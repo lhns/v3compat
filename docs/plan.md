@@ -3,7 +3,7 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** design. Phase 0 is running. Nothing here is built or proven yet.
+**Status:** design. Phase 0 measured, with the Go hang still open. No emulation is built yet.
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -160,11 +160,44 @@ Every phase has a go/no-go. A failure stops the plan.
 
 | Phase | Work | Go/no-go |
 |---|---|---|
-| **0. Is DynamoRIO good enough?** | Unmodified DynamoRIO with a null client on an AVX2 host: duckdb, Go, static musl and glibc, JVM, Node, exec chains, default seccomp. Instruction density of duckdb, static and dynamic | Startup under 1 s and under 2x native. No crashes. **Static targets and Go work** under default seccomp without ptrace |
+| **0. Is DynamoRIO good enough?** | Unmodified DynamoRIO with a null client on an AVX2 host: duckdb, Go, static musl and glibc, JVM, Node, exec chains, default seccomp. Instruction density of duckdb, static and dynamic | Revised after results, see below: cold startup under 5 s on Ivy Bridge. No crashes. **Static targets and Go work** under default seccomp without ptrace |
 | **1. Correct, not yet fast** | Launcher, exec follow, `/proc/self/exe`; helpers for everything; translated CPUID and `lzcnt`; test suite hook | `lzcnt` in a dlopen'd library correct; static children correct; duckdb correct; compute under 3 s |
 | **2. Fast** | Inline expansion, flag liveness, register allocation in hot traces | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean |
 | **3. Startup** | Translation cache | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected |
 | **4. Production** | Wrapper integration, passthrough, canary | Two weeks with no divergence from native |
+
+### Phase 0 results
+
+DynamoRIO 11.3.0, no emulation yet, on AVX2 runners unless noted **[measured]**.
+
+| Workload | Native | DynamoRIO | Factor |
+|---|---|---|---|
+| duckdb `select 42` | 0.036 s | 0.71 s | 19.6x |
+| duckdb mixed SQL | 4.74 s | 7.93 s | 1.67x |
+| zstd -9 | 1.14 s | 1.31 s | 1.15x (about 1.25x on Ivy Bridge) |
+| Plain C benchmark | 1.37 s | 1.82 s | 1.33x (about 1.2x on Ivy Bridge) |
+| Node CPU benchmark | 1.13 s | 2.70 s | 2.4x |
+| Java CPU benchmark | 0.73 s | 9.51 s | 13x |
+| `java -version` | 0.024 s | 2.0 s | 84x |
+
+- **Works**, also with ptrace denied by seccomp and under Docker's default profile: static glibc, static musl,
+  static-PIE, exec chains in every direction, `dlopen`, signals, C++ exceptions, `pthread_cancel`, `rseq`, self-modifying code.
+- **Go hangs** in about half the runs, with no error. A `GOAMD64=v3` build also hangs under Docker. Open.
+- **setuid** children silently lose their privileges, so they must be detected and refused.
+- **`-persist`** wrote nothing without a client and made later runs slower: 4.5 s against 0.7 s. Its docs say a
+  client's blocks are not persisted by default. So phase 3 means our own cache, or accepting the startup.
+- **Density** in duckdb, by instructions executed in a query: AVX2-only mnemonics 0.016%, BMI2 about 0.03%,
+  `vp*` at most 8.5% (the tool does not separate XMM from YMM; XMM runs natively).
+- **SIGILL round trip** in a VM on Ivy Bridge: 12.3 us, 86 us under DynamoRIO, against 4.2 us on bare Haswell in AVXEmu's docs.
+
+**Criterion revised after seeing results.** The original go/no-go was startup under 1 s and under 2x native. Startup
+was 18-84x, so it failed. The 2x limit cannot hold for a program that natively starts in 0.04 s, as translation is
+the work being measured, so absolute time replaces it. This is a judgement made after the fact and is recorded as
+such. duckdb's startup on Ivy Bridge cannot be measured until emulation exists: native is about 4x slower there,
+which suggests about 3 s **[estimate]**.
+
+**Scope.** JVM workloads are out of scope for now, at 13x and 84x: move those pods or rebuild them. Default Go builds
+(`GOAMD64=v1`) need no AVX2 and run natively.
 
 **If Phase 0 fails:** use the AVXEmu preload for provable images only, refuse the rest, or write our own translator
 only if the numbers justify it.
@@ -174,10 +207,9 @@ only if the numbers justify it.
 - **The speed target is an estimate.** Dense AVX2 cost is unproven by anything measured so far.
 - **Dependency on DynamoRIO.** Large and mature, with its own bugs in every executed instruction path.
 - **Static injection** under default seccomp without ptrace: the plan is wrapper argv plus self-loading **[memory]**.
-- **Go:** signals, async preemption, and whether Go leaves the segment register DynamoRIO needs free **[memory]**.
-- **JIT-heavy programs** may regress past AVXEmu's 1.2x.
+- **Go:** hangs under DynamoRIO, see Phase 0 results. Cause unknown.
+- **JIT-heavy programs** may regress past AVXEmu's 1.2x. Measured: Node 2.4x, Java 13x.
 - **setuid children** lose privilege under a launcher: refuse them rather than run them with the wrong rights.
-- **`-persist` on Linux:** quality is unclear from the docs.
 - **FMA** under correct rounding stays slow. FMA-heavy programs may not reach the targets.
 
 ## License
