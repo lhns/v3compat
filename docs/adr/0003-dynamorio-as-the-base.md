@@ -14,5 +14,5 @@ Write a DynamoRIO client. Do not write a translator from scratch.
 
 ## Consequences
 A large dependency and its bugs, and a tie to its release cycle. Its core and `drmgr`, `drreg`, `drx` are BSD. Its
-`drutil`, `drwrap` and `drsyscall` are LGPL 2.1, so they are avoided or kept as separate shared libraries. Replacing
-it would mean rewriting the client, though helpers and tests stay.
+`drutil`, `drwrap` and `drsyscall` are LGPL 2.1, so if used they ship as separate shared libraries, never statically
+linked. Replacing it would mean rewriting the client, though helpers and tests stay.
