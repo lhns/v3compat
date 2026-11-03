@@ -7,3 +7,5 @@ natively except for the instructions the CPU lacks. Whether it is fast enough is
 
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.
+
+See the [plan](docs/plan.md).
