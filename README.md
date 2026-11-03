@@ -9,3 +9,4 @@ natively except for the instructions the CPU lacks. Whether it is fast enough is
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.
 
 See the [plan](docs/plan.md).
+See the [decisions](docs/adr/README.md).
