@@ -182,7 +182,7 @@ only if the numbers justify it.
 
 ## License
 
-Apache-2.0 for this repo is the current proposal. Compatible with its inputs:
+Apache-2.0, chosen for its patent grant. Compatible with its inputs:
 
 - DynamoRIO core and `drmgr`, `drreg`, `drx`: BSD **[source]**.
 - DynamoRIO's `drutil`, `drwrap`, `drsyscall`: LGPL 2.1 **[source]**. They ship as separate shared libraries, never

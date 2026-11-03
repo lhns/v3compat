@@ -10,3 +10,5 @@ natively except for the instructions the CPU lacks. Whether it is fast enough is
 
 See the [plan](docs/plan.md).
 See the [decisions](docs/adr/README.md).
+
+Licensed under [Apache-2.0](LICENSE).
