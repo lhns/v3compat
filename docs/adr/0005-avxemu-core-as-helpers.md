@@ -1,7 +1,7 @@
 # 0005: AVXEmu's core as helpers, its mechanism retired
 
 ## Status
-Proposed: depends on Phase 0.
+Accepted.
 
 ## Context
 AVXEmu has carefully tested instruction semantics and a differential test approach, and it is CC0. Its patching

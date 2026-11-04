@@ -1,0 +1,25 @@
+# DynamoRIO is pinned and downloaded at configure time, never committed.
+# V3COMPAT_DR_ROOT points at an existing extracted release instead (offline builds).
+set(V3COMPAT_DR_TAG release_11.3.0-1)
+set(V3COMPAT_DR_ASSET DynamoRIO-Linux-11.3.0.tar.gz)
+set(V3COMPAT_DR_SHA256 ae02049df5c4daeb82d4087aaa0d38bf58cdd26b38fb6042dccf27cbc32ceed9)
+set(V3COMPAT_DR_URL https://github.com/DynamoRIO/dynamorio/releases/download/${V3COMPAT_DR_TAG}/${V3COMPAT_DR_ASSET})
+set(V3COMPAT_DR_ROOT "" CACHE PATH "Use this extracted DynamoRIO release instead of downloading")
+# Outside the build tree so a fresh build dir does not refetch 400 MB.
+set(V3COMPAT_DR_CACHE "$ENV{HOME}/.cache/v3compat" CACHE PATH "Download and extraction cache")
+
+if(NOT V3COMPAT_DR_ROOT)
+  set(_tgz "${V3COMPAT_DR_CACHE}/${V3COMPAT_DR_SHA256}.tar.gz")
+  set(_dir "${V3COMPAT_DR_CACHE}/dr-${V3COMPAT_DR_SHA256}")
+  if(NOT EXISTS "${_dir}/.done")
+    message(STATUS "Fetching DynamoRIO ${V3COMPAT_DR_TAG}")
+    file(DOWNLOAD "${V3COMPAT_DR_URL}" "${_tgz}" EXPECTED_HASH SHA256=${V3COMPAT_DR_SHA256} SHOW_PROGRESS)
+    file(REMOVE_RECURSE "${_dir}")
+    file(ARCHIVE_EXTRACT INPUT "${_tgz}" DESTINATION "${_dir}")
+    file(WRITE "${_dir}/.done" "")
+    file(REMOVE "${_tgz}")
+  endif()
+  file(GLOB _top "${_dir}/DynamoRIO-Linux-*")
+  list(GET _top 0 V3COMPAT_DR_ROOT)
+endif()
+set(DynamoRIO_DIR "${V3COMPAT_DR_ROOT}/cmake" CACHE PATH "" FORCE)

@@ -1,7 +1,7 @@
 # 0002: A same-ISA binary translator, not a kernel module or patching
 
 ## Status
-Proposed: depends on Phase 0.
+Accepted.
 
 ## Context
 The goal covers libraries, `dlopen`, static binaries, Go and JIT code. Trap designs, including a kernel module and
