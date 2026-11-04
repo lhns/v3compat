@@ -29,10 +29,8 @@ build/inst/bin/v3compat-run [--] prog args...
 
 `cmake -S . -B build -DV3COMPAT_SEMANTIC=ON` adds `semantic-hw`: it fetches a pinned
 [avxemu](https://github.com/lhns/avxemu) commit and runs its instruction-form cases under the client against
-the digests recorded on AVX2 hardware. On AVX2 it must pass. On an AVX-only CPU it fails with
-`EMULATION MISSING` (exit 3) at the first instruction nothing emulates, which is distinct from a result mismatch
-(exit 1). `test/sem/known-dr.txt` lists forms where plain DynamoRIO itself differs from native; they are
-tolerated under the client only. It has no entries.
+the digests recorded on AVX2 hardware, also with inline expansions off. `test/sem/refused.txt` lists the forms still
+refused, and has to be exact. A program that executes something nothing handles exits with status 86.
 
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.

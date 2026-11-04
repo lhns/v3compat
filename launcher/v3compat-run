@@ -3,7 +3,8 @@
 # drrun execs the program in place, so the exit status and signals are the program's own.
 # Policy lives here: V3COMPAT_NATIVE=1 skips DynamoRIO, even on a CPU that needs it.
 #   V3COMPAT_DR_OPTS   extra DynamoRIO options, appended to DEFAULT_DR_OPTS
-#   V3COMPAT_STATS=1   client prints per-class instruction totals to stderr at exit
+#   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals to stderr at exit
+#   V3COMPAT_HELPERS_ONLY=1   no inline expansions, to compare them with the helpers
 set -eu
 
 # The one place to change DynamoRIO's defaults.
@@ -27,6 +28,7 @@ fi
 
 client_opts=""
 [ "${V3COMPAT_STATS:-}" = 1 ] && client_opts="-stats"
+[ "${V3COMPAT_HELPERS_ONLY:-}" = 1 ] && client_opts="$client_opts -helpers-only"
 
 # Unquoted on purpose: both option lists are space-separated words.
 set -f
