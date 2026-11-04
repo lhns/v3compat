@@ -3,7 +3,8 @@
  * CPU only (no avxemu emulator) and checks their digests against the reference recorded on AVX2
  * silicon. Built to run under the v3compat client. sem_test.c is included, not modified.
  *
- *   semhw MANIFEST REF [smoke|full]     env SEM_ONLY=glob restricts the forms
+ *   semhw MANIFEST REF [smoke|full] [KNOWN]   env SEM_ONLY=glob restricts the forms, SEM_DUMP=1 dumps cases
+ *   KNOWN: file of form names whose mismatch is tolerated (differences DynamoRIO itself causes)
  *
  * Exit: 0 match, 1 mismatch, 3 emulation missing (SIGILL, or a silent lzcnt/tzcnt-style
  * difference on a form the host lacks), 2 usage/setup.
@@ -20,7 +21,20 @@ int avxemu_emulate(const decoded *d, avxemu_regfile *rf) { (void)d; (void)rf; re
 size_t avxemu_page_size(void) { return PAGE; }
 
 enum { EX_OK = 0, EX_MISMATCH = 1, EX_USAGE = 2, EX_MISSING = 3 };
-static char *g_form;     /* shared with the parent: form being run when the child died */
+static char *g_form;
+static const char *g_known;   /* path of the tolerated-forms file, or NULL */
+
+static int is_known(const char *form) {
+    char line[128];
+    FILE *k = g_known ? fopen(g_known, "r") : NULL;
+    int hit = 0;
+    while (k && fgets(line, sizeof line, k)) {
+        line[strcspn(line, "\r\n")] = 0;
+        if (line[0] && line[0] != '#' && !strcmp(line, form)) hit = 1;
+    }
+    if (k) fclose(k);
+    return hit;
+}     /* shared with the parent: form being run when the child died */
 
 static int host_lacks(const specform *f) {
     unsigned a, b, c, d;
@@ -89,6 +103,7 @@ static int run_hw_suite(const char *manifest, const char *refpath, int full) {
                     printf("EMULATION MISSING: %s runs without faulting but gives a different result (silent)\n", f->name);
                     return EX_MISSING;
                 }
+                if (is_known(f->name)) { printf("known client difference: %s\n", nm); continue; }
                 printf("MISMATCH: %s digest %016llx (%lu cases) != recorded %016llx (%lu)\n", nm,
                        (unsigned long long)mine, mc, (unsigned long long)rd, rc);
                 bad = 1;
@@ -102,6 +117,7 @@ static int run_hw_suite(const char *manifest, const char *refpath, int full) {
 int main(int argc, char **argv) {
     if (argc < 3) { fprintf(stderr, "usage: semhw MANIFEST REF [smoke|full]\n"); return EX_USAGE; }
     int full = argc > 3 && !strcmp(argv[3], "full");
+    g_known = argc > 4 ? argv[4] : NULL;
     g_form = mmap(0, 128, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
     if (g_form == MAP_FAILED) return EX_USAGE;
     fflush(NULL);

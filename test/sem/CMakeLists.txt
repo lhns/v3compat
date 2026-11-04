@@ -17,7 +17,7 @@ target_compile_definitions(semhw PRIVATE SEM_MANIFEST="" SEM_KNOWN="")
 # 0 match; 3 prints "EMULATION MISSING" (expected until emulation exists on an AVX-only CPU);
 # any other failure is a result mismatch.
 add_test(NAME semantic-hw COMMAND ${RUN} -- $<TARGET_FILE:semhw>
-         "${S}/test/spec/manifest.tsv" "${S}/test/reference/semantics.ref" smoke)
+         "${S}/test/spec/manifest.tsv" "${S}/test/reference/semantics.ref" smoke "${CMAKE_CURRENT_SOURCE_DIR}/known-dr.txt")
 set_tests_properties(semantic-hw PROPERTIES TIMEOUT 900 LABELS semantic)
 # Control: the same cases without DynamoRIO, to tell client-induced differences from the host's.
 add_test(NAME semantic-hw-native COMMAND ${CMAKE_COMMAND} -E env V3COMPAT_NATIVE=1 ${RUN} -- $<TARGET_FILE:semhw>
