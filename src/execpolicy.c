@@ -1,5 +1,5 @@
 /* What happens at exec, and at the places that name the executable. DynamoRIO handles execve only,
- * and virtualizes only readlink of /proc/self/exe; the rest is rewritten here, on the way into the
+ * and virtualizes only readlink of /proc/self/exe; the rest, and that, is rewritten here, on the way into the
  * kernel. Refusals and the shared judgement: exec_check.h. */
 #include "dr_api.h"
 #include "drmgr.h"
@@ -199,7 +199,9 @@ static bool pre_execveat(void *dc, tls_t *t) {
     return run_judged(dc, t, dirfd, path, (flags & V3C_AT_SYMLINK_NOFOLLOW) ? V3C_O_NOFOLLOW : 0, argv, envp, cloexec);
 }
 
-/* The calls that follow /proc/self/exe: the index of the path argument and of the flags (-1: none). */
+/* The calls that follow /proc/self/exe, sent to the held descriptor so the kernel answers. That includes readlink:
+ * DynamoRIO's own answer fails on a short buffer and skips a path it does not recognise. The index of the path
+ * argument and of the flags (-1: none). */
 static bool open_like(int sysnum, int *pi, int *fi) {
     *fi = -1;
     switch (sysnum) {
@@ -211,22 +213,14 @@ static bool open_like(int sysnum, int *pi, int *fi) {
     return false;
 }
 
-static void pre_open_like(void *dc, tls_t *t, int sysnum, int pi, int fi) {
+static void pre_open_like(void *dc, tls_t *t, int pi, int fi) {
     const char *app_path = (const char *)dr_syscall_get_param(dc, pi);
     char head[6];
     size_t got = 0;
-    bool rl = sysnum == V3C_SYS_readlink || sysnum == V3C_SYS_readlinkat;
-    if (!rl && held == INVALID_FILE) return;
+    if (held == INVALID_FILE) return;
     if (fi >= 0 && ((long)dr_syscall_get_param(dc, fi) & V3C_AT_SYMLINK_NOFOLLOW)) return;
     if (!dr_safe_read(app_path, 6, head, &got) || got != 6 || !starts(head, "/proc/")) return;
-    if (read_str(app_path, t->path, 64) < 0 || !is_self_exe(t->path)) return;
-    if (rl) {
-        /* DR answers readlink of /proc/self/exe itself, but not of the thread-self spelling. */
-        if (!eq(t->path, "/proc/thread-self/exe")) return;
-        put_str(t->path, "/proc/self/exe")[0] = 0;
-    } else if (!exe_target(t->path)) {
-        return;
-    }
+    if (read_str(app_path, t->path, 64) < 0 || !is_self_exe(t->path) || !exe_target(t->path)) return;
     save_regs(dc, t);
     dr_syscall_set_param(dc, pi, (reg_t)t->path);
 }
@@ -250,7 +244,7 @@ static bool event_pre(void *dc, int sysnum) {
     if (sysnum == V3C_SYS_clone3) return fail_with(dc, 38 /* ENOSYS */);
     if (sysnum == V3C_SYS_execve) return pre_execve(dc, t);
     if (sysnum == V3C_SYS_execveat) return pre_execveat(dc, t);
-    if (open_like(sysnum, &pi, &fi)) pre_open_like(dc, t, sysnum, pi, fi);
+    if (open_like(sysnum, &pi, &fi)) pre_open_like(dc, t, pi, fi);
     return true;
 }
 

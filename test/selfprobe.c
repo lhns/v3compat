@@ -3,6 +3,7 @@
  *   report   print what the client does not try to change (maps order, auxv, environ) instead */
 #define _GNU_SOURCE
 #include <elf.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <link.h>
 #include <pthread.h>
@@ -64,10 +65,38 @@ static void check_path(const char *label, const char *p) {
     res(access(p, R_OK | X_OK) == 0, name, "not accessible");
 }
 
+/* What the kernel does with the buffer: it truncates, adds no NUL and touches nothing past what it returns. */
+static void check_readlink_buffer(const char *label, const char *p) {
+    enum { GUARD = 0x55 };
+    char name[160], b[4096 + 2];
+    const size_t len = strlen(real);
+    static const size_t sizes[] = {1, 4, 0 /* the path's length */, (size_t)-1 /* one longer */};
+    for (int at = 0; at < 2; at++) {
+        for (size_t i = 0; i < sizeof sizes / sizeof *sizes; i++) {
+            size_t sz = sizes[i] == 0 ? len : sizes[i] == (size_t)-1 ? len + 1 : sizes[i];
+            size_t want = sz < len ? sz : len;
+            memset(b, GUARD, sizeof b);
+            ssize_t n = at ? readlinkat(AT_FDCWD, p, b, sz) : readlink(p, b, sz);
+            snprintf(name, sizeof name, "%s size %zu %s", at ? "readlinkat" : "readlink", sz, label);
+            res(n == (ssize_t)want && !memcmp(b, real, want) && (unsigned char)b[want] == GUARD, name, "returned %zd", n);
+        }
+        /* Raw: musl's wrappers turn size 0 into a call with a dummy buffer. */
+        errno = 0;
+        long n = at ? syscall(SYS_readlinkat, AT_FDCWD, p, b, 0L) : syscall(SYS_readlink, p, b, 0L);
+        snprintf(name, sizeof name, "%s size 0 %s", at ? "readlinkat" : "readlink", label);
+        res(n == -1 && errno == EINVAL, name, "returned %ld errno %d", n, errno);
+    }
+    errno = 0;
+    long r = syscall(SYS_readlink, p, (char *)8, 4096L);
+    snprintf(name, sizeof name, "readlink bad buffer %s", label);
+    res(r == -1 && errno == EFAULT, name, "returned %ld errno %d", r, errno);
+}
+
 static void *thread_probe(void *arg) {
     char p[64];
     snprintf(p, sizeof p, "/proc/%ld/exe", (long)syscall(SYS_gettid));
     check_path("tid from a thread", p);
+    check_readlink_buffer("tid from a thread", p);
     return arg;
 }
 
@@ -77,9 +106,12 @@ int main(int argc, char **argv) {
     file_a = malloc(1 << 24); file_b = malloc(1 << 24);
     if (argc < 2 || !(real = realpath(argv[1], 0))) return 2;
     check_path("self", "/proc/self/exe");
+    check_readlink_buffer("self", "/proc/self/exe");
     snprintf(p, sizeof p, "/proc/%d/exe", (int)getpid());
     check_path("pid", p);
+    check_readlink_buffer("pid", p);
     check_path("thread-self", "/proc/thread-self/exe");
+    check_readlink_buffer("thread-self", "/proc/thread-self/exe");
     { pthread_t t; pthread_create(&t, 0, thread_probe, 0); pthread_join(t, 0); }
 
     {   /* Look-alikes are not the executable. */
