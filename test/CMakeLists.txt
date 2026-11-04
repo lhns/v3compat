@@ -247,8 +247,9 @@ set(_A "${CMAKE_CURRENT_SOURCE_DIR}/allow")
 add_executable(allow_probe "${_A}/probe.c" "${_A}/probe_stub.S")
 target_compile_options(allow_probe PRIVATE -fno-stack-protector -O1 -U_FORTIFY_SOURCE)
 target_link_options(allow_probe PRIVATE -static)
-add_test(NAME allowlist-check COMMAND sh -c "gzip -dc '${_A}/evidence/rows.tsv.gz' > rows.tsv && $<TARGET_FILE:allow_dkey> < rows.tsv > keys.tsv && $<TARGET_FILE:allow_probe> < rows.tsv > allow_probe.tsv && python3 '${_A}/gen.py' check allow_probe.tsv keys.tsv")
+add_test(NAME allowlist-check COMMAND sh -c "gzip -dc '${_A}/evidence/rows.tsv.gz' > rows.tsv && $<TARGET_FILE:allow_dkey> < rows.tsv > keys.tsv && python3 '${_A}/gen.py' sweep $<TARGET_FILE:allow_probe> rows.tsv allow_probe.tsv && python3 '${_A}/gen.py' check allow_probe.tsv keys.tsv")
 set_tests_properties(allowlist-check PROPERTIES TIMEOUT 300)
+add_test(NAME allow-probe-isolation COMMAND sh "${_A}/isolation.sh" $<TARGET_FILE:allow_probe>)
 
 # The client's archive must stay plain AVX1 with no libc: the CI CPU would run anything.
 add_test(NAME helpers-guard COMMAND sh "${AVXEMU_SRC}/test/check-helpers-lib.sh" $<TARGET_FILE:avxemu_helpers>)

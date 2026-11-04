@@ -7,8 +7,9 @@ keys go through the expansions, and anything else exits with status 86 if execut
 
 - Ivy Bridge evidence: `GenuineIntel family=6 model=58`
 - AVX2 evidence: `AuthenticAMD family=25 model=17`
+- Each machine's results held with the rows in sequence, reversed, shuffled twice and each in its own process.
 - Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9793 native keys, 832 emulated keys.
+- Listed: 9795 native keys, 832 emulated keys.
 
 ## Rows by outcome
 
@@ -28,10 +29,9 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | lacked-not-in-emulation-suite | 1156 |
 | native-approx | 114 |
 | native-faults | 72 |
-| native-tested | 43669 |
+| native-tested | 43673 |
 | native-untested | 152 |
 | not-on-ivy-bridge | 1247 |
-| refused-by-policy | 4 |
 
 ## Iforms never reached by the sweep, by ISA set: all refused
 
@@ -132,7 +132,6 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 | `rdsspq` | hint | as rdsspd |
 | `rdtsc` | untested | nondeterministic; its meaning does not change with ISA level |
 | `rdtscp` | untested | as rdtsc |
-| `repne_cmpsq` | refused | A CI runner (Intel family 6 model 207) stopped where Ivy Bridge and AMD fault, on one seed; unexplained, and no compiler emits it |
 | `rsqrtps` | approx | as rcpps |
 | `rsqrtss` | approx | as rcpps |
 | `syscall` | untested | would leave the harness; DR handles it, and the kernel's interface is not an ISA question |
@@ -164,6 +163,10 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 ## Refused because the machines differ
 
 `call_near`, `jb`, `jbe`, `jl`, `jle`, `jmp`, `jnb`, `jnbe`, `jnl`, `jnle`, `jno`, `jnp`, `jns`, `jnz`, `jo`, `jp`, `jrcxz`, `js`, `jz`, `loop`, `loope`, `loopne`, `pause`, `ret_near`, `smsw`
+
+## Refused because a result changed with the order of the rows
+
+None.
 
 ## Keys with a refused form among listed ones: the whole key is refused
 

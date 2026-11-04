@@ -111,6 +111,10 @@ Rules:
   [allowlist.md](allowlist.md). Regenerate with `test/allow/regen.sh`. The lookup is at translation only: about 0.25 s
   of duckdb's 5.7 s startup, 480,000 translated instructions at about 1,400 cycles each **[measured]**. hello, zstd and
   duckdb's three queries translate no form off the list **[measured]**.
+  Results hold in every row order: reversed, shuffled and one process per row give identical results on Ivy Bridge and
+  on each sampled runner CPU **[measured]**; `allowlist-check` reruns all five orders. The earlier `repne cmpsq` mismatch
+  was the sweep's own leak: on CPUs with `movdir64b`, that row left a pointer in the code page, which `repne cmpsq`
+  found **[measured]**, so the form is listed now.
 - **Signals** map the code-cache PC back to the application instruction. An expansion must be rewindable or
   commit its result last, and a signal-injection test must prove it.
 - **JIT and self-modifying code**: translated pages are write-protected, and a write invalidates them.
