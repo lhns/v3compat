@@ -26,7 +26,7 @@ v3test(maps-has-dynamorio stdout-has dynamorio-mapped exit 0 -- ${RUN} $<TARGET_
 v3test(exec-child-has-dynamorio stdout-has dynamorio-mapped exit 0 -- ${RUN} $<TARGET_FILE:proc> exec)
 v3test(native-bypass stdout-has dynamorio-absent exit 1 -- env V3COMPAT_NATIVE=1 ${RUN} $<TARGET_FILE:proc> maps)
 # Flags across block entry, where DynamoRIO's flag table overstates writes; run on an AVX2 host until movbe is emulated.
-v3test(flags-preserved stdout-has fails=0 exit 0 -- ${RUN} -- $<TARGET_FILE:flagrepro>)
+v3test(flags-preserved stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:flagrepro>)
 add_test(NAME client-stats COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/stats.sh" ${RUN} $<TARGET_FILE:avx2prog> $<TARGET_FILE:hello_dyn>)
 set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynamorio
   exec-child-has-dynamorio native-bypass flags-preserved client-stats PROPERTIES TIMEOUT 120)

@@ -1,5 +1,5 @@
 // flagrepro: arithmetic flags and results DR must preserve across an indirect-branch entry.
-// Every case is checked against what the architecture defines, so native must print fails=0.
+// Every case is checked against what the architecture defines, so native must print PASS.
 //   static   instructions that write flags only conditionally (count or rcx is 0)
 //   fault    a faulting load before a flag writer: flags the handler sees in its ucontext
 //   smc      code at one address rewritten from a flag writer to one that is not (DR sandboxes
