@@ -13,6 +13,17 @@ add_executable(proc proc.c)
 add_executable(expect expect.c)
 add_executable(avx2prog avx2prog.S)
 add_executable(flagrepro flagrepro.c)
+add_executable(fault_state fault_state.c)
+add_executable(flags_kept flags_kept.c)
+add_executable(misc_forms misc_forms.c)
+add_library(lzlib SHARED lzlib.c)
+target_compile_options(lzlib PRIVATE -mlzcnt)
+add_executable(lzcnt_dyn lzcnt.c)
+target_link_libraries(lzcnt_dyn PRIVATE ${CMAKE_DL_LIBS})
+target_compile_options(lzcnt_dyn PRIVATE -mlzcnt)
+add_executable(lzcnt_static lzcnt.c)
+target_link_options(lzcnt_static PRIVATE -static)
+target_compile_options(lzcnt_static PRIVATE -mlzcnt)
 target_link_options(avx2prog PRIVATE -nostdlib -static)
 
 function(v3test name)
@@ -27,9 +38,17 @@ v3test(exec-child-has-dynamorio stdout-has dynamorio-mapped exit 0 -- ${RUN} $<T
 v3test(native-bypass stdout-has dynamorio-absent exit 1 -- env V3COMPAT_NATIVE=1 ${RUN} $<TARGET_FILE:proc> maps)
 # Flags across block entry, where DynamoRIO's flag table overstates writes.
 v3test(flags-preserved stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:flagrepro>)
+# What a fault or a flag reader sees of the application's state, whatever the expansion kind.
+v3test(fault-state stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:fault_state>)
+v3test(flags-kept stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:flags_kept>)
+v3test(misc-forms stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:misc_forms>)
+# lzcnt in code the client sees late: a dlopen'd library, and a static program after exec.
+v3test(lzcnt-dlopen stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> dl $<TARGET_FILE:lzlib>)
+v3test(lzcnt-static-exec stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> exec $<TARGET_FILE:lzcnt_static>)
 add_test(NAME client-stats COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/stats.sh" ${RUN} $<TARGET_FILE:avx2prog> $<TARGET_FILE:hello_dyn>)
 set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynamorio
-  exec-child-has-dynamorio native-bypass flags-preserved client-stats PROPERTIES TIMEOUT 120)
+  exec-child-has-dynamorio native-bypass flags-preserved client-stats fault-state flags-kept misc-forms
+  lzcnt-dlopen lzcnt-static-exec PROPERTIES TIMEOUT 120)
 
 # The client's archive must stay plain AVX1 with no libc: the CI CPU would run anything.
 add_test(NAME helpers-guard COMMAND sh "${AVXEMU_SRC}/test/check-helpers-lib.sh" $<TARGET_FILE:avxemu_helpers>)
