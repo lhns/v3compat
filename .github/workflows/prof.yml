@@ -39,3 +39,31 @@ jobs:
           C="select sum(range*range) from range(30000000)"
           for o in "" "-disable_traces"; do export V3COMPAT_DR_OPTS="$o"; echo "== opts [$o]"; T compute 2 $V ./duckdb -c "$C"; T varied 1 $V ./duckdb -f $SQL; done
           unset V3COMPAT_DR_OPTS; T native-compute 2 ./duckdb -c "$C"; T native-varied 1 ./duckdb -f $SQL
+      - name: micro threads persist
+        run: |
+          DR=$(ls -d ~/.cache/v3compat/dr-*[0-9a-f] | head -1); V=/w/inst/bin/v3compat-run; cd /w
+          gcc -O1 -mavx $GITHUB_WORKSPACE/prof/micro.c -o micro; ./micro
+          gcc -O2 $GITHUB_WORKSPACE/prof/thr.c -o thr -pthread
+          T() { l=$1; n=$2; shift 2; for i in $(seq $n); do /usr/bin/time -f "$l %e s user %U sys %S minflt %R" -o /tmp/tt "$@" >/dev/null 2>/tmp/err; tail -1 /tmp/tt; done; }
+          for n in 20 100; do T nat-thr$n 3 ./thr $n; T cli-thr$n 3 $V ./thr $n; done
+          FIX="-no_vm_base_near_app -vm_base 0x700000000000 -vm_max_offset 0x0"
+          SQL=$GITHUB_WORKSPACE/test/apps/duckdb-varied.sql; C="select sum(range*range) from range(30000000)"
+          h() { "$@" 2>/dev/null | sha256sum | cut -c1-12; }
+          echo "native hashes: $(h ./duckdb -csv -noheader -c 'select 42') $(h ./duckdb -csv -noheader -c "$C") $(h ./duckdb -csv -noheader -f $SQL)"
+          export V3C_XOPTS=-persistable
+          for x in "" "-disable_traces"; do
+            rm -rf /tmp/pc; mkdir -p /tmp/pc
+            export V3COMPAT_DR_OPTS="$FIX -persist -no_coarse_split_riprel -no_persist_protect_stubs -persist_dir /tmp/pc $x"
+            echo "== persist [$x]"
+            T cold 1 setarch -R $V ./duckdb -csv -noheader -c "select 42"; T warm 5 setarch -R $V ./duckdb -csv -noheader -c "select 42"
+            du -sk /tmp/pc | cut -f1
+            echo "warm hashes: $(h setarch -R $V ./duckdb -csv -noheader -c 'select 42') $(h setarch -R $V ./duckdb -csv -noheader -c "$C") $(h setarch -R $V ./duckdb -csv -noheader -f $SQL)"
+            T warm-compute 2 setarch -R $V ./duckdb -csv -noheader -c "$C"
+          done
+          # Project tests against a persisted cache: run twice, second run is warm.
+          rm -rf /tmp/pc; mkdir -p /tmp/pc; cd $GITHUB_WORKSPACE
+          export V3COMPAT_DR_OPTS="$FIX -persist -no_coarse_split_riprel -no_persist_protect_stubs -persist_dir /tmp/pc"
+          unset V3COMPAT_DR_OPTS V3C_XOPTS; echo "== ctest baseline"; ctest --test-dir build 2>&1 | tail -6 | cut -c1-100 || true
+          export V3C_XOPTS=-persistable V3COMPAT_DR_OPTS="$FIX -persist -no_coarse_split_riprel -no_persist_protect_stubs -persist_dir /tmp/pc"
+          echo "== ctest writer"; setarch -R ctest --test-dir build 2>&1 | tail -12 | cut -c1-100 || true
+          echo "== ctest warm"; setarch -R ctest --test-dir build 2>&1 | tail -12 | cut -c1-100 || true; find /tmp/pc -type f | wc -l
