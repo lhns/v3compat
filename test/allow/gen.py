@@ -56,7 +56,7 @@ def status(r, pol, emulated):
         return "decodes-differently" if r["ivb"].startswith("as:") else "not-on-ivy-bridge"
     if r["isig"] == "ff":
         return "killed-harness"
-    if (r["isig"] != r["asig"] or r["ih"] != r["ah"]) and kind == "approx" and r["isig"] != ALL_FAULT:
+    if kind == "approx" and ALL_FAULT not in (r["isig"], r["asig"]) and (r["isig"] != r["asig"] or r["ih"] != r["ah"]):
         return "native-approx"
     if r["isig"] != r["asig"] or r["ih"] != r["ah"]:
         return "ivy-faults" if r["isig"] == ALL_FAULT else "differs-on-avx2"

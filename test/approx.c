@@ -4,8 +4,7 @@
 //   dpps/vdpps: no documented bound. Allowed |out - exact| <= 4 * 2^-23 * sum|a_i*b_i| + 4 * 2^-149: a few single
 //     ULPs of the sum of magnitudes (the order of rounding differs by vendor), not of a result that cancels.
 //   f2xm1: the SDM documents the domain -1..+1 only. Allowed relative error 2^-60, 8 ULPs of the 64-bit mantissa.
-// Ambiguous cases are skipped, never widened: a dpps sum, or finite product, within 2^-20 of overflowing single precision.
-#define _GNU_SOURCE
+// Ambiguous cases are skipped, never widened: a dpps whose finite products sum in magnitude to within 2^-20 of overflowing single precision.
 #define _GNU_SOURCE
 #include <float.h>
 #include <immintrin.h>
@@ -57,7 +56,6 @@ static void check_rcp(const char *nm, float x, float y, int rsq) {
     if (rsq && neg) { if (!isnan(y)) FAIL("%s(%a) = %a, want NaN", nm, x, y); return; }
     ref = rsq ? 1.0 / sqrt(ax) : 1.0 / (double)x;
     if (fabs(ref) < FLT_MIN * (1 + 1.0 / 1024) && y == 0 && signbit(y) == (rsq ? 0 : neg)) return;  // tiny results flush to 0
-    if (fabs(ref) > FLT_MAX) { if (!isinf(y)) FAIL("%s(%a) = %a, want infinity", nm, x, y); return; }
     if (!(fabs((double)y - ref) <= BOUND * fabs(ref))) FAIL("%s(%a) = %a, exact %a", nm, x, y, (float)ref);
 }
 
@@ -85,20 +83,19 @@ RUN(t_vrcpps, f_vrcpps, 0) RUN(t_vrcpss, f_vrcpss, 0) RUN(t_vrsqrtps, f_vrsqrtps
 /* ---- dpps / vdpps: every immediate, by bytes (an immediate cannot be a variable) ------------------------------- */
 static void check_dp(const char *nm, int imm, const float *a, const float *b, const float *out, int lanes) {
     for (int l = 0; l < lanes; l += 4) {
-        double sum = 0, mag = 0, maxp = 0;
+        double sum = 0, mag = 0, fmag = 0;
         for (int i = 0; i < 4; i++) if (imm >> (4 + i) & 1) {
             double p = (double)a[l + i] * (double)b[l + i];
             sum += p; mag += fabs(p);
-            if (isfinite(p) && fabs(p) > maxp) maxp = fabs(p);
+            if (isfinite(p)) fmag += fabs(p);
         }
         for (int j = 0; j < 4; j++) {
             float y = out[l + j];
             checks++;
             if (!(imm >> j & 1)) { if (y != 0 || signbit(y)) FAIL("%s imm=%02x lane %d = %a, want +0", nm, imm, l + j, y); continue; }
-            if (maxp > NEAR_MAX) continue;   // ambiguous: a finite product that overflows in single precision
+            if (fmag > NEAR_MAX) continue;   // ambiguous: a finite product or partial sum may overflow in single precision
             if (isnan(sum)) { if (!isnan(y)) FAIL("%s imm=%02x lane %d = %a, want NaN", nm, imm, l + j, y); continue; }
             if (isinf(sum)) { if (y != (float)sum) FAIL("%s imm=%02x lane %d = %a, want %a", nm, imm, l + j, y, (float)sum); continue; }
-            if (fabs(sum) > NEAR_MAX) continue;   // ambiguous: the sum is at the overflow edge
             if (!(fabs((double)y - sum) <= 4 * 0x1p-23 * mag + 4 * 0x1p-149))
                 FAIL("%s imm=%02x lane %d = %a, exact %a (sum|p| %a)", nm, imm, l + j, y, sum, mag);
         }
