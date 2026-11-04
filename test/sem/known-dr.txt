@@ -1,0 +1,6 @@
+# Forms whose result differs under DynamoRIO 11.3.0 itself (plain drrun, no client), not natively:
+# OF is lost across the instruction when the input has it set. Remove an entry once DynamoRIO is fixed.
+movbe.g_m16
+movbe.g_m64.2
+movbe.m64_g.2
+vbroadcasti128.y_m128
