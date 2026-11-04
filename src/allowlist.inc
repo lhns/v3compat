@@ -191,6 +191,7 @@ static const uint64 allow_native[] = {
     0x050d3ce8f0c4630cULL, /* rcl 66 f2 d:m3 s:i,m3 */
     0x0511de90207cdbdbULL, /* xorps d:x s:m8,x */
     0x05183eba8e620385ULL, /* lods f2 d:g32,g64 s:m4,g64 */
+    0x05303027b4cb667bULL, /* rsqrtss 66 f3 d:x s:x */
     0x0530a810fa519b3bULL, /* rol f3 rexw d:m6 s:i,m6 */
     0x0536c4f6ccf1b89cULL, /* bndcu f2 d:r333 s:g64 */
     0x05410438b4c7c225ULL, /* psrldq 66 d:x s:i,x */
@@ -265,6 +266,7 @@ static const uint64 allow_native[] = {
     0x0784b7f44281e9d3ULL, /* and 66 f3 rexw d:m6 s:i,m6 */
     0x07854ed02b211e65ULL, /* sub d:g32 s:m4,g32 */
     0x0786492e3aa7d03bULL, /* fstp f2 d:m6 s:st */
+    0x07a29250e837c21dULL, /* f2xm1 f3 rexw d:st s:st */
     0x07ad5bb9c5bca3baULL, /* vpsllq vex d:x s:i,x */
     0x07c09ad149eff7b7ULL, /* adc d:g32 s:i,g32 */
     0x07c3b8c2a83525b3ULL, /* ffree 66 d:st s: */
@@ -333,6 +335,7 @@ static const uint64 allow_native[] = {
     0x0968edbeb2096111ULL, /* cmovs f3 rexw d:g64 s:m6 */
     0x0969ae68725ecdc0ULL, /* add 66 f2 rexw d:m6 s:i,m6 */
     0x0971462562d9c2b5ULL, /* btr 66 f2 rexw d:m6 s:g64,m6 */
+    0x0977f43081decd56ULL, /* vdpps vex l d:y s:y,y,i */
     0x09783d7058c13ea6ULL, /* rcl f2 d:g8 s:g8,g8 */
     0x097b71e650669f66ULL, /* paddsw 66 rexw d:x s:m8,x */
     0x097bd009d5ad4479ULL, /* sar 66 rexw d:m2 s:i,m2 */
@@ -372,6 +375,7 @@ static const uint64 allow_native[] = {
     0x0a4c2de311b59e70ULL, /* sar 66 f3 rexw d:g64 s:i,g64 */
     0x0a4c78c9a8c179a2ULL, /* vroundpd vex w d:x s:m8,i */
     0x0a4d0ee90c05d0f5ULL, /* pmovsxwq 66 d:x s:x */
+    0x0a52bfe7b8f7f3c8ULL, /* f2xm1 66 rexw d:st s:st */
     0x0a59bf207e7e0552ULL, /* fabs d:st s:st */
     0x0a61104737dfe59aULL, /* adc f3 lock d:m4 s:g32,m4 */
     0x0a613b7813ce50f6ULL, /* vpextrb vex w d:g32 s:x,i */
@@ -586,6 +590,7 @@ static const uint64 allow_native[] = {
     0x0fd5f17beafa85cbULL, /* pmulhrsw rexw d:mm s:m6,mm */
     0x0fd807c082ed2e12ULL, /* pavgb 66 d:x s:x,x */
     0x0fdf3361b4f02293ULL, /* fimul f2 d:st s:m3,st */
+    0x0feef159a7f75220ULL, /* rsqrtps rexw d:x s:m8 */
     0x0ff153dee31a9b3cULL, /* paddsw rexw d:mm s:m6,mm */
     0x0ff353e8f9825a0dULL, /* div 66 f3 d:g8,g8 s:g8,g16 */
     0x0ff3b245ebeba72bULL, /* fstp f2 rexw d:m6 s:st */
@@ -643,6 +648,7 @@ static const uint64 allow_native[] = {
     0x1124b3f92fccaec1ULL, /* fst d:m4 s:st */
     0x1144ef5efe5aa940ULL, /* vaesimc vex w d:x s:x */
     0x114eb56be814bbebULL, /* test f3 d: s:g8,g8 */
+    0x115589cf2e0f7038ULL, /* vrcpss vex w l d:x s:x,m4 */
     0x11562ee130855c63ULL, /* mov f3 rexw d:m6 s:seg */
     0x115649aa69013402ULL, /* xor f2 d:g8 s:m2,g8 */
     0x115c057e5d2f457cULL, /* fsubr 66 f3 rexw d:st s:m4,st */
@@ -792,6 +798,7 @@ static const uint64 allow_native[] = {
     0x146cb425dde6c63aULL, /* sar 66 f3 rexw d:m6 s:i,m6 */
     0x146cbd318640acfaULL, /* subps rexw d:x s:m8,x */
     0x146e71a90e7343d5ULL, /* repne cmps f2 d:g64,g64,g64 s:m4,m4,g64,g64,g64 */
+    0x14754ff6fc393eedULL, /* vrsqrtps vex d:x s:m8 */
     0x148096cb1eb1634aULL, /* lods f2 rexw d:g8,g64 s:m2,g64 */
     0x1481a56ae1d84da8ULL, /* or 66 f2 rexw d:g8 s:m2,g8 */
     0x148377a06727c141ULL, /* pop d:m6,g64 s:g64,m6 */
@@ -1242,6 +1249,7 @@ static const uint64 allow_native[] = {
     0x20c3e13dd8602ac7ULL, /* vsubpd vex d:x s:x,x */
     0x20c7839e17fca5ccULL, /* mul 66 f2 d:g16,g16 s:g16,g16 */
     0x20d6e295d8ec783fULL, /* prefetchnta d: s:m2 */
+    0x20dd3fb4edcc34adULL, /* rsqrtss f3 rexw d:x s:x */
     0x20e06c1bef75c4f4ULL, /* and rexw d:g64 s:m6,g64 */
     0x20e514b7eef2112dULL, /* setp f2 d:g8 s: */
     0x20e530d3430ba184ULL, /* addss f3 d:x s:x,x */
@@ -1315,6 +1323,7 @@ static const uint64 allow_native[] = {
     0x229090ecb94ff6caULL, /* vpcmpgtw vex d:x s:x,m8 */
     0x22964b516ceb62eeULL, /* vucomiss vex w d: s:x,m4 */
     0x22a3dad763b9f705ULL, /* pop 66 f2 rexw d:g64,g64 s:g64,m6 */
+    0x22b260b8aabbe97cULL, /* rcpss f3 rexw d:x s:x */
     0x22bca5ae391ae00fULL, /* setns f3 rexw d:m2 s: */
     0x22beb3c9fff18c78ULL, /* not f2 lock d:m4 s:m4 */
     0x22c0ca85b4a2d155ULL, /* vhaddpd vex d:x s:x,m8 */
@@ -1351,6 +1360,7 @@ static const uint64 allow_native[] = {
     0x2386b4cbae043e68ULL, /* fcmovb f3 d:st s:st */
     0x2398fae35842f773ULL, /* jno 66 f2 rexw d: s:p */
     0x239ead6c73b09272ULL, /* mul f2 d:g16 s:g8,g8 */
+    0x23a9bdaa4e459335ULL, /* vrcpps vex w d:x s:m8 */
     0x23ab459242479276ULL, /* ror 66 f2 rexw d:g64 s:i,g64 */
     0x23b28cabaea89769ULL, /* cmovno 66 f3 rexw d:g64 s:g64 */
     0x23b359766390d327ULL, /* cvtdq2ps d:x s:x */
@@ -1608,6 +1618,7 @@ static const uint64 allow_native[] = {
     0x299d1f8c7bc8f136ULL, /* mov f2 rexw d:m6 s:g64 */
     0x29a2e399653b6edeULL, /* cmovnle 66 rexw d:g64 s:m6 */
     0x29a373c987edfe97ULL, /* push f3 d:g64,m6 s:g64,g64 */
+    0x29a54888347089dfULL, /* rcpss f3 d:x s:m4 */
     0x29b147350fa2eb54ULL, /* fstp f3 rexw d:m4 s:st */
     0x29b1afdee18e444eULL, /* lar 66 rexw d:g64 s:m3 */
     0x29d4d849660aa48cULL, /* vmovshdup vex w l d:y s:y */
@@ -1742,6 +1753,7 @@ static const uint64 allow_native[] = {
     0x2d168b2fd1d7901fULL, /* cmovnl 66 rexw d:g64 s:m6 */
     0x2d1b2bbdd41c3d01ULL, /* bts f2 d:m4 s:g32,m4 */
     0x2d1c226e054e8ab1ULL, /* inc 66 f2 lock d:m3 s:m3 */
+    0x2d24f013a5b164e5ULL, /* vrsqrtps vex w d:x s:x */
     0x2d268750eb0c5569ULL, /* vpsubusb vex w d:x s:x,m8 */
     0x2d2bc9d4406eaf11ULL, /* maxps rexw d:x s:x,x */
     0x2d2c84108dbcaed4ULL, /* xor 66 f3 lock d:m2 s:i,m2 */
@@ -1766,6 +1778,7 @@ static const uint64 allow_native[] = {
     0x2da377ab8cf95f7cULL, /* smsw d:m3 s: */
     0x2da79d378eea5cc6ULL, /* cvtpd2pi 66 d:mm s:x */
     0x2dab985769da5a28ULL, /* call f2 rexw d:g64,m6 s:g64,g64 */
+    0x2db79b8371613907ULL, /* rsqrtps rexw d:x s:x */
     0x2dc4b297e784e41bULL, /* vpblendw vex w d:x s:x,x,i */
     0x2dc62488ad125445ULL, /* adc 66 d:g8 s:m2,g8 */
     0x2dd2e1460ed2649dULL, /* cmovnz 66 f2 rexw d:g64 s:g64 */
@@ -1877,6 +1890,7 @@ static const uint64 allow_native[] = {
     0x30c0fa504933b721ULL, /* vpermilpd vex l d:y s:y,m33 */
     0x30c9594e3830d993ULL, /* setp f2 rexw d:g8 s: */
     0x30cb967cee6ac602ULL, /* lods rexw d:g64,g64 s:m6,g64 */
+    0x30d3508d2d0be056ULL, /* f2xm1 rexw d:st s:st */
     0x30d3ad6cc496c116ULL, /* fsubr 66 f3 rexw d:st s:m6,st */
     0x30dd90bba2db146eULL, /* rol 66 d:m2 s:i,m2 */
     0x30ea8171a6b4f1a0ULL, /* vextractps vex w d:m4 s:i,x */
@@ -1957,6 +1971,7 @@ static const uint64 allow_native[] = {
     0x32e0bd97f652a533ULL, /* shrd rexw d:m6 s:g64,g8,m6 */
     0x32ec140fe123decbULL, /* sar 66 f2 d:m3 s:g8,m3 */
     0x32fac3a0824c2df4ULL, /* cmp 66 d: s:g8,m2 */
+    0x3305a01f4339dd69ULL, /* vdpps vex d:x s:x,x,i */
     0x33071cfd95f1a292ULL, /* int3 f2 d: s: */
     0x3314599d6ea3c520ULL, /* vmulss vex w d:x s:x,x */
     0x33273b79efebd714ULL, /* adc 66 f3 d:g16 s:i,g16 */
@@ -2002,6 +2017,7 @@ static const uint64 allow_native[] = {
     0x3431feef975e9de6ULL, /* setns 66 f2 rexw d:g8 s: */
     0x34332f59ed20184bULL, /* xorpd 66 rexw d:x s:x,x */
     0x34333226621f7bceULL, /* pcmpgtw 66 rexw d:x s:x,x */
+    0x3433a9b8a9efbd08ULL, /* vrcpps vex w l d:y s:y */
     0x34394d880bac26d2ULL, /* vpmulhrsw vex d:x s:x,m8 */
     0x343cf1b772b31f48ULL, /* div 66 f2 rexw d:g64,g64 s:m6,g64,g64 */
     0x343f101a5eb879d0ULL, /* idiv 66 f2 d:g16,g16 s:g16,g16,g16 */
@@ -2106,6 +2122,7 @@ static const uint64 allow_native[] = {
     0x36c5e44b56b7789aULL, /* rcl f2 rexw d:m6 s:g8,m6 */
     0x36d0c68c0ffa0790ULL, /* haddpd 66 rexw d:x s:m8,x */
     0x36d4def6a751ff0bULL, /* xadd f2 d:m2,g8 s:m2,g8 */
+    0x36d926aa66d0366fULL, /* rcpps d:x s:m8 */
     0x36da7133bdfdb657ULL, /* movaps rexw d:x s:m8 */
     0x36dc60771b8c58baULL, /* psignb 66 rexw d:x s:m8,x */
     0x36e5e6a5b929f457ULL, /* vpsllw vex w d:x s:x,m8 */
@@ -2113,6 +2130,7 @@ static const uint64 allow_native[] = {
     0x36f83c20dbc29643ULL, /* fucomip f2 d: s:st,st */
     0x36fae655726523d1ULL, /* setnb f2 rexw d:g8 s: */
     0x3701f880d8bae44fULL, /* setnl 66 f2 d:m2 s: */
+    0x370995270c5fd7a0ULL, /* rsqrtss 66 f3 rexw d:x s:m4 */
     0x3711aa97832ef2d4ULL, /* cvtss2si 66 f3 rexw d:g64 s:m4 */
     0x3714e16a43ff0030ULL, /* bt f2 d: s:m4,i */
     0x371858f43710a791ULL, /* mulss 66 f3 rexw d:x s:x,x */
@@ -2218,6 +2236,7 @@ static const uint64 allow_native[] = {
     0x3a13d45722d96259ULL, /* pop 66 d:g16,g64 s:g64,m3 */
     0x3a15789be5fca46fULL, /* shl 66 f3 d:m3 s:i,m3 */
     0x3a2d7ec2ab072fc4ULL, /* btc f2 rexw d:m6 s:g64,m6 */
+    0x3a394d6b591ab782ULL, /* rsqrtss f3 d:x s:m4 */
     0x3a39c76cf0db56a2ULL, /* blendps 66 rexw d:x s:m8,i,x */
     0x3a4c952b2ed9c9c0ULL, /* cvtdq2ps d:x s:m8 */
     0x3a52fe6806f5ba18ULL, /* add rexw d:m2 s:g8,m2 */
@@ -2301,6 +2320,7 @@ static const uint64 allow_native[] = {
     0x3c2b2120c52c053dULL, /* shrd rexw d:g64 s:g64,i,g64 */
     0x3c5396a932ca5587ULL, /* hlt 66 f3 d: s: */
     0x3c55ba45246cea95ULL, /* pslld 66 rexw d:x s:x,x */
+    0x3c5b10239f9b295aULL, /* rcpss f3 d:x s:x */
     0x3c5c6c2a038d2f1bULL, /* imul 66 d:g16 s:g8,g8 */
     0x3c5ce4c4db9f5e6fULL, /* jecxz f2 rexw d: s:p,g64 */
     0x3c606916339b09d2ULL, /* vcmppd vex w d:x s:x,m8,i */
@@ -2737,6 +2757,7 @@ static const uint64 allow_native[] = {
     0x47e6f48fb925ba88ULL, /* shr 66 f2 d:g8 s:i,g8 */
     0x47eea44023d1714eULL, /* setnle f2 d:m2 s: */
     0x47f5995c90570bc4ULL, /* cvttpd2dq 66 rexw d:x s:x */
+    0x4803fbc76d30173dULL, /* vrcpps vex l d:y s:y */
     0x480448ac29beb829ULL, /* divss f3 d:x s:m4,x */
     0x480cc0ecde424011ULL, /* pslld 66 d:x s:x,x */
     0x481bcfe0cab60b27ULL, /* setp 66 f2 d:m2 s: */
@@ -2806,6 +2827,7 @@ static const uint64 allow_native[] = {
     0x49f8532a78cf3c72ULL, /* pinsrb 66 d:x s:m2,i */
     0x49fcb94273561f91ULL, /* adc 66 d:g16 s:i,g16 */
     0x4a131d5fec3540d5ULL, /* sub 66 rexw d:m6 s:g64,m6 */
+    0x4a1a00d64e4c998bULL, /* rsqrtss 66 f3 rexw d:x s:x */
     0x4a2337812cdb499eULL, /* fisttp d:m6 s:st */
     0x4a31a0787b8593e4ULL, /* vpmovzxwq vex d:x s:m4 */
     0x4a46c970c64ca424ULL, /* subpd 66 rexw d:x s:x,x */
@@ -3167,6 +3189,7 @@ static const uint64 allow_native[] = {
     0x52ffe1e4f8832190ULL, /* fcmovnbe 66 d:st s:st */
     0x5305939d21a55c74ULL, /* fimul f2 d:st s:m4,st */
     0x530e6fad37c6d826ULL, /* lahf 66 f2 rexw d:g8 s: */
+    0x530ed9d36a42a6f8ULL, /* rcpps rexw d:x s:x */
     0x531b90dd26179500ULL, /* cmp 66 f3 d: s:m3,i */
     0x531eb65462980cdeULL, /* shld d:m4 s:g32,g8,m4 */
     0x531f074ea6f8e546ULL, /* vpsllw vex w d:x s:x,x */
@@ -3187,6 +3210,7 @@ static const uint64 allow_native[] = {
     0x5372d0122faad27cULL, /* lods 66 f2 d:g16,g64 s:m3,g64 */
     0x537399c3a6799b44ULL, /* mov 66 f2 d:m3 s:g16 */
     0x5373e57c0b29cbb9ULL, /* pminud 66 d:x s:x,x */
+    0x53769a7096d6e823ULL, /* f2xm1 66 f3 d:st s:st */
     0x537dca2a969d403cULL, /* scas d:g64 s:m2,g8,g64 */
     0x537e0f4ba6639f9bULL, /* fsubr 66 d:st s:m4,st */
     0x538e690f3cee8062ULL, /* adc 66 f3 rexw d:g8 s:g8,g8 */
@@ -3294,6 +3318,7 @@ static const uint64 allow_native[] = {
     0x566cf190115e2119ULL, /* cwde 66 d:g16 s:g16 */
     0x566fb90de3dcae7fULL, /* punpcklqdq 66 d:x s:x,x */
     0x56734d8ae07098dbULL, /* lsl f2 d:g32 s:m3 */
+    0x5683cd3a447f9f32ULL, /* vrcpss vex l d:x s:x,x */
     0x56841f429bf5c0aaULL, /* imul 66 f3 rexw d:g64,g64 s:m6,g64 */
     0x568950fe9360b3a8ULL, /* vpmulhw vex d:x s:x,x */
     0x568ab89583fe71dfULL, /* paddw 66 rexw d:x s:m8,x */
@@ -3474,6 +3499,7 @@ static const uint64 allow_native[] = {
     0x5b54f224a29978a2ULL, /* sets f2 d:m2 s: */
     0x5b55c11d0bb6d569ULL, /* sub f3 lock d:m2 s:g8,m2 */
     0x5b5ee6ee3ce5dba0ULL, /* imul 66 d:g16 s:g16,i */
+    0x5b6c328efcc8b0d4ULL, /* vdpps vex w d:x s:x,x,i */
     0x5b6e4687cb165f46ULL, /* shl 66 f2 d:g8 s:i,g8 */
     0x5b6f48720e110f84ULL, /* fxtract f2 d:st s:st */
     0x5b71b0544d1d48bfULL, /* add f3 rexw d:g8 s:g8,g8 */
@@ -3574,6 +3600,7 @@ static const uint64 allow_native[] = {
     0x5e3283f2d3079064ULL, /* btr 66 f3 rexw d:m6 s:i,m6 */
     0x5e34bbb879fc2c09ULL, /* punpckhdq 66 rexw d:x s:m8,x */
     0x5e3cc0f6feaa032eULL, /* hlt 66 d: s: */
+    0x5e40c52cf618205dULL, /* vrsqrtps vex w l d:y s:y */
     0x5e42330565d2769cULL, /* verw 66 f2 rexw d: s:g16 */
     0x5e4377c28b4abb4cULL, /* vpavgw vex d:x s:x,x */
     0x5e527f8454e07d7aULL, /* enter 66 f3 rexw d:g64,m6,g64 s:i,i,g64,g64 */
@@ -3601,6 +3628,7 @@ static const uint64 allow_native[] = {
     0x5edef49f4e015725ULL, /* vcvtph2ps vex l d:y s:y */
     0x5ef4074ade835ad1ULL, /* fcmovne f3 d:st s:st */
     0x5ef506f25b601fbaULL, /* fabs 66 rexw d:st s:st */
+    0x5ef9f8ad3dc82f90ULL, /* vrsqrtps vex l d:y s:y */
     0x5f05d888cdaf67afULL, /* pminsd 66 rexw d:x s:x,x */
     0x5f160454fe8d6f2bULL, /* dec 66 f2 lock d:m2 s:m2 */
     0x5f16c9b78c6ac7ebULL, /* prefetcht2 66 f3 d: s:m2 */
@@ -3751,6 +3779,7 @@ static const uint64 allow_native[] = {
     0x6340b190698268d6ULL, /* orps rexw d:x s:x,x */
     0x6342629d32a47065ULL, /* vmovapd vex w l d:y s:m33 */
     0x634595c5f3d8c145ULL, /* aesenc 66 rexw d:x s:x,x */
+    0x6346d0e4ff3f6098ULL, /* vrsqrtss vex d:x s:x,m4 */
     0x634bc3385b40ece1ULL, /* add f3 d:g8 s:m2,g8 */
     0x635043b00f63c7d3ULL, /* loopne d:g64 s:p,g64 */
     0x6378628cb4bbeebbULL, /* bswap 66 f2 rexw d:g64 s:g64 */
@@ -3822,6 +3851,7 @@ static const uint64 allow_native[] = {
     0x65204e48965a27eeULL, /* fcmovu d:st s:st */
     0x6525a9138c21d676ULL, /* bts lock d:m4 s:g32,m4 */
     0x6529573a98006d89ULL, /* vpaddsb vex d:x s:x,x */
+    0x652a703d8f7e4c2dULL, /* rcpps rexw d:x s:m8 */
     0x652f80e355d1d1a9ULL, /* push 66 d:g64,m3 s:i,g64 */
     0x652fe7628c23842bULL, /* bt f3 rexw d: s:g64,i */
     0x65332dd62078d9ebULL, /* vpmovsxdq vex w d:x s:m6 */
@@ -3887,6 +3917,7 @@ static const uint64 allow_native[] = {
     0x6740551e85ad43e2ULL, /* mov rexw d:g64 s:i */
     0x6740718102bc3c7bULL, /* fdivp 66 f3 rexw d:st s:st,st */
     0x67476a0ecc28d150ULL, /* test 66 f2 rexw d: s:m2,i */
+    0x674e50628c8e5caaULL, /* vrsqrtps vex w d:x s:m8 */
     0x675230d51929cffeULL, /* fyl2x 66 f3 rexw d:st,st s:st,st */
     0x676246ac832e74d9ULL, /* xor f3 lock d:m4 s:g32,m4 */
     0x6765853290e0cc6eULL, /* setno f2 rexw d:g8 s: */
@@ -3946,6 +3977,7 @@ static const uint64 allow_native[] = {
     0x68dd3a26e4d45690ULL, /* ficom 66 f3 d:st s:m4,st */
     0x68dec9db682bb8d4ULL, /* shl 66 f2 d:g16 s:i,g16 */
     0x68ea306bdbdfd762ULL, /* cmpxchg8b f2 d:m6,g32,g32 s:m6,g32,g32,g32,g32 */
+    0x68ee48dcae9b90efULL, /* vrsqrtss vex l d:x s:x,x */
     0x68eebb447068394cULL, /* or 66 f2 rexw d:m6 s:g64,m6 */
     0x68f1a9fc953eeb2aULL, /* vmovddup vex l d:y s:y */
     0x68f4d30b9b1cd0b1ULL, /* vsubss vex d:x s:x,x */
@@ -3986,6 +4018,7 @@ static const uint64 allow_native[] = {
     0x69bd46002bcc3e5aULL, /* vcmpps vex w d:x s:x,x,i */
     0x69cf2951fc9c36f5ULL, /* sub 66 f2 rexw d:m2 s:g8,m2 */
     0x69d3f824c4e3ba5cULL, /* cmovp f3 rexw d:g64 s:g64 */
+    0x69d5ed904a6553c7ULL, /* vrsqrtss vex w d:x s:x,m4 */
     0x69dd6dc5160e728bULL, /* or f3 d:m2 s:i,m2 */
     0x69e60fe2ae6f928aULL, /* fcmovnbe 66 f2 d:st s:st */
     0x69e9a4c03700a128ULL, /* jnz rexw d: s:p */
@@ -4379,6 +4412,7 @@ static const uint64 allow_native[] = {
     0x73b3dc95ba99877fULL, /* fld 66 f3 d:st s:m6 */
     0x73b3de95ba998ae5ULL, /* fld 66 f3 d:st s:m4 */
     0x73c0205138994f87ULL, /* pcmpeqb 66 rexw d:x s:m8,x */
+    0x73c87ce542abfd92ULL, /* vrsqrtss vex w d:x s:x,x */
     0x73cd7f06091e1cdaULL, /* rol f2 d:m4 s:g8,m4 */
     0x73ea40d872ca73b2ULL, /* mul f2 d:g32,g32 s:g32,g32 */
     0x73ed57fb10b3ed80ULL, /* not f3 d:g32 s:g32 */
@@ -4464,7 +4498,9 @@ static const uint64 allow_native[] = {
     0x75e5833f69413ca8ULL, /* xgetbv d:g32,g32 s:g32 */
     0x75ee89ad879b4d49ULL, /* cmovnbe f2 d:g32 s:m4 */
     0x76001bc2e89de7caULL, /* fst 66 f3 rexw d:st s:st */
+    0x76022cee3b8b6293ULL, /* vrcpss vex w l d:x s:x,x */
     0x7607264ab4c5f738ULL, /* shr f2 rexw d:g8 s:i,g8 */
+    0x760c7b7d80962090ULL, /* f2xm1 d:st s:st */
     0x7624988ffef46f60ULL, /* inc 66 f2 rexw d:m2 s:m2 */
     0x76287d546200674dULL, /* fstp 66 f3 d:m7 s:st */
     0x7630d77f245fd34bULL, /* vunpckhpd vex w d:x s:x,x */
@@ -4558,6 +4594,7 @@ static const uint64 allow_native[] = {
     0x78191fca96b7e370ULL, /* rcr rexw d:m2 s:i,m2 */
     0x78200c3b7b77abe2ULL, /* rep scas 66 f3 d:g64,g64 s:m3,g16,g64,g64 */
     0x7821a41ce31300d1ULL, /* ror 66 f3 d:m3 s:i,m3 */
+    0x7824859b4ab6bd7fULL, /* vrsqrtps vex w l d:y s:m33 */
     0x782694f08d1b12a2ULL, /* fbstp 66 d:m7 s:st */
     0x7831ef93fb15b637ULL, /* mov 66 f3 d:g8 s:i */
     0x7837c9a304c3bd91ULL, /* rcr f3 d:g8 s:g8,g8 */
@@ -4833,6 +4870,7 @@ static const uint64 allow_native[] = {
     0x7f71e9605d0e676dULL, /* vinsertf128 vex l d:y s:y,m8,i */
     0x7f7b1e2f8aff5f4eULL, /* imul 66 f3 rexw d:g16 s:g8,g8 */
     0x7f9a9f8b99346146ULL, /* fcmovne rexw d:st s:st */
+    0x7fa25e3f47bd18f6ULL, /* rcpss 66 f3 d:x s:x */
     0x7fa2feff9211b3aeULL, /* shl f2 d:m2 s:g8,m2 */
     0x7fa520445714e519ULL, /* cmovnz d:g32 s:g32 */
     0x7fa73f824b4842afULL, /* vbroadcastf128 vex l d:y s:m8 */
@@ -4852,6 +4890,7 @@ static const uint64 allow_native[] = {
     0x800ba766b5ac6dd5ULL, /* fist rexw d:m3 s:st */
     0x800c1b2f7fa5c2cdULL, /* xor 66 f3 d:m2 s:i,m2 */
     0x800c45c1754a7c9cULL, /* mov f2 rexw d:g8 s:g8 */
+    0x8010a5624045c14eULL, /* vrsqrtss vex w l d:x s:x,x */
     0x801b967dcecbed3cULL, /* or f2 rexw d:m2 s:i,m2 */
     0x8026182471c05489ULL, /* sub rexw d:g64 s:i,g64 */
     0x802d466feabd4714ULL, /* emms d: s: */
@@ -4919,6 +4958,7 @@ static const uint64 allow_native[] = {
     0x81bac48ffebdb049ULL, /* fxam 66 f2 d: s:st */
     0x81be23ecaf9f7f1bULL, /* adc 66 f2 d:m2 s:g8,m2 */
     0x81bf29135bb520b3ULL, /* vorps vex w d:x s:x,m8 */
+    0x81c14e0265016367ULL, /* vrcpss vex l d:x s:x,m4 */
     0x81c214f238d40f38ULL, /* imul 66 f2 rexw d:g64 s:g64,i */
     0x81cb97f771121d26ULL, /* subps d:x s:m8,x */
     0x81cf76ccc8c8115eULL, /* adc f2 lock rexw d:m2 s:g8,m2 */
@@ -5085,6 +5125,7 @@ static const uint64 allow_native[] = {
     0x85f39b6c9a43b4a8ULL, /* add 66 f2 rexw d:m2 s:i,m2 */
     0x85f39faa66cb3de3ULL, /* movq2dq 66 f3 d:x s:mm */
     0x85fafe4144989b29ULL, /* setnp 66 f2 rexw d:g8 s: */
+    0x85fb76dfb04436ecULL, /* f2xm1 66 f2 d:st s:st */
     0x85fd12ac69d2e1d1ULL, /* mov f3 d:m4 s:seg */
     0x860be84f35c3efb7ULL, /* nop f3 d: s:m4 */
     0x860d74c3c7e0fdc7ULL, /* xadd rexw d:m2,g8 s:m2,g8 */
@@ -5318,6 +5359,7 @@ static const uint64 allow_native[] = {
     0x8ced15ea3ebc8883ULL, /* cmovnl 66 f2 d:g16 s:m3 */
     0x8cf1eb8e941c2dcdULL, /* comiss d: s:x,m4 */
     0x8cf8c7a12e6fd84fULL, /* not f2 d:m2 s:m2 */
+    0x8cfb29e682490fd4ULL, /* f2xm1 f2 rexw d:st s:st */
     0x8d092390cd2d2effULL, /* cmps 66 d:g64,g64 s:m2,m2,g64,g64 */
     0x8d0a9ea77a89cf78ULL, /* pcmpestri 66 d:g32 s:x,x,i,g32,g32 */
     0x8d11c9ad3d2bd583ULL, /* imul d:g32 s:g32,g32 */
@@ -5413,6 +5455,7 @@ static const uint64 allow_native[] = {
     0x8f1cba956f97fe42ULL, /* psubd rexw d:mm s:mm,mm */
     0x8f1e629430176f99ULL, /* jmp 66 f3 rexw d: s:g64 */
     0x8f256dd6c4908f1eULL, /* fincstp f3 rexw d: s: */
+    0x8f25f4de5221bf3cULL, /* vrcpss vex w d:x s:x,m4 */
     0x8f44c5a668a9c65eULL, /* bts rexw d:g64 s:i,g64 */
     0x8f4811bd98dbb73cULL, /* fld1 66 f3 d:st s:i */
     0x8f49d83c1d3952ccULL, /* ficomp f3 rexw d: s:m3,st */
@@ -5473,6 +5516,7 @@ static const uint64 allow_native[] = {
     0x90676e435298adc9ULL, /* movshdup 66 f3 d:x s:x */
     0x906e9503ae998fdcULL, /* pmaxuw 66 d:x s:x,x */
     0x9073fc280f5603cdULL, /* movs 66 f2 d:m3,g64,g64 s:m3,g64,g64 */
+    0x907ab1d6c1163db0ULL, /* rcpss 66 f3 rexw d:x s:x */
     0x908122c380657466ULL, /* adc 66 d:m3 s:g16,m3 */
     0x90947314fb101524ULL, /* shr f2 rexw d:m6 s:i,m6 */
     0x909c20c00a63bf7eULL, /* rcl 66 d:g8 s:i,g8 */
@@ -5693,6 +5737,7 @@ static const uint64 allow_native[] = {
     0x968b1ca43e9c650bULL, /* movsx rexw d:g64 s:g8 */
     0x9690465f615c7dc6ULL, /* fist 66 d:m4 s:st */
     0x9692d48418c62e36ULL, /* cvttsd2si 66 f2 rexw d:g64 s:m6 */
+    0x969449ea18aab6f1ULL, /* rcpss 66 f3 rexw d:x s:m4 */
     0x9696b1ac00c4387bULL, /* movsx 66 f2 d:g16 s:g16 */
     0x969c560346902c08ULL, /* vminss vex d:x s:x,m4 */
     0x96a3e61268137188ULL, /* cmovns 66 f2 rexw d:g64 s:g64 */
@@ -5770,6 +5815,7 @@ static const uint64 allow_native[] = {
     0x984f6d8257f70866ULL, /* xor f2 d:g8 s:i,g8 */
     0x9850c186ece32574ULL, /* addsubpd 66 d:x s:m8,x */
     0x9852088d79ccb98bULL, /* cmovo 66 f3 d:g16 s:g16 */
+    0x9852f77c55d0790fULL, /* vdpps vex w l d:y s:y,y,i */
     0x98586877384a6aa1ULL, /* add 66 f3 rexw d:m6 s:i,m6 */
     0x985f0e9299199908ULL, /* cmovp 66 f3 rexw d:g64 s:g64 */
     0x986079781b780224ULL, /* vpcmpeqw vex w d:x s:x,m8 */
@@ -5863,6 +5909,7 @@ static const uint64 allow_native[] = {
     0x9aa6e40938c33f91ULL, /* vpacksswb vex d:x s:x,x */
     0x9aab7e632e3cc7b6ULL, /* or rexw d:g64 s:g64,g64 */
     0x9aabd04d6609ac6cULL, /* xchg 66 d:m3,g16 s:m3,g16 */
+    0x9aacfdb9c5629ebeULL, /* rcpps d:x s:x */
     0x9ab5582a7cf409e7ULL, /* fst 66 d:st s:st */
     0x9ab6ff133bb74bf4ULL, /* ret rexw d:g64 s:g64,m6 */
     0x9abeeab74212f253ULL, /* xadd f2 d:m4,g32 s:m4,g32 */
@@ -5920,6 +5967,7 @@ static const uint64 allow_native[] = {
     0x9c0e5dbed266c29cULL, /* cmp f2 rexw d: s:m6,i */
     0x9c15f5d000808e4fULL, /* vmulpd vex w l d:y s:y,m33 */
     0x9c195ac71c8d0728ULL, /* ret f3 d:g64 s:i,g64,m6 */
+    0x9c1c0c78357977f0ULL, /* rsqrtss 66 f3 d:x s:m4 */
     0x9c252bb65044dedaULL, /* jz d: s:p */
     0x9c2f99bc1caca357ULL, /* loopne f2 d:g64 s:p,g64 */
     0x9c2fa47b0456d36dULL, /* vpor vex w d:x s:x,x */
@@ -5991,6 +6039,7 @@ static const uint64 allow_native[] = {
     0x9dccd114dc393095ULL, /* ffreep 66 d:st s: */
     0x9dd63fcadef12180ULL, /* fldl2t 66 d:st s:i */
     0x9dd8e5ff2dd37aeaULL, /* cmpxchg f3 d:m2,g8 s:g8,m2,g8 */
+    0x9dd9e586e631f203ULL, /* rcpss 66 f3 d:x s:m4 */
     0x9ddedf5139bc280bULL, /* vpextrd vex w d:m6 s:x,i */
     0x9de0e3e17f1afff2ULL, /* fld 66 f2 rexw d:st s:st */
     0x9de7063404e2eb0aULL, /* pmuludq rexw d:mm s:mm,mm */
@@ -6206,6 +6255,7 @@ static const uint64 allow_native[] = {
     0xa3d4b45180f9421dULL, /* ror f3 rexw d:m2 s:i,m2 */
     0xa3d5e50f593a75ffULL, /* fincstp 66 f2 d: s: */
     0xa3dcd53a7b95cd60ULL, /* vaddps vex l d:y s:y,y */
+    0xa3e05b7011c0873eULL, /* rsqrtss f3 rexw d:x s:m4 */
     0xa3e07d07887527c9ULL, /* lea 66 f2 rexw d:g64 s:m1 */
     0xa3e51a398ee2d1c8ULL, /* or rexw d:m6 s:g64,m6 */
     0xa3e55585ecd225c4ULL, /* pushf f3 rexw d:g64,m6 s:g64 */
@@ -6325,6 +6375,7 @@ static const uint64 allow_native[] = {
     0xa6d2c9d07baca35fULL, /* movzx 66 rexw d:g64 s:g16 */
     0xa6d8f728fb63dc61ULL, /* addsd f2 rexw d:x s:m6,x */
     0xa6e3475702e60efbULL, /* xor lock rexw d:m6 s:g64,m6 */
+    0xa6ee812d40bbc0f3ULL, /* vrsqrtss vex d:x s:x,x */
     0xa6f79f4fbf6eeb8fULL, /* rcl 66 f3 rexw d:m2 s:i,m2 */
     0xa7000bbbf967189aULL, /* fdivr f2 d:st s:m6,st */
     0xa700cc2ea683d009ULL, /* or f3 rexw d:g8 s:i,g8 */
@@ -6496,6 +6547,7 @@ static const uint64 allow_native[] = {
     0xab2d723f3c89c9acULL, /* adc f3 rexw d:m2 s:i,m2 */
     0xab3a43d1744014b7ULL, /* psubsw 66 d:x s:m8,x */
     0xab3d4211f664147aULL, /* vmaxps vex d:x s:x,x */
+    0xab4227d5c83c628aULL, /* vrcpps vex d:x s:m8 */
     0xab4360d7d32881cbULL, /* movhps rexw d:x s:x */
     0xab45b9714fa20811ULL, /* sub f3 d:g32 s:g32,g32 */
     0xab48175a6734f5e4ULL, /* vpaddb vex w d:x s:x,m8 */
@@ -6505,6 +6557,7 @@ static const uint64 allow_native[] = {
     0xab619a0f41832493ULL, /* shr 66 f3 d:g8 s:i,g8 */
     0xab6a3d0257abeebcULL, /* movdq2q f2 d:mm s:x */
     0xab782b3bc2b8f3aaULL, /* xor 66 rexw d:m2 s:g8,m2 */
+    0xab7b89b96664fd78ULL, /* vdpps vex l d:y s:y,m33,i */
     0xab7e270c3d497d31ULL, /* vcomisd vex w l d: s:x,x */
     0xab8029b09dce8066ULL, /* psignb 66 d:x s:m8,x */
     0xab827e1ae98e406cULL, /* minsd f2 rexw d:x s:m6,x */
@@ -6704,6 +6757,7 @@ static const uint64 allow_native[] = {
     0xb0a96d07d7340332ULL, /* shl 66 d:m2 s:g8,m2 */
     0xb0bb4b8b0c37587aULL, /* cmovs f3 d:g32 s:m4 */
     0xb0bf93ae49a82198ULL, /* ror f2 rexw d:m6 s:g8,m6 */
+    0xb0c317ca1d1696e5ULL, /* rcpss f3 rexw d:x s:m4 */
     0xb0c9287900c76dadULL, /* ud2 d: s: */
     0xb0cdca23ad709d45ULL, /* setz 66 rexw d:m2 s: */
     0xb0d07050a7ae17feULL, /* prefetchnta f3 d: s:m2 */
@@ -6975,6 +7029,7 @@ static const uint64 allow_native[] = {
     0xb84f32ed62bfdc08ULL, /* shld 66 f2 d:g16 s:g16,g8,g16 */
     0xb850f7b6b785cf64ULL, /* bt 66 d: s:m3,g16 */
     0xb862b9cde9931ce4ULL, /* mul 66 f2 d:g16 s:g8,g8 */
+    0xb86a4c178b56bb7aULL, /* vrsqrtps vex l d:y s:m33 */
     0xb87005c21634807cULL, /* jnl 66 rexw d: s:p */
     0xb87fe0a0baf61366ULL, /* bts 66 f2 d:m3 s:i,m3 */
     0xb87ffc91c36f728aULL, /* ror 66 rexw d:g64 s:g8,g64 */
@@ -7024,6 +7079,7 @@ static const uint64 allow_native[] = {
     0xb9b55ac95e9494ccULL, /* fnsave 66 f2 d:m11 s: */
     0xb9c3293f7ee01534ULL, /* cmovz 66 f3 rexw d:g64 s:m6 */
     0xb9ce35243f08544dULL, /* bsr 66 f2 rexw d:g64 s:g64 */
+    0xb9d024aafe691f59ULL, /* vdpps vex w l d:y s:y,m33,i */
     0xb9d5dee1a3235870ULL, /* vxorpd vex w l d:y s:y,m33 */
     0xb9ea773a61c04affULL, /* movsd 66 f2 d:x s:x */
     0xb9edf2d5f6580ee4ULL, /* prefetcht1 f3 rexw d: s:m2 */
@@ -7215,6 +7271,7 @@ static const uint64 allow_native[] = {
     0xbe5bfa5e9aa7a6f4ULL, /* inc rexw d:m2 s:m2 */
     0xbe5f1f456e1befe2ULL, /* pslld 66 rexw d:x s:i,x */
     0xbe61f9bee5c02b30ULL, /* cmp f2 rexw d: s:m2,i */
+    0xbe66394e2c2b2a4aULL, /* dpps 66 d:x s:x,i,x */
     0xbe76b23fd47035aaULL, /* btr d:m4 s:g32,m4 */
     0xbe793f9879a8632eULL, /* nop f3 d: s:g32 */
     0xbe7f859ca249e975ULL, /* minsd 66 f2 rexw d:x s:x,x */
@@ -7432,6 +7489,7 @@ static const uint64 allow_native[] = {
     0xc4bf5625fa6c7b9eULL, /* setno rexw d:g8 s: */
     0xc4c17df85e13bccfULL, /* movlps d:x s:x */
     0xc4c644c298d04f26ULL, /* vcomiss vex d: s:x,m4 */
+    0xc4cacd9f23b635a1ULL, /* f2xm1 f3 d:st s:st */
     0xc4cd777a39c99949ULL, /* fldcw f3 d: s:m3 */
     0xc4db811c6580ba47ULL, /* sub 66 f2 rexw d:m6 s:i,m6 */
     0xc4e76424426811d8ULL, /* fsub f3 d:st s:st,st */
@@ -7469,6 +7527,7 @@ static const uint64 allow_native[] = {
     0xc5eef294c78da64dULL, /* fsubr 66 f2 d:st s:m4,st */
     0xc5f65691a82723c4ULL, /* verr f3 rexw d: s:g16 */
     0xc5fc1b1ccf012a1aULL, /* or d:g32 s:m4,g32 */
+    0xc5fe14e88521e78aULL, /* f2xm1 f2 d:st s:st */
     0xc606935172498ea2ULL, /* vpsrad vex d:x s:i,x */
     0xc60bacd6ef287271ULL, /* fcmovnb 66 f2 rexw d:st s:st */
     0xc61b29c8781e5720ULL, /* prefetcht2 rexw d: s:m2 */
@@ -7613,6 +7672,7 @@ static const uint64 allow_native[] = {
     0xca24dba764f311fdULL, /* movaps d:x s:m8 */
     0xca2d2ce45a15f77dULL, /* fcomi 66 f3 rexw d: s:st,st */
     0xca2f56ae3f2bd81eULL, /* shr rexw d:g64 s:g8,g64 */
+    0xca3ccf10fc44110bULL, /* vrcpss vex d:x s:x,m4 */
     0xca42e5fd78cc8144ULL, /* ficom 66 f3 rexw d: s:m3,st */
     0xca4d0da14c2a7393ULL, /* btc 66 f3 rexw d:g64 s:i,g64 */
     0xca52b1b811e0d072ULL, /* movsd f2 rexw d:x s:m6 */
@@ -7994,6 +8054,7 @@ static const uint64 allow_native[] = {
     0xd36b8a91b571878fULL, /* jl f3 rexw d: s:p */
     0xd36c2ae00e2edc37ULL, /* movsd f2 d:x s:x */
     0xd37a13418a30040dULL, /* setno f3 d:m2 s: */
+    0xd38190220b0e0212ULL, /* vrcpps vex w l d:y s:m33 */
     0xd383650abbc503d0ULL, /* adc f3 d:g8 s:g8,g8 */
     0xd38ab449f7c7d394ULL, /* vmovdqa vex w l d:m33 s:y */
     0xd39e082c486bd83fULL, /* setl f2 rexw d:g8 s: */
@@ -8006,6 +8067,7 @@ static const uint64 allow_native[] = {
     0xd3e24678b8d96a60ULL, /* movq f3 rexw d:x s:x */
     0xd3e2dfee2330f1a9ULL, /* vpcmpgtd vex w d:x s:x,x */
     0xd3ff3c88db99a6dfULL, /* not 66 f2 rexw d:g64 s:g64 */
+    0xd40140caad7b0596ULL, /* dpps 66 rexw d:x s:x,i,x */
     0xd4077b3b793c5697ULL, /* ucomisd 66 rexw d: s:x,m6 */
     0xd40d33f5916d47c7ULL, /* fist f2 rexw d:m3 s:st */
     0xd40d7a9229fa9e3bULL, /* mul 66 f3 d:g16 s:g8,g8 */
@@ -8239,6 +8301,7 @@ static const uint64 allow_native[] = {
     0xd9c6ba5767ab94abULL, /* cmps 66 rexw d:g64,g64 s:m6,m6,g64,g64 */
     0xd9c99ab09e898ca7ULL, /* and 66 f3 d:g8 s:g8,g8 */
     0xd9ce68cca27737ebULL, /* sets f3 rexw d:m2 s: */
+    0xd9ce88e1ca096fa0ULL, /* vrcpps vex w d:x s:x */
     0xd9d16b5acbe63325ULL, /* or 66 f3 d:g8 s:m2,g8 */
     0xd9d27f55aa147086ULL, /* rdtsc 66 rexw d:g32,g32 s: */
     0xd9d3c3c205949f4dULL, /* fcmovnb 66 d:st s:st */
@@ -8403,6 +8466,7 @@ static const uint64 allow_native[] = {
     0xde25972aa4769e07ULL, /* phminposuw 66 rexw d:x s:m8 */
     0xde27426d79b71d84ULL, /* cmpxchg f2 lock d:m2,g8 s:g8,m2,g8 */
     0xde397ef593998114ULL, /* test rexw d: s:g64,i */
+    0xde417abc9190b4f9ULL, /* rsqrtss f3 d:x s:x */
     0xde43ee19d95296c7ULL, /* fsub f2 d:st s:m4,st */
     0xde483217abd4d201ULL, /* inc 66 f3 rexw d:g8 s:g8 */
     0xde49bd727dd2305bULL, /* fwait f2 d: s: */
@@ -8442,6 +8506,7 @@ static const uint64 allow_native[] = {
     0xdf10a0012eedbdc3ULL, /* sub 66 rexw d:g8 s:m2,g8 */
     0xdf1bc83b10c9c114ULL, /* fidiv f3 d:st s:m4,st */
     0xdf257231b4403183ULL, /* jns 66 rexw d: s:p */
+    0xdf2c2a228a7d89dfULL, /* vrcpps vex l d:y s:m33 */
     0xdf32b5fff70c9042ULL, /* inc f3 lock rexw d:m6 s:m6 */
     0xdf37d3ef69a636b2ULL, /* btc 66 f2 rexw d:g64 s:i,g64 */
     0xdf383015e277ab56ULL, /* add 66 f3 d:g16 s:m3,g16 */
@@ -8453,6 +8518,7 @@ static const uint64 allow_native[] = {
     0xdf5c783c894efd54ULL, /* hsubps f2 rexw d:x s:m8,x */
     0xdf61b70542fb4bc6ULL, /* divpd 66 rexw d:x s:m8,x */
     0xdf686b779ae25abfULL, /* subsd 66 f2 rexw d:x s:x,x */
+    0xdf6acb0adf6f3516ULL, /* f2xm1 66 d:st s:st */
     0xdf7364d7aa8f562eULL, /* xor 66 f2 d:g8 s:i,g8 */
     0xdf73fa59ceeb1ec2ULL, /* pop f3 d:m6,g64 s:g64,m6 */
     0xdf7c7f0c057833deULL, /* fldpi 66 f3 d:st s:i */
@@ -8541,6 +8607,7 @@ static const uint64 allow_native[] = {
     0xe1d5e0d82aa635e6ULL, /* fcomp f3 rexw d: s:m6,st */
     0xe1db0948e6ee9e94ULL, /* pminsw 66 d:x s:x,x */
     0xe1de33806268d8c4ULL, /* sbb 66 f2 d:g16 s:i,g16 */
+    0xe1e4fdf33667c92bULL, /* vrsqrtss vex w l d:x s:x,m4 */
     0xe1f74a14cd1e9710ULL, /* vldmxcsr vex w d: s:m4 */
     0xe1fb9d47f4c59135ULL, /* fcomp f2 d: s:m6,st */
     0xe20eacee186ae4beULL, /* mov 66 d:g16 s:g16 */
@@ -8668,6 +8735,7 @@ static const uint64 allow_native[] = {
     0xe56bc24ef99157d9ULL, /* vpsllw vex w d:x s:i,x */
     0xe56cea9df1f54f6cULL, /* vmovapd vex l d:m33 s:y */
     0xe572f3415c37add7ULL, /* shld f2 rexw d:m6 s:g64,i,m6 */
+    0xe5741a0c8802489fULL, /* rsqrtps d:x s:x */
     0xe57c59da0d23a8adULL, /* vmulss vex d:x s:x,x */
     0xe5806b90489452beULL, /* vpaddsb vex d:x s:x,m8 */
     0xe58319a8b6b5044bULL, /* fyl2x f2 d:st,st s:st,st */
@@ -8714,6 +8782,7 @@ static const uint64 allow_native[] = {
     0xe6a741dea53623dfULL, /* mov 66 f3 rexw d:m6 s:g64 */
     0xe6aa9e51b7d22aefULL, /* imul f2 rexw d:g16 s:g8,g8 */
     0xe6ad67b502ab3ad5ULL, /* shr f3 d:g8 s:g8,g8 */
+    0xe6b65c4b1c0151b8ULL, /* rsqrtps d:x s:m8 */
     0xe6b85556002e4e02ULL, /* sub 66 f3 rexw d:m6 s:g64,m6 */
     0xe6bb010b157a6b61ULL, /* movddup f2 rexw d:x s:x */
     0xe6bbbbdfb5e9d30bULL, /* setle 66 f3 rexw d:g8 s: */
@@ -8777,6 +8846,7 @@ static const uint64 allow_native[] = {
     0xe80a9f5fd826f952ULL, /* cmovns rexw d:g64 s:m6 */
     0xe8153f44c51e4694ULL, /* vpmaxuw vex w d:x s:x,x */
     0xe81585e58110124cULL, /* pextrb 66 rexw d:g32 s:x,i */
+    0xe82f93fcb21afc1cULL, /* vrsqrtss vex l d:x s:x,m4 */
     0xe83ee7b14741f05bULL, /* pcmpeqb rexw d:mm s:m6,mm */
     0xe83f61783711df5cULL, /* vdivps vex l d:y s:y,y */
     0xe83f69eb00d6f3caULL, /* unpckhpd 66 rexw d:x s:m8,x */
@@ -8841,6 +8911,7 @@ static const uint64 allow_native[] = {
     0xe9523897066e9f7cULL, /* rol rexw d:g64 s:i,g64 */
     0xe95a6dc8e02a85adULL, /* xor 66 lock d:m2 s:i,m2 */
     0xe96b24bfc598574aULL, /* and rexw d:m6 s:g64,m6 */
+    0xe974d48b60f997c5ULL, /* vrcpps vex d:x s:x */
     0xe9767285dbfd7bcdULL, /* setnb 66 f2 d:m2 s: */
     0xe981a00b59d8f6d6ULL, /* orpd 66 d:x s:m8,x */
     0xe98b3b30a0f9cfcfULL, /* xor 66 f3 d:g8 s:g8,g8 */
@@ -9037,6 +9108,7 @@ static const uint64 allow_native[] = {
     0xeea4ee7e2f95c481ULL, /* vpmullw vex w d:x s:x,x */
     0xeea5d4fa30714b11ULL, /* cmovnle f3 d:g32 s:g32 */
     0xeec0389f9b99b9c0ULL, /* not 66 f3 d:g8 s:g8 */
+    0xeec884f91e862acbULL, /* f2xm1 66 f3 rexw d:st s:st */
     0xeeca34a542aa0a64ULL, /* pmaxsb 66 rexw d:x s:m8,x */
     0xeeca833adc106796ULL, /* rcl d:m4 s:i,m4 */
     0xeece5ed2eea921f8ULL, /* ror rexw d:m2 s:g8,m2 */
@@ -9120,6 +9192,7 @@ static const uint64 allow_native[] = {
     0xf0c88f9fed019761ULL, /* vblendvps vex d:x s:x,x,x */
     0xf0cb181c8e4a0627ULL, /* movsldup f3 d:x s:x */
     0xf0eae1c595cfc3beULL, /* add 66 f3 lock rexw d:m2 s:i,m2 */
+    0xf0ecdd2ae22cf18fULL, /* vrcpss vex w d:x s:x,x */
     0xf0fa11c9d5551e61ULL, /* setns f3 d:m2 s: */
     0xf0fb6b364abb19b5ULL, /* movsxd rexw d:g64 s:m4 */
     0xf0fd7505563d5e63ULL, /* bt 66 f3 rexw d: s:m6,g64 */
@@ -9322,6 +9395,7 @@ static const uint64 allow_native[] = {
     0xf5c7ee96ad47f8cfULL, /* sqrtps d:x s:x */
     0xf5d23d447f7f28ccULL, /* fcomp f3 d: s:m6,st */
     0xf5e80916495c26ceULL, /* rcl 66 f2 d:m2 s:i,m2 */
+    0xf5eea6fa1b9e86baULL, /* f2xm1 66 f2 rexw d:st s:st */
     0xf5eee5f0f3714c82ULL, /* rol d:m4 s:i,m4 */
     0xf5f72f7529f7a44aULL, /* jmp 66 f2 rexw d: s:g64 */
     0xf602166bcc2a273bULL, /* imul f3 rexw d:g64 s:m6,g64 */
@@ -9473,6 +9547,7 @@ static const uint64 allow_native[] = {
     0xf98440efa0e8d34aULL, /* seto f2 rexw d:m2 s: */
     0xf990af9486210ab1ULL, /* psignb 66 d:x s:x,x */
     0xf9a3de720349282cULL, /* rcl 66 d:g16 s:i,g16 */
+    0xf9a60b09fbdf0938ULL, /* vrsqrtps vex d:x s:x */
     0xf9a7f85c47f33820ULL, /* setnz f3 rexw d:m2 s: */
     0xf9b5bf9fff27a88fULL, /* minss 66 f3 d:x s:x,x */
     0xf9c33f7800cf03f1ULL, /* ftst 66 f2 rexw d:st s:i */
@@ -9629,6 +9704,7 @@ static const uint64 allow_native[] = {
     0xfd53d9c489d9a92fULL, /* movs 66 rexw d:m2,g64,g64 s:m2,g64,g64 */
     0xfd5cbe7b0ee4b6eaULL, /* vorpd vex d:x s:x,x */
     0xfd6339960cfdf44dULL, /* pcmpeqd rexw d:mm s:m6,mm */
+    0xfd6896c8b831aa2eULL, /* vrcpss vex d:x s:x,x */
     0xfd699716f19dbb96ULL, /* and f2 d:m4 s:i,m4 */
     0xfd6b31475b13ebd2ULL, /* fiadd 66 f2 rexw d:st s:m3,st */
     0xfd6e95d541cf86d4ULL, /* vpsrlq vex d:x s:i,x */
