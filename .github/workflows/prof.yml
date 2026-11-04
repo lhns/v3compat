@@ -1,0 +1,41 @@
+name: prof
+on:
+  push:
+    branches: [prof-scratch]
+jobs:
+  p:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev time
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$PWD/inst && cmake --build build -j --target install >/dev/null
+      - name: measure
+        run: |
+          grep -m1 'model name' /proc/cpuinfo; nproc; cat /proc/loadavg
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+          curl -fsSL https://github.com/duckdb/duckdb/releases/download/v1.4.5/duckdb_cli-linux-amd64.zip -o d.zip && mkdir old && (cd old && python3 -c "import zipfile;zipfile.ZipFile('../d.zip').extractall()" && chmod +x duckdb)
+          sudo mkdir -p /w; sudo cp -r inst /w/inst; sudo chown -R $USER /w; cp prof/ana.py /w/; cp duckdb /w/; gcc -O2 prof/samp.c -o /w/samp
+          DR=$(ls -d ~/.cache/v3compat/dr-*[0-9a-f] | head -1); V=/w/inst/bin/v3compat-run
+          T() { l=$1; n=$2; shift 2; for i in $(seq $n); do /usr/bin/time -f "$l %e s user %U sys %S minflt %R ctx %c/%w rss %M" -o /tmp/tt "$@" >/dev/null 2>/tmp/err; tail -1 /tmp/tt; done; grep -a PROF /tmp/err | head -1; }
+          cd /w
+          T native-select 5 ./duckdb -c "select 42"
+          T native-old 5 $GITHUB_WORKSPACE/old/duckdb -c "select 42"
+          T bare-select 3 $DR/bin64/drrun -quiet -root $DR -- ./duckdb -c "select 42"
+          T client-true 3 $V /bin/true
+          T client-select 5 $V ./duckdb -c "select 42"
+          T client-select-1cpu 3 taskset -c 0 $V ./duckdb -c "select 42"
+          V3COMPAT_DR_OPTS=-rstats_to_stderr $V ./duckdb -c "select 42" 2>&1 >/dev/null | grep -aE "Threads ever|Basic block frag|Trace frag|Fcache exits|PROF"
+          $DR/bin64/drrun -quiet -root $DR -rstats_to_stderr -- ./duckdb -c "select 42" 2>&1 >/dev/null | grep -aE "Basic block frag|Trace frag|Fcache exits"
+          V3COMPAT_DR_OPTS=-disable_traces T client-notraces 5 $V ./duckdb -c "select 42"
+          V3C_XOPTS=-noallow T client-noallow 3 $V ./duckdb -c "select 42"
+          ./samp /tmp/s 500 $V ./duckdb -c "select 42" >/dev/null 2>&1; python3 ana.py /tmp/s 35 $DR
+          SQL=$GITHUB_WORKSPACE/test/apps/duckdb-varied.sql
+          C="select sum(range*range) from range(30000000)"
+          for o in "" "-disable_traces"; do export V3COMPAT_DR_OPTS="$o"; echo "== opts [$o]"; T compute 2 $V ./duckdb -c "$C"; T varied 1 $V ./duckdb -f $SQL; done
+          unset V3COMPAT_DR_OPTS; T native-compute 2 ./duckdb -c "$C"; T native-varied 1 ./duckdb -f $SQL

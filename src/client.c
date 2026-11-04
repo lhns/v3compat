@@ -21,19 +21,30 @@ static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, 
 static uint64 op_counts[OP_LAST];
 static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELAXED); }
 
+#include <x86intrin.h>
+static uint64 T0,tA,tK,tE,nB,nI,nTr,nXl,nEm; static bool noallow;
+static uint64 last_t, last_a;
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
                                      bool translating) {
     /* Runs when translating too: DR maps PCs through the list, so it must come out the same. */
     (void)tag; (void)for_trace; (void)translating;
+    uint64 t_in=__rdtsc();uint64 lb=__atomic_add_fetch(&nB,1,__ATOMIC_RELAXED);
+    if(for_trace)__atomic_add_fetch(&nTr,1,__ATOMIC_RELAXED); if(translating)__atomic_add_fetch(&nXl,1,__ATOMIC_RELAXED);
+    if(lb%10000==0){uint64 a=__atomic_load_n(&tA,__ATOMIC_RELAXED);dr_fprintf(STDERR,"PROG bbs=%llu wall_Mc=%llu app2app_Mc=%llu dwall_Mc=%llu dapp_Mc=%llu\n",lb,(t_in-T0)/1000000,a/1000000,(t_in-last_t)/1000000,(a-last_a)/1000000);last_t=t_in;last_a=a;}
     int n[C_N] = {0};
     instr_t *next;
     for (instr_t *in = instrlist_first_app(bb); in != NULL; in = next) {
         next = instr_get_next_app(in);
+        __atomic_add_fetch(&nI,1,__ATOMIC_RELAXED);
+        uint64 t1=__rdtsc();
         int c = classify(drcontext, in);
         /* cpuid is translated whatever its shape. Off the list means refused when executed, not now:
          * a form on a path never taken must not stop the program. */
         char text[ALLOW_TEXT_MAX];
-        if (instr_get_opcode(in) != OP_cpuid && !allow_listed(allow_key(drcontext, in, text), c != C_N)) {
+        bool ok = noallow || instr_get_opcode(in) == OP_cpuid || allow_listed(allow_key(drcontext, in, text), c != C_N);
+        uint64 t2=__rdtsc();__atomic_add_fetch(&tK,t2-t1,__ATOMIC_RELAXED);
+        if (c!=C_N)__atomic_add_fetch(&nEm,1,__ATOMIC_RELAXED);
+        if (!ok) {
             if (audit_on) {
                 dr_fprintf(STDERR, "v3compat: audit %s at %p\n", text, instr_get_app_pc(in));
                 if (c == C_N) continue;
@@ -50,12 +61,13 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
             }
             n[C_INSTRS]++;
         }
-        expand_instr(drcontext, bb, in, c != C_N);
+        { uint64 t3=__rdtsc(); expand_instr(drcontext, bb, in, c != C_N); __atomic_add_fetch(&tE,__rdtsc()-t3,__ATOMIC_RELAXED);}
     }
     for (int c = 0; c < C_N; c++)
         if (n[c] != 0)
             dr_insert_clean_call(drcontext, bb, instrlist_first(bb), (void *)add_count, false, 2,
                                  OPND_CREATE_INT32(c), OPND_CREATE_INT32(n[c]));
+    __atomic_add_fetch(&tA,__rdtsc()-t_in,__ATOMIC_RELAXED);
     return DR_EMIT_DEFAULT;
 }
 
@@ -75,6 +87,7 @@ static dr_signal_action_t event_signal(void *drcontext, dr_siginfo_t *info) {
 }
 
 static void event_exit(void) {
+    dr_fprintf(STDERR,"PROF wall_Mc=%llu app2app_Mc=%llu classify+allow_Mc=%llu expand_Mc=%llu bbs=%llu instrs=%llu for_trace=%llu translating=%llu lacked=%llu\n",(__rdtsc()-T0)/1000000,tA/1000000,tK/1000000,tE/1000000,nB,nI,nTr,nXl,nEm);
     if (stats_on) {
         dr_fprintf(STDERR, "v3compat: stats pid=%d", (int)dr_get_process_id());
         for (int i = 0; i < C_N; i++) dr_fprintf(STDERR, " %s=%llu", cls_name[i], (unsigned long long)counts[i]);
@@ -89,7 +102,7 @@ static void event_exit(void) {
 }
 
 DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
-    (void)id;
+    (void)id; T0=__rdtsc(); last_t=T0;
     dr_set_client_name("v3compat", "https://github.com/lhns/v3compat");
     if (!drmgr_init()) return;
     /* The launcher turns V3COMPAT_STATS=1 and V3COMPAT_HELPERS_ONLY=1 into these options. */
@@ -98,6 +111,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         if (starts(argv[i], "-stats")) stats_on = true;
         if (starts(argv[i], "-helpers-only")) helpers_only = true;
         if (starts(argv[i], "-audit")) audit_on = true;
+        if (starts(argv[i], "-noallow")) noallow = true;
     }
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_bb_app2app_event(event_app2app, NULL);

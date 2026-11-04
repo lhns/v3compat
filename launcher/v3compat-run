@@ -32,6 +32,7 @@ client_opts=""
 [ "${V3COMPAT_HELPERS_ONLY:-}" = 1 ] && client_opts="$client_opts -helpers-only"
 [ "${V3COMPAT_AUDIT:-}" = 1 ] && client_opts="$client_opts -audit"
 
+client_opts="$client_opts ${V3C_XOPTS:-}"
 # Unquoted on purpose: both option lists are space-separated words.
 set -f
 # shellcheck disable=SC2086
