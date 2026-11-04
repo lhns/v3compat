@@ -276,7 +276,8 @@ is mapped **[measured]**; a subset also in a scratch image with `--read-only`, u
 | Executable but unreadable file | Child untranslated, silently [source] | Refused, 87 |
 | setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, 87, also from a thread or `vfork` child |
 | 32-bit child | `execve` fails `ENOENT` [source] | Refused, 87 |
-| `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
+| argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
+| `readlink`, `readlinkat` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe` | Right, but -1 on a buffer shorter than the path | The kernel's answer: truncates, `EINVAL` on size 0 |
 | `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
 
 Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
@@ -292,8 +293,6 @@ Still differs from native **[measured]**:
   `/proc/self/fd`.
 - `clone3` returns `ENOSYS`, as under Docker's default seccomp: a static glibc `posix_spawn` child dies with SIGSEGV under DynamoRIO's
   `clone3`, with or without this client. The cause is open and this is a stopgap, to be removed with it; libcs fall back to `clone`.
-- `readlink` of `/proc/self/exe` into a buffer shorter than the path fails with -1 under DynamoRIO's own virtualization; the kernel
-  truncates. Not fixed here; the test does not cover it **[measured]**.
 - `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
 
 Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
