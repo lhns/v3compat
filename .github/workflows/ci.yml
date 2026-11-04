@@ -47,3 +47,6 @@ jobs:
           SEM_DUMP=1 build/inst/bin/v3compat-run -- $B/semhw $D/spec/manifest.tsv $D/reference/semantics.ref > d.txt || true
           wc -l n.txt d.txt
           diff n.txt d.txt | cut -c1-330 | head -24
+          R=$PWD/build/inst/libexec/v3compat/dynamorio; mkdir -p cfg
+          SEM_DUMP=1 DYNAMORIO_CONFIGDIR=$PWD/cfg $R/bin64/drrun -quiet -root $R -- $B/semhw $D/spec/manifest.tsv $D/reference/semantics.ref > p.txt || true
+          echo "plain drrun (no client) vs native:"; diff n.txt p.txt | cut -c1-200 | head -8
