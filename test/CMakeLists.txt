@@ -189,6 +189,8 @@ if(MUSL_GCC)
   endforeach()
 endif()
 
+add_executable(swapper swapper.c)
+add_test(NAME exec-identity COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/exec_identity.sh" ${INST}/bin/v3compat-run ${B})
 add_test(NAME launcher-failures COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/launcher.sh" ${INST} $<TARGET_FILE:hello_dyn> ${B})
 add_test(NAME setuid COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/setuid.sh" ${INST} ${B})
 add_test(NAME docker COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/docker.sh" ${INST} ${B})

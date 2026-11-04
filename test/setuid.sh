@@ -95,4 +95,53 @@ if command -v setpriv >/dev/null; then
 else
   part_skip "setpriv not found"
 fi
+
+# The check and the exec race a swap of the name or a change of the mode. Whatever the timing, a refused file never
+# runs, and the kernel never runs a file itself: that would give its rights or an untranslated run.
+N=${V3COMPAT_RACE_N:-150}
+sw=$B/swapper
+race() { # race NAME BAD-REGEX FLIPPER-ARGS -- CMD...: N runs of CMD with the flipper running
+  name=$1; badre=$2; shift 2
+  fa=
+  while [ "$1" != -- ]; do fa="$fa $1"; shift; done; shift
+  $S "$sw" $fa & sp=$!
+  sleep 0.1
+  allowed=0 denied=0 other=0 wrong=0
+  i=0
+  while [ "$i" -lt "$N" ]; do
+    i=$((i + 1))
+    o=$("$@" 2>&1)
+    case $o in
+      *"Operation not permitted"*) denied=$((denied + 1)) ;;
+      *PASS*|*euid=*) allowed=$((allowed + 1)) ;;
+      *) other=$((other + 1)) ;;
+    esac
+    if echo "$o" | grep -q "$badre"; then wrong=$((wrong + 1)); echo "WRONG: $o" | head -3; fi
+  done
+  $S pkill -f "^$sw " 2>/dev/null || $S kill "$sp" 2>/dev/null
+  wait "$sp" 2>/dev/null
+  echo "$name: $N runs, ran $allowed, refused $denied, other $other, wrong $wrong"
+  [ "$wrong" = 0 ] || fail "$name: a refused file ran"
+  [ "$allowed" -gt 0 ] && [ "$denied" -gt 0 ] || part_skip "$name: the race did not exercise both sides"
+}
+# Each name in turn: an allowed program, and one that must be refused.
+cp "$B/lz_static" "$t/race_ok"; mk race_suid 4755 nobody:nogroup
+race "swap of an allowed program and a setuid one" 'euid=' swap "$t/race_ok" "$t/race_suid" -- \
+  $S "$RUN" "$B/execer_static" plain "$t/race_ok" translated
+printf '#!%s translated\n' "$B/lz_dyn" > "$t/race_script"; chmod 755 "$t/race_script"
+mk race_suid2 4755 nobody:nogroup
+race "swap of a script and a setuid program" 'euid=' swap "$t/race_script" "$t/race_suid2" -- \
+  $S "$RUN" "$B/execer_static" plain "$t/race_script"
+# The same file, its setuid bit coming and going: it may run without the bit's rights, never with them.
+mk race_mode 4755 nobody:nogroup
+race "setuid bit flipping" 'euid=65534' chmod "$t/race_mode" 4755 755 -- \
+  $S "$RUN" "$B/execer_static" plain "$t/race_mode" translated
+# Readability flipping: refused or translated, never run by the kernel behind DynamoRIO's back.
+mk race_read 755 root:root
+if command -v setpriv >/dev/null; then
+  race "read permission flipping" 'translated=0' chmod "$t/race_read" 755 111 -- \
+    $S setpriv --reuid=65534 --regid=65534 --clear-groups "$RUN" "$B/execer_static" plain "$t/race_read" translated
+else
+  part_skip "setpriv not found"
+fi
 exit $bad

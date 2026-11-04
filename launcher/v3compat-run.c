@@ -130,7 +130,7 @@ static void native(char **argv, char **envp) {
 __attribute__((used)) void run(long *sp) {
     long argc = sp[0];
     char **argv = (char **)(sp + 1), **envp = argv + argc + 1, **av;
-    char *self, *client, *dr, *opts, *optsval, *envstr;
+    char *self, *client, *dr, *opts, *optsval, *envstr, *fdstr;
     const char *prog;
     long n;
     int eacces, ne = 0, i, k;
@@ -161,15 +161,18 @@ __attribute__((used)) void run(long *sp) {
     prog = lookup(argv[0], envp, &eacces);
     if (!prog) die(eacces ? 126 : 127, argv[0], eacces ? ": permission denied" : ": command not found", "");
     x = grab(sizeof *x);
-    v3c_judge(prog, x);
+    v3c_judge(V3C_AT_FDCWD, prog, 0, x);
     switch (x->verdict) {
     case V3C_REFUSE:
         say("refusing to exec ", x->final, ": ", x->why, (const char *)0);
         quit(V3COMPAT_REFUSED_EXEC);
-    case V3C_PASS: case V3C_FAIL:
+    case V3C_FAIL:
         say(x->final, ": ", x->why ? x->why : errname(x->err), (const char *)0);
-        quit((x->verdict == V3C_PASS && x->err == V3C_ENOENT && x->level == 0) ? 127 : 126);
+        quit((x->err == V3C_ENOENT && x->level == 0 && !x->why) ? 127 : 126);
     }
+    /* What DynamoRIO loads; it survives the exec, and the client closes it. */
+    x->fd = v3c_pin(x->fd);
+    if (x->fd < 0) die(125, "cannot keep ", x->final, " open");
 
     /* DYNAMORIO_OPTIONS: -code_api, the user's options, then the client with its options. */
     opts = grab(8192);
@@ -188,19 +191,28 @@ __attribute__((used)) void run(long *sp) {
         optsval = opts + slen("DYNAMORIO_OPTIONS=");
         if (slen(optsval) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", "");
     }
-    envstr = grab(slen(x->final) + 64);
-    scpy(scpy(envstr, "DYNAMORIO_EXE_PATH="), x->final);
+    /* The name is what was asked for, as for the kernel's AT_EXECFN, also if that is a script. */
+    envstr = grab(slen(prog) + 64);
+    scpy(scpy(envstr, "DYNAMORIO_EXE_PATH="), prog);
+    fdstr = grab(64);
+    {
+        char *q = scpy(fdstr, "DYNAMORIO_EXE_FD=");
+        long v = x->fd, div = 1;
+        while (v / div >= 10) div *= 10;
+        for (; div; div /= 10) *q++ = (char)('0' + v / div % 10);
+        *q = 0;
+    }
 
     for (nenv = envp; *nenv; nenv++) ne++;
-    nenv = grab(sizeof(char *) * (unsigned long)(ne + 4));
+    nenv = grab(sizeof(char *) * (unsigned long)(ne + 5));
     for (k = 0, i = 0; i < ne; i++) {
         const char *v = envp[i];
-        if (has_prefix(v, "DYNAMORIO_EXE_PATH=") || has_prefix(v, "DYNAMORIO_RUNUNDER=") ||
-            has_prefix(v, "DYNAMORIO_OPTIONS="))
+        if (has_prefix(v, "DYNAMORIO_EXE_PATH=") || has_prefix(v, "DYNAMORIO_EXE_FD=") ||
+            has_prefix(v, "DYNAMORIO_RUNUNDER=") || has_prefix(v, "DYNAMORIO_OPTIONS="))
             continue;
         nenv[k++] = envp[i];
     }
-    nenv[k++] = envstr; nenv[k++] = "DYNAMORIO_RUNUNDER=3"; nenv[k++] = opts; nenv[k] = 0;
+    nenv[k++] = envstr; nenv[k++] = fdstr; nenv[k++] = "DYNAMORIO_RUNUNDER=3"; nenv[k++] = opts; nenv[k] = 0;
 
     /* The kernel's argv for a script: interpreter, its argument, the script, then the old arguments. */
     nargv = grab(sizeof(char *) * (unsigned long)(argc + 3 * V3C_MAXSHEBANG + 2));

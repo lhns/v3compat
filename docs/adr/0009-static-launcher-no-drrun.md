@@ -25,6 +25,12 @@ setuid, setgid, file capabilities and unreadable files return `EPERM`, on which 
 file in `PATH`. 32-bit children return `ENOEXEC`, as a kernel without 32-bit support does, on which glibc's `execvp` hands the file to
 `/bin/sh`.
 
+## Amendment, 2026-11-04 (2)
+An exec opens the file once, judges that descriptor and has DynamoRIO load from it, including through the launcher, so a swapped path or
+a file that cannot be judged is never run. It needs a small fork API, `dr_syscall_set_exec_file`, as what the client can rewrite still leaves
+DynamoRIO opening the path and falling back to a real exec; the fork's diff stays to what cannot be done from outside. The client
+resolves shebangs itself, as the launcher does.
+
 ## Consequences
 Nothing in an image is needed beyond the mounted install. We rely on DynamoRIO's early-injection environment contract rather than its
-supported tool, so a DynamoRIO update must rerun the exec tests. The check opens the file shortly before the kernel execs it, so a path swapped in between is not caught; a file descriptor is judged through the same path or a private copy. The install path may not contain spaces, quotes or `;`, as the option string cannot carry them.
+supported tool, so a DynamoRIO update must rerun the exec tests. The install path may not contain spaces, quotes or `;`, as the option string cannot carry them.

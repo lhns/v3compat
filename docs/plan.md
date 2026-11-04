@@ -283,19 +283,31 @@ is mapped **[measured]**; a subset also in a scratch image with `--read-only`, u
 Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
 change nothing natively.
 
+A check and the exec cannot be separated by a swap: each exec opens the file once, checks that descriptor (`fstat`, `fgetxattr`, the header)
+and has DynamoRIO load from it through `/proc/self/fd`. The kernel's `execve` under DynamoRIO is of `libdynamorio.so`, so an `execveat` of
+the descriptor would not be what runs the app; the fork's `dr_syscall_set_exec_file` is. A file that cannot be judged fails the exec
+instead of being handed to the kernel, which would run it itself. `test/setuid.sh` races this, `test/exec_identity.sh` compares what a
+program sees of its exec with a native run. What remains, none of which gives rights since the kernel never execs the file **[source]**:
+
+- A write to the same file, as nothing denies writes to it the way a real exec does: `ETXTBSY` is not returned, to the exec or a writer.
+- `chmod` or `chown` after the check, indistinguishable from one just after a native exec.
+- A script: its interpreter opens it by name, natively too, which is why the kernel ignores setuid on one. The ELF interpreter (`PT_INTERP`)
+  is opened by name as well.
+- A `fork` in another thread between the pin and the exec, or a `vfork` with `CLONE_FILES`, keeps a read-only copy of the descriptor.
+- The exec needs a free descriptor (`EMFILE` otherwise), and what only `binfmt_misc` could run fails with `ENOEXEC`.
+
 Still differs from native **[measured]**:
 
 - `/proc/self/maps` lists DynamoRIO and the client too, and for a PIE the first named mapping is the client. Not filtered: a program
   choosing addresses from it must see what is occupied.
 - `/proc/self/auxv` has the loader's values (`getauxval` is right). `/proc/<pid>/exe` read from another process shows the loader;
   fixing that needs `CAP_SYS_RESOURCE`.
-- `DYNAMORIO_EXE_PATH`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
+- `DYNAMORIO_EXE_PATH`, `_EXE_FD`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
   `/proc/self/fd`.
 - `clone3` returns `ENOSYS`, as under Docker's default seccomp: a static glibc `posix_spawn` child dies with SIGSEGV under DynamoRIO's
   `clone3`, with or without this client. The cause is open and this is a stopgap, to be removed with it; libcs fall back to `clone`.
 - `readlink` of `/proc/self/exe` into a buffer shorter than the path fails with -1 under DynamoRIO's own virtualization; the kernel
   truncates. Not fixed here; the test does not cover it **[measured]**.
-- `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
 
 Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
 to a directory fd is not rewritten **[source]**.

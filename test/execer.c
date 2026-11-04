@@ -2,6 +2,8 @@
  * how it ended; the child's own output is the verdict.
  *   plain thread execveat-path execveat-dirfd fexecve-cloexec fexecve-memfd vfork spawn
  *   emptyenv nullenv nullargv-plain nullargv-script closedfds shebang reexec execvp
+ *   argv0 fexecve fexecve-path execveat-nofollow execveat-dirfd-cloexec
+ *   whoami            (as the child) how this process was exec'd, to compare with a native run
  *   childcheck [FD]   (not a mode to start from) PASS on FD if libdynamorio is mapped, using fd 0 for its open
  *   failexec CHILD    execveat and fexecve of a non-executable file must fail and the program continues
  *   nnp CHILD         plain, after PR_SET_NO_NEW_PRIVS
@@ -17,6 +19,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/prctl.h>
+#include <dirent.h>
+#include <sys/auxv.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -110,10 +114,39 @@ bad:
     return 1;
 }
 
+static int whoami(int argc, char **argv) {
+    char buf[4096];
+    struct stat self, st;
+    int exe_fds = 0, low = 0;
+    for (int i = 0; i < argc; i++) printf("argv[%d]=%s\n", i, argv[i]);
+    printf("execfn=%s\n", (const char *)getauxval(AT_EXECFN));
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+    printf("exe=%.*s\n", n < 0 ? 0 : (int)n, buf);
+    /* The file is not named after its descriptor since Linux 6.14, whichever the libc asked for. */
+    if (strncmp((const char *)getauxval(AT_EXECFN), "/dev/fd/", 8)) {
+        FILE *f = fopen("/proc/self/comm", "r");
+        if (f && fgets(buf, sizeof buf, f)) printf("comm=%s", buf);
+        if (f) fclose(f);
+    }
+    /* Beyond the app's own: the client's one descriptor for the executable and DynamoRIO's, far up. */
+    stat("/proc/self/exe", &self);
+    DIR *d = opendir("/proc/self/fd");
+    for (struct dirent *e; d && (e = readdir(d));) {
+        int fd = atoi(e->d_name);
+        if (e->d_name[0] == '.' || fd == dirfd(d)) continue;
+        if (fd >= 3 && fd < 512) { printf("fd %d\n", fd); low = 1; }
+        if (fstat(fd, &st) == 0 && st.st_ino == self.st_ino && st.st_dev == self.st_dev) exe_fds++;
+    }
+    if (d) closedir(d);
+    printf("fds %s\n", exe_fds > 1 || low ? "LEAK" : "ok");
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) return 2;
     const char *mode = argv[1];
     if (!strcmp(mode, "childcheck")) return childcheck(argc, argv);
+    if (!strcmp(mode, "whoami")) return whoami(argc, argv);
     if (argc < 3) return 2;
     const char *child = argv[2];
     child_args = argc > 3 ? argv + 3 : dflt;
@@ -131,6 +164,22 @@ int main(int argc, char **argv) {
         char *dir = strdup(child), *slash = strrchr(dir, '/');
         *slash = 0;
         int dfd = open(dir, O_RDONLY | O_DIRECTORY);
+        execveat_(dfd, slash + 1, mkargv(slash + 1), environ, 0);
+    } else if (!strcmp(mode, "argv0")) { /* argv[0] is not the path */
+        char **v = mkargv("some-name");
+        execve(child, v, environ);
+    } else if (!strcmp(mode, "fexecve")) {
+        int fd = open(child, O_RDONLY);
+        execveat_(fd, "", mkargv(child), environ, AT_EMPTY_PATH);
+    } else if (!strcmp(mode, "fexecve-path")) {
+        int fd = open(child, O_PATH);
+        execveat_(fd, "", mkargv(child), environ, AT_EMPTY_PATH);
+    } else if (!strcmp(mode, "execveat-nofollow")) {
+        execveat_(AT_FDCWD, child, mkargv(child), environ, AT_SYMLINK_NOFOLLOW);
+    } else if (!strcmp(mode, "execveat-dirfd-cloexec")) {
+        char *dir = strdup(child), *slash = strrchr(dir, '/');
+        *slash = 0;
+        int dfd = open(dir, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
         execveat_(dfd, slash + 1, mkargv(slash + 1), environ, 0);
     } else if (!strcmp(mode, "fexecve-cloexec")) {
         int fd = open(child, O_RDONLY | O_CLOEXEC);
