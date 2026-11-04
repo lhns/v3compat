@@ -1,8 +1,7 @@
 # Opt-in (-DV3COMPAT_SEMANTIC=ON): lhns/avxemu's instruction-form cases, run on the real CPU
 # under the client, against the reference recorded on AVX2 silicon. Fetches avxemu at configure time.
 include(FetchContent)
-# test-suite branch (PR #2). If that branch is rewritten, re-pin to the replacing commit.
-set(AVXEMU_COMMIT 8242e2ebfc11a0054fb428676e576e4f30f5cae6)
+set(AVXEMU_COMMIT 977923a2f5f43db044e241062733aa6104ba831c)
 FetchContent_Declare(avxemu GIT_REPOSITORY https://github.com/lhns/avxemu GIT_TAG ${AVXEMU_COMMIT}
                      SOURCE_SUBDIR no-cmake-project)
 FetchContent_MakeAvailable(avxemu)

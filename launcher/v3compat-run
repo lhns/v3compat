@@ -6,7 +6,7 @@
 #   V3COMPAT_STATS=1   client prints per-class instruction totals to stderr at exit
 set -eu
 
-# The one place to change DynamoRIO's defaults (e.g. -thread_private, undecided: docs/plan.md "The hang").
+# The one place to change DynamoRIO's defaults.
 DEFAULT_DR_OPTS=""
 
 [ "${1:-}" = "--" ] && shift
