@@ -31,7 +31,8 @@ build/inst/bin/v3compat-run [--] prog args...
 [avxemu](https://github.com/lhns/avxemu) commit and runs its instruction-form cases under the client against
 the digests recorded on AVX2 hardware. On AVX2 it must pass. On an AVX-only CPU it fails with
 `EMULATION MISSING` (exit 3) at the first instruction nothing emulates, which is distinct from a result mismatch
-(exit 1).
+(exit 1). `test/sem/known-dr.txt` lists forms where plain DynamoRIO 11.3.0 itself differs from native
+(OF is lost around `movbe` and `vbroadcasti128` loads); they are tolerated under the client only.
 
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.
