@@ -276,9 +276,9 @@ is mapped **[measured]**; a subset also in a scratch image with `--read-only`, u
 | Executable but unreadable file | Child untranslated, silently [source] | Refused, 87 |
 | setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, 87, also from a thread or `vfork` child |
 | 32-bit child | `execve` fails `ENOENT` [source] | Refused, 87 |
-| argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
-| `readlink`, `readlinkat` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe` | Right, but -1 on a buffer shorter than the path | The kernel's answer: truncates, `EINVAL` on size 0 |
+| `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
 | `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
+| `readlink`, `readlinkat` of any of them into a buffer shorter than the path | -1 | The kernel's answer, by rewriting to the client's descriptor: truncates, `EINVAL` on size 0 |
 
 Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
 change nothing natively.

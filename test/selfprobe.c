@@ -80,11 +80,11 @@ static void check_readlink_buffer(const char *label, const char *p) {
             snprintf(name, sizeof name, "%s size %zu %s", at ? "readlinkat" : "readlink", sz, label);
             res(n == (ssize_t)want && !memcmp(b, real, want) && (unsigned char)b[want] == GUARD, name, "returned %zd", n);
         }
+        /* Raw: musl's wrappers turn size 0 into a call with a dummy buffer. */
         errno = 0;
-        size_t volatile zero = 0;
-        ssize_t n = at ? readlinkat(AT_FDCWD, p, b, zero) : readlink(p, b, zero);
+        long n = at ? syscall(SYS_readlinkat, AT_FDCWD, p, b, 0L) : syscall(SYS_readlink, p, b, 0L);
         snprintf(name, sizeof name, "%s size 0 %s", at ? "readlinkat" : "readlink", label);
-        res(n == -1 && errno == EINVAL, name, "returned %zd errno %d", n, errno);
+        res(n == -1 && errno == EINVAL, name, "returned %ld errno %d", n, errno);
     }
     errno = 0;
     long r = syscall(SYS_readlink, p, (char *)8, 4096L);
