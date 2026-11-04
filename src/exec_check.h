@@ -3,6 +3,7 @@
 #ifndef V3COMPAT_EXEC_CHECK_H
 #define V3COMPAT_EXEC_CHECK_H
 
+/* The launcher's status for a refusal; under the client the exec itself fails, with x->err (ADR 0009). */
 #ifndef V3COMPAT_REFUSED_EXEC
 #define V3COMPAT_REFUSED_EXEC 87 /* also in expand.h */
 #endif
@@ -10,7 +11,7 @@
 enum { V3C_MAXSHEBANG = 4, V3C_HDR = 256 };
 /* PASS: not our business, the real exec reports it (err says how, for the launcher).
  * FAIL: the kernel would fail it but DynamoRIO would not notice; err says how.
- * REFUSE: the kernel would run it and DynamoRIO cannot. */
+ * REFUSE: the kernel would run it and DynamoRIO cannot; err is what the exec fails with. */
 enum { V3C_OK, V3C_PASS, V3C_FAIL, V3C_REFUSE };
 
 struct v3c_exec {
@@ -120,7 +121,8 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
         if (fd < 0) {
             /* DR would fail to open it too, and then let the kernel run it untranslated. */
             if (v3c_faccess(cur, V3C_X_OK) == 0)
-                v3c_set(x, V3C_REFUSE, 0, "it is executable but not readable, so DynamoRIO cannot load it");
+                /* EPERM, not EACCES: execvp would take EACCES as a reason to run the next file in PATH. */
+                v3c_set(x, V3C_REFUSE, V3C_EPERM, "it is executable but not readable, so DynamoRIO cannot load it");
             else
                 v3c_set(x, V3C_PASS, (int)-fd, 0);
             return;
@@ -148,7 +150,7 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
             unsigned long phoff = 0;
             unsigned phnum, phsz;
             int machine = h[18] | (h[19] << 8), type = h[16] | (h[17] << 8);
-            if (h[4] == 1) { v3c_set(x, V3C_REFUSE, 0, "it is a 32-bit program"); goto done; }
+            if (h[4] == 1) { v3c_set(x, V3C_REFUSE, V3C_ENOEXEC, "it is a 32-bit program"); goto done; }
             if (n < 64 || h[4] != 2 || h[5] != 1 || machine != 62 || (type != 2 && type != 3)) {
                 v3c_set(x, V3C_FAIL, V3C_ENOEXEC, "not an x86-64 executable");
                 goto done;
@@ -189,7 +191,7 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
                 }
             }
             x->why = v3c_priv_change((int)fd, &st);
-            if (x->why) v3c_set(x, V3C_REFUSE, 0, x->why);
+            if (x->why) v3c_set(x, V3C_REFUSE, V3C_EPERM, x->why);
             goto done;
         }
         v3c_set(x, V3C_PASS, V3C_ENOEXEC, 0);

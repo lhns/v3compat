@@ -18,7 +18,13 @@ An exec that cannot run correctly under the translator exits with status 87 and 
 privileges would change. The client rewrites the syscalls DynamoRIO does not follow rather than changing the fork, keeping the fork's
 diff to what cannot be done from outside.
 
+## Amendment, 2026-11-04
+A refused exec under the client fails instead of ending the process, so a caller can handle it, keeping the stderr message; only the
+launcher, which has no caller, still exits 87. Nothing executes on a refusal, so no fallback runs a child with the wrong rights.
+setuid, setgid, file capabilities and unreadable files return `EPERM`, on which `execvp` stops, where `EACCES` would run the next
+file in `PATH`. 32-bit children return `ENOEXEC`, as a kernel without 32-bit support does, on which glibc's `execvp` hands the file to
+`/bin/sh`.
+
 ## Consequences
 Nothing in an image is needed beyond the mounted install. We rely on DynamoRIO's early-injection environment contract rather than its
-supported tool, so a DynamoRIO update must rerun the exec tests. A refusal ends the process rather than failing the `execve`, so a
-caller cannot fall back. The check opens the file shortly before the kernel execs it, so a path swapped in between is not caught; a file descriptor is judged through the same path or a private copy. The install path may not contain spaces, quotes or `;`, as the option string cannot carry them.
+supported tool, so a DynamoRIO update must rerun the exec tests. The check opens the file shortly before the kernel execs it, so a path swapped in between is not caught; a file descriptor is judged through the same path or a private copy. The install path may not contain spaces, quotes or `;`, as the option string cannot carry them.

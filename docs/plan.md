@@ -262,8 +262,9 @@ time, until Phase 3; the mixed workload's 11x; the thread-creation stress test, 
 ### Launcher, exec follow, `/proc/self/exe`
 
 [ADR 0009](adr/0009-static-launcher-no-drrun.md). The launcher is a static, freestanding binary that execs `libdynamorio.so` with
-its options in the environment, with no drrun, config file, shell or libc in the image. Statuses: 86 refused instruction, 87 refused
-exec, 125 launcher failure, 126 and 127 as in a shell; app statuses and signals pass through.
+its options in the environment, with no drrun, config file, shell or libc in the image. Statuses: 86 refused instruction, 87 the
+launcher itself refused the program (it has no caller to return an error to), 125 launcher failure, 126 and 127 as in a shell; app
+statuses and signals pass through. An exec refused under the client fails with an errno and a message on stderr, and the caller goes on.
 
 All below on Ivy Bridge with no AVX2, under Docker's default seccomp and no ptrace, each child running `lzcnt` and checking DynamoRIO
 is mapped **[measured]**; a subset also in a scratch image with `--read-only`, uid 65534 and the install mounted read-only.
@@ -273,9 +274,9 @@ is mapped **[measured]**; a subset also in a scratch image with `--read-only`, u
 | `execve`, threads, `vfork`, `posix_spawn`, shebang, empty or NULL env, closed fds 0-2; glibc, static, static-PIE, musl in the directions tested | Follows | Same |
 | `execveat`, `fexecve`, also on a memfd or a close-on-exec fd | Child runs untranslated, silently | Follows |
 | `execve` with NULL argv | Child untranslated, or DynamoRIO crashes on a script | Follows |
-| Executable but unreadable file | Child untranslated, silently [source] | Refused, 87 |
-| setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, 87, also from a thread or `vfork` child |
-| 32-bit child | `execve` fails `ENOENT` [source] | Refused, 87 |
+| Executable but unreadable file | Child untranslated, silently [source] | Refused, `EPERM` |
+| setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, `EPERM`, also from a thread or `vfork` child |
+| 32-bit child | `execve` fails `ENOENT` [source] | Refused, `ENOEXEC` |
 | `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
 | `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
 

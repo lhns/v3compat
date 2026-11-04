@@ -98,19 +98,13 @@ static bool fail_with(void *dc, int err) {
     return false;
 }
 
-static void refuse(void *dc, const struct v3c_exec *x) {
-    dr_fprintf(STDERR, "v3compat: refusing to exec %s: %s\n", x->final, x->why);
-    /* An app-issued exit is DR's normal path, also from a vfork child; dr_exit_process is not. */
-    dr_syscall_set_sysnum(dc, V3C_SYS_exit_group);
-    dr_syscall_set_param(dc, 0, V3COMPAT_REFUSED_EXEC);
-}
-
-/* 1: run the exec on; 0: the syscall is already decided (refused or failed). */
-static int judge(void *dc, tls_t *t, const char *path) {
+/* True: run the exec on. False: it is decided, and the caller gets an error. */
+static bool judge(void *dc, tls_t *t, const char *path) {
     v3c_judge(path, &t->x);
-    if (t->x.verdict == V3C_REFUSE) { refuse(dc, &t->x); return 0; }
-    if (t->x.verdict == V3C_FAIL) { fail_with(dc, t->x.err); return 0; }
-    return 1;
+    if (t->x.verdict == V3C_REFUSE)
+        dr_fprintf(STDERR, "v3compat: refusing to exec %s: %s\n", t->x.final, t->x.why);
+    if (t->x.verdict == V3C_REFUSE || t->x.verdict == V3C_FAIL) return fail_with(dc, t->x.err);
+    return true;
 }
 
 static bool pre_execve(void *dc, tls_t *t) {
@@ -119,7 +113,7 @@ static bool pre_execve(void *dc, tls_t *t) {
     const char *judged = t->path;
     if (read_str(app_path, t->path, PATHBUF) < 0) return true; /* the kernel reports EFAULT or ENAMETOOLONG */
     if (is_self_exe(t->path) && exe_target(self)) judged = self;
-    if (!judge(dc, t, judged)) return t->x.verdict == V3C_REFUSE;
+    if (!judge(dc, t, judged)) return false;
     /* DR reads argv for scripts and does not check it. */
     if (dr_syscall_get_param(dc, 1) == 0) {
         save_regs(dc, t);
@@ -185,7 +179,7 @@ static bool pre_execveat(void *dc, tls_t *t) {
     if (!judge(dc, t, t->path)) {
         if (t->dupfd >= 0) V3C_SC(V3C_SYS_close, t->dupfd, 0, 0);
         t->dupfd = -1;
-        return t->x.verdict == V3C_REFUSE;
+        return false;
     }
     save_regs(dc, t);
     dr_syscall_set_sysnum(dc, V3C_SYS_execve);

@@ -1,7 +1,7 @@
 /* execer MODE CHILD [ARGS...]: start CHILD (default argument "translated") the way MODE says, and report
  * how it ended; the child's own output is the verdict.
  *   plain thread execveat-path execveat-dirfd fexecve-cloexec fexecve-memfd vfork spawn
- *   emptyenv nullenv nullargv-plain nullargv-script closedfds shebang reexec
+ *   emptyenv nullenv nullargv-plain nullargv-script closedfds shebang reexec execvp
  *   childcheck [FD]   (not a mode to start from) PASS on FD if libdynamorio is mapped, using fd 0 for its open
  *   failexec CHILD    execveat and fexecve of a non-executable file must fail and the program continues
  *   nnp CHILD         plain, after PR_SET_NO_NEW_PRIVS
@@ -46,8 +46,9 @@ static long execveat_(int fd, const char *path, char **argv, char **envp, int fl
 static void *thread_exec(void *p) {
     const char *child = p;
     execve(child, mkargv(child), environ);
-    perror("execve in thread");
-    return (void *)1;
+    printf("FAIL exec thread: %s
+", strerror(errno));
+    exit(1);
 }
 
 static int wait_status(pid_t c) {
@@ -147,11 +148,14 @@ int main(int argc, char **argv) {
         if (mode[0] == 'v') {
             c = vfork();
             if (c == 0) { execve(child, mkargv(child), environ); _exit(127); }
-        } else if (posix_spawn(&c, child, 0, 0, mkargv(child), environ)) {
-            return 2;
+        } else {
+            int e = posix_spawn(&c, child, 0, 0, mkargv(child), environ);
+            if (e) { printf("spawn failed: %s\n", strerror(e)); return 2; }
         }
         fflush(stdout);
         return wait_status(c);
+    } else if (!strcmp(mode, "execvp")) { /* child is looked up in PATH */
+        execvp(child, mkargv(child));
     } else if (!strcmp(mode, "emptyenv")) {
         char *env[] = {0};
         execve(child, mkargv(child), env);
