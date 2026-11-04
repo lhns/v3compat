@@ -65,6 +65,13 @@ static int run_hw_suite(const char *manifest, const char *refpath, int full) {
             gen_case(f, k, &c);
             run_hw(&c, &ho);
             size_t nh = pack(&ho, ph);
+            if (getenv("SEM_DUMP")) {     /* per-case line, to diff a native run against a client run */
+                char hx[80] = "";
+                for (int b = 0; b < c.len; b++) sprintf(hx + 2 * b, "%02x", c.code[b]);
+                printf("case %s k=%d place=%d code=%s kind=%d fault=%llx h=%016llx
+", f->name, k, c.place, hx, ho.kind,
+                       (unsigned long long)ho.fault_page, (unsigned long long)fnv(ph, nh, REF_FNV_OFFSET));
+            }
             dh_f = fnv(ph, nh, dh_f); cf++;
             if (smoke) { dh_s = fnv(ph, nh, dh_s); cs++; }
             ncases++;

@@ -39,3 +39,12 @@ jobs:
         run: |
           cmake --build build --target package-tarball
           tar tzf build/v3compat-*-linux-x86_64.tar.gz
+      - name: Diff native vs client on the mismatching forms
+        if: failure()
+        run: |
+          B=build/test/sem; D=build/_deps/avxemu-src/test
+          for f in 'movbe.g_m16' 'vbroadcasti128.y_m128'; do
+            SEM_DUMP=1 SEM_ONLY=$f V3COMPAT_NATIVE=1 build/inst/bin/v3compat-run -- $B/semhw $D/spec/manifest.tsv $D/reference/semantics.ref > n.txt || true
+            SEM_DUMP=1 SEM_ONLY=$f build/inst/bin/v3compat-run -- $B/semhw $D/spec/manifest.tsv $D/reference/semantics.ref > d.txt || true
+            diff n.txt d.txt | head -20
+          done
