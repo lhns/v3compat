@@ -3,7 +3,7 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** design. Phase 0 measured, with the Go hang still open. No emulation is built yet.
+**Status:** design. Phase 0 measured. The decision on DynamoRIO waits on the hang below. No emulation is built yet.
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -117,9 +117,20 @@ Rules:
 
 ### Reused from AVXEmu
 
-Kept: the emulation core (`exec.c`, `exec_bmi.c`, `softfma.c`) as helpers, the core semantic fixes, and the test
-suite. Dropped: patching, trampolines, the SIGILL handler, live relocation and the ELF metadata parser. Its
-preload stays viable as a narrow fallback if this plan fails.
+Kept: the emulation core (`exec.c`, `exec_bmi.c`, `softfma.c`) as helpers taking operands directly, the core semantic
+fixes, and the test suite. Dropped: patching, trampolines, the SIGILL handler, live relocation, the ELF metadata
+parser and probably the decoder, as DynamoRIO decodes.
+
+The preload is a poor fallback: it refuses duckdb and even Debian's `zstd`, as it cannot prove where `lzcnt` and `tzcnt`
+are **[measured]**.
+
+### Where the work lives
+
+| Work | Repo |
+|---|---|
+| DynamoRIO client, launcher, inline expansions, `lzcnt`/`tzcnt`, `cpuid`, translation cache | `v3compat` |
+| Emulation helpers and their fixes; the test suite | [lhns/avxemu](https://github.com/lhns/avxemu) |
+| OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
 ### What other translators teach
 
@@ -141,6 +152,9 @@ rename, a size cap, and stale or corrupt entries rejected. Never shared writable
 The tests matter more than the design: with a translator, every executed instruction passes through it, which
 is a larger correctness surface than patching a few sites.
 
+Status: stages 1, 2, 3 and 6 are built. Of 578 forms from XED, 340 match real AVX2 hardware, 154 fail (144 of them FMA),
+and 84 are refused. Stages 4 and 5 are not built, as they depend on the mechanism.
+
 Developed in the AVXEmu fork, independent of the mechanism:
 
 1. **Spec.** Every instruction form generated from XED's tables. CI fails if a form has no status.
@@ -153,6 +167,19 @@ Developed in the AVXEmu fork, independent of the mechanism:
 6. **Applications.** duckdb, zstd, OpenSSL, sqlite and others: output hashes identical to native.
 
 This gives strong evidence, not proof. Keep storage and database primaries off it.
+
+## Order of work
+
+1. Settle the hang, then decide on DynamoRIO.
+2. Merge the test suite.
+3. Scaffold `v3compat`: a DynamoRIO client, pinned, with no emulation; the launcher; CI; the semantic suite running through
+   the client. Done when a test runs through it and fails only because emulation is missing.
+4. Expose the helper interface in the fork: the emulation core as a library, with no decoder or preload parts.
+5. Fix the helpers against their tests: FMA, half-written stores, `vcvtph2ps`.
+6. Phase 1 below.
+
+The scaffold comes first because it decides how helpers are called. The preload's decoder bugs are not fixed unless the
+preload stays.
 
 ## Phases
 
@@ -182,13 +209,40 @@ DynamoRIO 11.3.0, no emulation yet, on AVX2 runners unless noted **[measured]**.
 
 - **Works**, also with ptrace denied by seccomp and under Docker's default profile: static glibc, static musl,
   static-PIE, exec chains in every direction, `dlopen`, signals, C++ exceptions, `pthread_cancel`, `rseq`, self-modifying code.
-- **Go hangs** in about half the runs, with no error. A `GOAMD64=v3` build also hangs under Docker. Open.
+- **A hang, found with Go.** See below. Open.
 - **setuid** children silently lose their privileges, so they must be detected and refused.
 - **`-persist`** wrote nothing without a client and made later runs slower: 4.5 s against 0.7 s. Its docs say a
   client's blocks are not persisted by default. So phase 3 means our own cache, or accepting the startup.
 - **Density** in duckdb, by instructions executed in a query: AVX2-only mnemonics 0.016%, BMI2 about 0.03%,
   `vp*` at most 8.5% (the tool does not separate XMM from YMM; XMM runs natively).
 - **SIGILL round trip** in a VM on Ivy Bridge: 12.3 us, 86 us under DynamoRIO, against 4.2 us on bare Haswell in AVXEmu's docs.
+
+### The hang
+
+Goroutines in a tight loop with no function calls, while the garbage collector stops the world **[measured]**. Ordinary
+Go programs do not hit it: hello, thousands of goroutines, GC stress, `signal.Notify` and `net/http` each ran 20 of 20.
+
+| Configuration | Hangs of 20 |
+|---|---|
+| Native | 0 |
+| DynamoRIO default | 6 |
+| `GOAMD64=v3` | 12 |
+| `GOMAXPROCS=1` | 3 |
+| `-disable_traces` | 6 |
+| `-thread_private` | 0 |
+| `-no_early_inject` | 0, but it does not follow static programs, so this proves nothing |
+
+A hung process has one thread spinning in a small self-loop in the code cache, with others waiting on it. No signal is
+pending or blocked at the kernel, and no `tgkill` is seen. Go sends its preemption signal once per thread and waits
+**[memory]**. **Suspected, not proven:** DynamoRIO takes the signal and never delivers it to a thread looping in a linked
+fragment of the shared cache. If so, any program with such a loop that relies on an async signal can hang, not only Go.
+[DynamoRIO #4431](https://github.com/DynamoRIO/dynamorio/issues/4431) is a similar open bug.
+
+`GODEBUG=asyncpreemptoff=1` is no fix, as the same program hangs natively with it.
+
+**To settle before deciding:** 100 runs of `-thread_private` directly and under Docker, its cost in memory and startup
+with about 100 threads, and a C reproducer. If `-thread_private` holds at an acceptable cost, use it and report the bug
+upstream. If the bug is general and it does not hold, this blocks the plan without a fix in DynamoRIO.
 
 **Criterion revised after seeing results.** The original go/no-go was startup under 1 s and under 2x native. Startup
 was 18-84x, so it failed. The 2x limit cannot hold for a program that natively starts in 0.04 s, as translation is
@@ -207,7 +261,8 @@ only if the numbers justify it.
 - **The speed target is an estimate.** Dense AVX2 cost is unproven by anything measured so far.
 - **Dependency on DynamoRIO.** Large and mature, with its own bugs in every executed instruction path.
 - **Static injection** under default seccomp without ptrace: the plan is wrapper argv plus self-loading **[memory]**.
-- **Go:** hangs under DynamoRIO, see Phase 0 results. Cause unknown.
+- **The hang:** see Phase 0 results. Possibly not limited to Go.
+- **`-thread_private`**, if needed, multiplies code caches per thread; the cost is unmeasured.
 - **JIT-heavy programs** may regress past AVXEmu's 1.2x. Measured: Node 2.4x, Java 13x.
 - **setuid children** lose privilege under a launcher: refuse them rather than run them with the wrong rights.
 - **FMA** under correct rounding stays slow. FMA-heavy programs may not reach the targets.
