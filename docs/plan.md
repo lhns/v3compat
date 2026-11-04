@@ -193,7 +193,7 @@ Every phase has a go/no-go. A failure stops the plan.
 | Phase | Work | Go/no-go |
 |---|---|---|
 | **0. Is DynamoRIO good enough?** | Unmodified DynamoRIO with a null client on an AVX2 host: duckdb, Go, static musl and glibc, JVM, Node, exec chains, default seccomp. Instruction density of duckdb, static and dynamic | Revised after results, see below: cold startup under 5 s on Ivy Bridge. No crashes. **Static targets and Go work** under default seccomp without ptrace |
-| **1. Correct, not yet fast** | Launcher, exec follow, `/proc/self/exe`; helpers, with the hot forms inline; translated CPUID and `lzcnt`; test suite hook | `lzcnt` in a dlopen'd library correct; static children correct; duckdb correct; compute under 3 s |
+| **1. Correct, not yet fast** | Launcher, exec follow, `/proc/self/exe`; helpers, with the hot forms inline; translated CPUID and `lzcnt`; test suite hook | `lzcnt` in a dlopen'd library correct; static children correct; duckdb correct; compute, excluding startup, under 3 s (revised after results, see below) |
 | **2. Fast** | Inline expansion, flag liveness, register allocation in hot traces | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean |
 | **3. Startup** | Translation cache | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected |
 | **4. Production** | Wrapper integration, passthrough, canary | Two weeks with no divergence from native |
@@ -249,9 +249,15 @@ duckdb 2.0.0 whole-process wall time, cold **[measured]**. Output hashes are the
 | `varied.sql` (mixed SQL) | 4.56 s | 49 s | 165 s |
 
 **Against the go/no-go.** `lzcnt` in a `dlopen`ed library, static children and duckdb's output are correct. Compute under 3 s is
-not met as a whole-process time: startup alone is about 5 s, and the query adds about 1.1 s to it. Startup is DynamoRIO
-translation, which Phase 3's cache addresses. The mixed workload, at about 11x on the AMD host against 1.67x with no client,
-needs more forms inline.
+not met as a whole-process time (5.9-7.4 s on Ivy Bridge): startup alone is about 5 s, and the query adds about 1.1 s to it.
+Startup is DynamoRIO translation, which Phase 3's cache addresses. The mixed workload, at about 11x on the AMD host against
+1.67x with no client, needs more forms inline.
+
+**Criterion revised after seeing results.** Phase 1's compute target now measures compute excluding startup: about 1.1 s
+against 3 s, which passes. Startup is measured separately and gated by Phase 3's warm-start target (`select 42` under
+0.5 s), not by Phase 1. The whole-process 5.9-7.4 s above would have failed the original wording. This is a judgement made
+after the fact, user-approved, and recorded as such, like the Phase 0 revision. **Still unmet in Phase 1:** the whole-process
+time, until Phase 3; the mixed workload's 11x; the thread-creation stress test, not settled.
 
 ### The hang
 

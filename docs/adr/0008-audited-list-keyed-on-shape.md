@@ -28,3 +28,8 @@ A real program using a form nobody tested stops with status 86 and names it; `V3
 the fix is more evidence, not a wider rule. AVX2 evidence comes from CI's runners, not approved Intel AVX2 references, so
 [allowlist.md](../allowlist.md) states what that leaves unverified. Bumping DR or XED means rerunning `test/allow/regen.sh`;
 CI fails until then.
+
+## Amendment 2026-11-04
+Policy kind `approx`: forms whose results are approximations by definition (`rcpps`, `rsqrtps` and their scalar and VEX
+forms, `f2xm1`, `dpps`/`vdpps`) are listed when Ivy Bridge does not fault, though the AVX2 machine differs. Their
+difference is bounded in `test/approx.c`, which states each margin and runs under the client; `allowlist-check` skips them.

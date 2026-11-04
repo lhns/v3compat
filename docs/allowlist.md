@@ -8,13 +8,13 @@ keys go through the expansions, and anything else exits with status 86 if execut
 - Ivy Bridge evidence: `GenuineIntel family=6 model=58`
 - AVX2 evidence: `AuthenticAMD family=25 model=17`
 - Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9717 native keys, 832 emulated keys.
+- Listed: 9793 native keys, 832 emulated keys.
 
 ## Rows by outcome
 
 | Outcome | Rows |
 |---|---|
-| differs-on-avx2 | 403 |
+| differs-on-avx2 | 289 |
 | dr-invalid | 1017 |
 | emulated | 1216 |
 | excluded:far-control-flow | 168 |
@@ -26,6 +26,7 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | faults-on-both | 916 |
 | ivy-faults | 18 |
 | lacked-not-in-emulation-suite | 1156 |
+| native-approx | 114 |
 | native-faults | 72 |
 | native-tested | 43669 |
 | native-untested | 152 |
@@ -108,8 +109,10 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 | `bndmov` | hint | MPX: NOP space, and no kernel enables MPX |
 | `bndstx` | hint | as bndmov |
 | `cldemote` | hint | cache hint; no result |
+| `dpps` | approx | summation order differs by vendor; test/approx.c bounds it against the exact dot product |
 | `endbr32` | hint | NOP without CET |
 | `endbr64` | hint | NOP without CET, which nothing here enables |
+| `f2xm1` | approx | x87 transcendental, domain -1..1; test/approx.c bounds the relative error |
 | `fxrstor` | untested | as fxsave |
 | `fxrstor64` | untested | as fxsave |
 | `fxsave` | untested | FIP and FDP differ by CPU, the rest is fixed |
@@ -122,16 +125,25 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 | `prefetchrst2` | hint | as prefetchit0 |
 | `prefetchw` | hint | cache hint; no result. Ivy Bridge runs it as a NOP |
 | `prefetchwt1` | hint | as prefetchw |
+| `rcpps` | approx | relative error at most 1.5*2^-12 per the SDM; vendors differ |
+| `rcpss` | approx | as rcpps |
 | `rdrand` | untested | nondeterministic; Ivy Bridge has it, cpuid reports it |
 | `rdsspd` | hint | NOP without CET, by design: leaves the register, which is how software detects it off |
 | `rdsspq` | hint | as rdsspd |
 | `rdtsc` | untested | nondeterministic; its meaning does not change with ISA level |
 | `rdtscp` | untested | as rdtsc |
 | `repne_cmpsq` | refused | A CI runner (Intel family 6 model 207) stopped where Ivy Bridge and AMD fault, on one seed; unexplained, and no compiler emits it |
+| `rsqrtps` | approx | as rcpps |
+| `rsqrtss` | approx | as rcpps |
 | `syscall` | untested | would leave the harness; DR handles it, and the kernel's interface is not an ISA question |
 | `ud0` | faults | as ud2 |
 | `ud1` | faults | as ud2; sanitizers emit it |
 | `ud2` | faults | faulting is its meaning: compilers emit it as a trap |
+| `vdpps` | approx | as dpps |
+| `vrcpps` | approx | as rcpps |
+| `vrcpss` | approx | as rcpps |
+| `vrsqrtps` | approx | as rcpps |
+| `vrsqrtss` | approx | as rcpps |
 | `xgetbv` | untested | nondeterministic by design; AVX2 adds no XCR0 bits (plan) |
 | `xrstor` | untested | as xsave |
 | `xrstor64` | untested | as xsave |
@@ -151,21 +163,13 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 
 ## Refused because the machines differ
 
-`call_near`, `dpps`, `f2xm1`, `jb`, `jbe`, `jl`, `jle`, `jmp`, `jnb`, `jnbe`, `jnl`, `jnle`, `jno`, `jnp`, `jns`, `jnz`, `jo`, `jp`, `jrcxz`, `js`, `jz`, `loop`, `loope`, `loopne`, `pause`, `rcpps`, `rcpss`, `ret_near`, `rsqrtps`, `rsqrtss`, `smsw`, `vdpps`, `vrcpps`, `vrcpss`, `vrsqrtps`, `vrsqrtss`
+`call_near`, `jb`, `jbe`, `jl`, `jle`, `jmp`, `jnb`, `jnbe`, `jnl`, `jnle`, `jno`, `jnp`, `jns`, `jnz`, `jo`, `jp`, `jrcxz`, `js`, `jz`, `loop`, `loope`, `loopne`, `pause`, `ret_near`, `smsw`
 
 ## Keys with a refused form among listed ones: the whole key is refused
 
-- `dpps 66 d:x s:x,i,x`: DPPS:differs-on-avx2, DPPS:native-tested
-- `dpps 66 rexw d:x s:x,i,x`: DPPS:differs-on-avx2, DPPS:native-tested
 - `smsw d:g16 s:`: SMSW:differs-on-avx2, SMSW:native-tested
 - `smsw f2 d:g16 s:`: SMSW:differs-on-avx2, SMSW:native-tested
 - `smsw f3 d:g16 s:`: SMSW:differs-on-avx2, SMSW:native-tested
-- `vdpps vex d:x s:x,x,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
-- `vdpps vex l d:y s:y,m33,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
-- `vdpps vex l d:y s:y,y,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
-- `vdpps vex w d:x s:x,x,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
-- `vdpps vex w l d:y s:y,m33,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
-- `vdpps vex w l d:y s:y,y,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
 
 ## Unverified
 
