@@ -12,7 +12,6 @@ part_skip() { echo "SKIPPED check: $*"; [ "$V3COMPAT_CI" = 1 ] && bad=1; }
 fail() { echo "FAIL $*"; bad=1; }
 ok() { echo "ok $*"; }
 ids=$B/ids_static
-[ -x "$ids" ] || ids=$B/ids_static
 [ -x "$ids" ] || skip "ids_static not found"
 mk() { # mk NAME MODE OWNER:GROUP: a copy of ids
   cp "$ids" "$t/$1"; $S chown "$3" "$t/$1"; $S chmod "$2" "$t/$1"
@@ -35,6 +34,7 @@ case $out in *euid=65534*) ok "native setuid changes the user" ;; *) skip "setui
 refused "setuid file, root to nobody" "$RUN" "$t/suid_nobody"
 mk sgid_nobody 2755 nobody:nogroup
 run env V3COMPAT_NATIVE=1 "$RUN" "$t/sgid_nobody"
+case $out in *egid=65534*) ok "native setgid changes the group" ;; *) skip "setgid has no effect here: $out" ;; esac
 refused "setgid file, root to nogroup" "$RUN" "$t/sgid_nobody"
 refused "setuid file, from execve in a program" "$RUN" "$B/execer_static" plain "$t/suid_nobody"
 refused "setuid file, from a thread" "$RUN" "$B/execer_dyn" thread "$t/suid_nobody"

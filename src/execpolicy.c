@@ -239,8 +239,9 @@ static bool event_pre(void *dc, int sysnum) {
     int pi, fi;
     t->rewritten = false;
     t->dupfd = -1;
-    /* A static glibc posix_spawn child dies under DR's clone3. libcs fall back to clone, as under Docker's
-     * default seccomp, which answers the same. */
+    /* Stopgap, for every clone3 and nothing else: a static glibc posix_spawn child dies under DR's clone3 and
+     * the cause is open (docs/plan.md, "Launcher, exec follow"). libcs fall back to clone, as under Docker's
+     * default seccomp. Remove it once DR's clone3 is fixed. */
     if (sysnum == V3C_SYS_clone3) return fail_with(dc, 38 /* ENOSYS */);
     if (sysnum == V3C_SYS_execve) return pre_execve(dc, t);
     if (sysnum == V3C_SYS_execveat) return pre_execveat(dc, t);

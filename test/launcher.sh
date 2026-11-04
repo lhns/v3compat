@@ -76,4 +76,5 @@ out=$(BIG=$big "$INST/bin/v3compat-run" -- /usr/bin/env 2>&1 | grep -c '^BIG=')
 [ "$out" = 1 ] && echo "ok big-env" || { echo "FAIL big-env"; bad=1; }
 # Too many options for DynamoRIO.
 check options-too-long 125 'too long' -- env "V3COMPAT_DR_OPTS=$(head -c 3000 /dev/zero | tr '\0' x)" "$INST/bin/v3compat-run" -- "$HELLO"
+check options-way-too-long 125 'too long' -- env "V3COMPAT_DR_OPTS=$(head -c 20000 /dev/zero | tr '\0' x)" "$INST/bin/v3compat-run" -- "$HELLO"
 exit $bad

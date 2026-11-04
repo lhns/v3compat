@@ -21,4 +21,4 @@ diff to what cannot be done from outside.
 ## Consequences
 Nothing in an image is needed beyond the mounted install. We rely on DynamoRIO's early-injection environment contract rather than its
 supported tool, so a DynamoRIO update must rerun the exec tests. A refusal ends the process rather than failing the `execve`, so a
-caller cannot fall back. The install path may not contain spaces, quotes or `;`, as the option string cannot carry them.
+caller cannot fall back. The check opens the file shortly before the kernel execs it, so a path swapped in between is not caught; a file descriptor is judged through the same path or a private copy. The install path may not contain spaces, quotes or `;`, as the option string cannot carry them.

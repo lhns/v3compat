@@ -291,7 +291,7 @@ Still differs from native **[measured]**:
 - `DYNAMORIO_EXE_PATH`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
   `/proc/self/fd`.
 - `clone3` returns `ENOSYS`, as under Docker's default seccomp: a static glibc `posix_spawn` child dies with SIGSEGV under DynamoRIO's
-  `clone3`, with or without this client. Cause not found; libcs fall back to `clone`.
+  `clone3`, with or without this client. The cause is open and this is a stopgap, to be removed with it; libcs fall back to `clone`.
 - `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
 
 Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative

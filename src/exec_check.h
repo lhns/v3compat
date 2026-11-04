@@ -34,10 +34,10 @@ static inline long v3c_sc(long n, long a, long b, long c, long d, long e, long f
 
 enum {
     V3C_SYS_read = 0, V3C_SYS_write = 1, V3C_SYS_open = 2, V3C_SYS_close = 3, V3C_SYS_stat = 4, V3C_SYS_fstat = 5,
-    V3C_SYS_lstat = 6, V3C_SYS_mmap = 9, V3C_SYS_pread64 = 17, V3C_SYS_access = 21, V3C_SYS_fcntl = 72,
-    V3C_SYS_readlink = 89, V3C_SYS_readlinkat = 267, V3C_SYS_getuid = 102, V3C_SYS_getgid = 104, V3C_SYS_geteuid = 107,
+    V3C_SYS_mmap = 9, V3C_SYS_pread64 = 17, V3C_SYS_access = 21, V3C_SYS_fcntl = 72,
+    V3C_SYS_readlink = 89, V3C_SYS_readlinkat = 267, V3C_SYS_getuid = 102, V3C_SYS_geteuid = 107,
     V3C_SYS_getegid = 108, V3C_SYS_fstatfs = 138, V3C_SYS_prctl = 157, V3C_SYS_fgetxattr = 193,
-    V3C_SYS_gettid = 186, V3C_SYS_execve = 59, V3C_SYS_exit_group = 231, V3C_SYS_openat = 257,
+    V3C_SYS_execve = 59, V3C_SYS_exit_group = 231, V3C_SYS_openat = 257,
     V3C_SYS_newfstatat = 262, V3C_SYS_faccessat = 269, V3C_SYS_execveat = 322, V3C_SYS_statx = 332,
     V3C_SYS_clone3 = 435, V3C_SYS_openat2 = 437, V3C_SYS_faccessat2 = 439
 };

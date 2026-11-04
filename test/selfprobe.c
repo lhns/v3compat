@@ -82,6 +82,20 @@ int main(int argc, char **argv) {
     check_path("thread-self", "/proc/thread-self/exe");
     { pthread_t t; pthread_create(&t, 0, thread_probe, 0); pthread_join(t, 0); }
 
+    {   /* Look-alikes are not the executable; a short buffer truncates like the kernel's. */
+        static const char *const other[] = {"/proc/selfish", "/proc/self/exe_", "/proc/self/executable", "/proc/0/exe"};
+        char small[5], name[160];
+        ssize_t r;
+        for (size_t i = 0; i < sizeof other / sizeof *other; i++) {
+            snprintf(name, sizeof name, "not rewritten %s", other[i]);
+            res(open(other[i], O_RDONLY) < 0, name, "opened");
+        }
+        r = readlink("/proc/self/exe", small, sizeof small);
+        res(r == 5 && !memcmp(small, real, 5), "readlink self, short buffer", "%zd", r);
+        r = readlink("/proc/thread-self/exe", small, sizeof small);
+        res(r == 5 && !memcmp(small, real, 5), "readlink thread-self, short buffer", "%zd", r);
+    }
+
     size_t n = slurp("/proc/self/cmdline", buf, sizeof buf - 1);
     res(n != (size_t)-1 && !strcmp(buf, argv[0]), "cmdline argv[0]", "'%s' against '%s'", buf, argv[0]);
     const char *ex = (const char *)getauxval(AT_EXECFN);
