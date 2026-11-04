@@ -3,7 +3,7 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** Phase 1. DynamoRIO is decided, built only from our fork. No emulation is built yet.
+**Status:** Phase 1. DynamoRIO is decided, built only from our fork. Emulation runs; see "Phase 1 results".
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -86,8 +86,8 @@ OCI wrapper (v3compat-runtime)
   host has AVX2?  -> run natively
   otherwise       -> launcher -> program under the translator
                                    |-- common instructions: unchanged
-                                   |-- lzcnt, tzcnt, lane-wise AVX2: inline expansion
-                                   |-- cross-lane, FMA, gathers: helpers (from AVXEmu)
+                                   |-- hot lane-wise AVX2: inline expansion
+                                   |-- the rest: native AVX1 equivalents, helpers (from AVXEmu)
                                    `-- anything unknown: refuse
 ```
 
@@ -95,12 +95,13 @@ OCI wrapper (v3compat-runtime)
 
 | Instruction | Handling | Cost per op |
 |---|---|---|
-| `lzcnt`, `tzcnt` | Inline; compute flags only when they are live | About native **[estimate]** |
-| BMI1, BMI2, MOVBE | Inline | Small **[estimate]** |
-| Lane-wise AVX2 | Two 128-bit operations | 2-5 ns; 1-2 ns with block register allocation **[estimate]** |
-| Cross-lane AVX2 | Short sequences | 5-15 ns **[estimate]** |
-| FMA, gathers | Helper call, correct fused rounding | 50 ns or more **[estimate]** |
-| `cpuid`, `xgetbv` | Translated to report the emulated CPU | Rare |
+| Hot lane-wise AVX2: `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq` | Inline, two 128-bit operations | 3 ns; 5 ns from memory **[measured]** |
+| Forms AVX1 has under another opcode | Native substitution | Native |
+| Other vector forms, FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
+| `lzcnt`, `tzcnt`, BMI1, BMI2, MOVBE loads | Helper through the mcontext | 320-400 ns **[measured]** |
+| MOVBE stores | Inline byte swap and store | Small **[estimate]** |
+| `cpuid` | Translated to report the emulated CPU | Rare |
+| `xgetbv` | Native: AVX2 adds no XCR0 bits | Native |
 
 Rules:
 
@@ -154,7 +155,7 @@ is a larger correctness surface than patching a few sites.
 
 Status: stages 1, 2, 3 and 6 are built. Of 578 forms from XED, 84 are refused. The rest match the recorded references on
 the helper-fixes branch, apart from `mem_read` zero-fill, left for the translator. References come from AMD EPYC, so Intel NaN
-priority is unverified until a recording on Intel AVX2 hardware. Stages 4 and 5 are not built, as they depend on the mechanism.
+priority is unverified until a recording on Intel AVX2 hardware. In `v3compat`, the suite runs through the client on Ivy Bridge, with inline expansions on and off (stage 4, required for every inline form). Stage 5 is partly built: faults and flags. Signal injection is not.
 
 Developed in the AVXEmu fork, independent of the mechanism:
 
@@ -177,8 +178,7 @@ This gives strong evidence, not proof. Keep storage and database primaries off i
    the client. Done when a test runs through it and fails only because emulation is missing.
 4. Expose the helper interface in the fork: the emulation core as a library, with no decoder or preload parts.
 5. Fix the helpers against their tests: FMA, half-written stores, `vcvtph2ps`.
-6. Phase 1 below, starting by building the client against our fork, and by finding why four forms lose OF under plain
-   DynamoRIO (`test/sem/known-dr.txt`).
+6. Phase 1 below, on the fork. Hot lane-wise forms are inlined within it, ahead of the launcher work, since measurement showed helpers alone cannot reach its target ([ADR 0007](adr/0007-hot-ops-inline-in-phase-1.md)).
 
 The scaffold comes first because it decides how helpers are called. The preload's decoder bugs are not fixed unless the
 preload stays.
@@ -190,7 +190,7 @@ Every phase has a go/no-go. A failure stops the plan.
 | Phase | Work | Go/no-go |
 |---|---|---|
 | **0. Is DynamoRIO good enough?** | Unmodified DynamoRIO with a null client on an AVX2 host: duckdb, Go, static musl and glibc, JVM, Node, exec chains, default seccomp. Instruction density of duckdb, static and dynamic | Revised after results, see below: cold startup under 5 s on Ivy Bridge. No crashes. **Static targets and Go work** under default seccomp without ptrace |
-| **1. Correct, not yet fast** | Launcher, exec follow, `/proc/self/exe`; helpers for everything; translated CPUID and `lzcnt`; test suite hook | `lzcnt` in a dlopen'd library correct; static children correct; duckdb correct; compute under 3 s |
+| **1. Correct, not yet fast** | Launcher, exec follow, `/proc/self/exe`; helpers, with the hot forms inline; translated CPUID and `lzcnt`; test suite hook | `lzcnt` in a dlopen'd library correct; static children correct; duckdb correct; compute under 3 s |
 | **2. Fast** | Inline expansion, flag liveness, register allocation in hot traces | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean |
 | **3. Startup** | Translation cache | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected |
 | **4. Production** | Wrapper integration, passthrough, canary | Two weeks with no divergence from native |
@@ -218,6 +218,37 @@ DynamoRIO 11.3.0, no emulation yet, on AVX2 runners unless noted **[measured]**.
 - **Density** in duckdb, by instructions executed in a query: AVX2-only mnemonics 0.016%, BMI2 about 0.03%,
   `vp*` at most 8.5% (the tool does not separate XMM from YMM; XMM runs natively).
 - **SIGILL round trip** in a VM on Ivy Bridge: 12.3 us, 86 us under DynamoRIO, against 4.2 us on bare Haswell in AVXEmu's docs.
+
+### Phase 1 results
+
+duckdb's compute query (`select sum(range*range) from range(30000000)`) on an AVX2 AMD runner, executed instructions under
+the client **[measured]**: 1.67G in all, 135.5M AVX2, of which `vpaddq` 60.1M, `vpmuludq` 45.0M, `vpsrlq` 15.1M and `vpsllq` 15.0M
+are 99.8%. BMI 0.63M, `lzcnt` 46k, `tzcnt` 11k, FMA none. Helpers alone would take about 11 s of CPU at the frame's 80 ns.
+
+Per operation on Ivy Bridge, against about 0.5 ns for an empty loop iteration **[measured]**:
+
+| Path | ns per op |
+|---|---|
+| Inline `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq`, register sources | 2.9-3.2 |
+| Inline `vpaddq` from memory | 4.9 |
+| Inline with the TLS block not 32-byte aligned | 10 |
+| Frame helper | 78-94 |
+| Mcontext helper (`tzcnt`) | 316-402 |
+| Clean call reading and writing the mcontext, `vec_exec` | 466-525 |
+
+duckdb 2.0.0 whole-process wall time, cold **[measured]**. Output hashes are the same in all three columns:
+
+| Query | Native, AMD AVX2 | Client, AMD AVX2 | Client, Ivy Bridge |
+|---|---|---|---|
+| `select 42` | 0.04 s | 0.92 s | 5.1-5.4 s |
+| Compute query | 0.16 s | 1.35 s | 5.9-7.4 s; 10.5 s once |
+| Compute query, `threads=1` | | | 6.5 s |
+| `varied.sql` (mixed SQL) | 4.56 s | 49 s | 165 s |
+
+**Against the go/no-go.** `lzcnt` in a `dlopen`ed library, static children and duckdb's output are correct. Compute under 3 s is
+not met as a whole-process time: startup alone is about 5 s, and the query adds about 1.1 s to it. Startup is DynamoRIO
+translation, which Phase 3's cache addresses. The mixed workload, at about 11x on the AMD host against 1.67x with no client,
+needs more forms inline.
 
 ### The hang
 

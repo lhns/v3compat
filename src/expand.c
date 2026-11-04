@@ -203,7 +203,7 @@ static const form_t vec_forms[] = {
     F3(vpmaddwd, VPMADDWD), F3(vpmaddubsw, VPMADDUBSW),
     F3(vpavgb, VPAVGB), F3(vpavgw, VPAVGW), F3(vpsadbw, VPSADBW),
     F3(vpsignb, VPSIGNB), F3(vpsignw, VPSIGNW), F3(vpsignd, VPSIGND), F3(vphaddd, VPHADDD),
-    F3(vpshufb, VPSHUFB), F3(vpalignr, VPALIGNR), F3(vpblendw, VPBLENDW), F3(vinserti128, VINSERTI128),
+    F3(vpshufb, VPSHUFB), F3(vpalignr, VPALIGNR), F3(vpblendw, VPBLENDW),
     F3(vpacksswb, VPACKSSWB), F3(vpackssdw, VPACKSSDW), F3(vpackuswb, VPACKUSWB), F3(vpackusdw, VPACKUSDW),
     F3(vpunpcklbw, VPUNPCKLBW), F3(vpunpckhbw, VPUNPCKHBW), F3(vpunpcklwd, VPUNPCKLWD),
     F3(vpunpckhwd, VPUNPCKHWD), F3(vpunpckldq, VPUNPCKLDQ), F3(vpunpckhdq, VPUNPCKHDQ),
