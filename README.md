@@ -8,7 +8,7 @@ instructions the CPU lacks. Whether it is fast enough is being measured.
 
 ## Build and run
 
-Linux x86-64 only. Needs cmake 3.18+, git and C and C++ compilers. Our DynamoRIO fork is built from its pinned commit at
+Linux x86-64 only. Needs cmake 3.18+, git, patch, zlib headers and C and C++ compilers. Our DynamoRIO fork is built from its pinned commit at
 configure time (cached in `~/.cache/v3compat`); `-DV3COMPAT_DR_ROOT=<dir>` uses an existing install instead.
 
 ```sh
@@ -31,8 +31,8 @@ build/inst/bin/v3compat-run [--] prog args...
 [avxemu](https://github.com/lhns/avxemu) commit and runs its instruction-form cases under the client against
 the digests recorded on AVX2 hardware. On AVX2 it must pass. On an AVX-only CPU it fails with
 `EMULATION MISSING` (exit 3) at the first instruction nothing emulates, which is distinct from a result mismatch
-(exit 1). `test/sem/known-dr.txt` lists forms where plain DynamoRIO 11.3.0 itself differs from native
-(OF is lost around `movbe` and `vbroadcasti128` loads); they are tolerated under the client only.
+(exit 1). `test/sem/known-dr.txt` lists forms where plain DynamoRIO itself differs from native; they are
+tolerated under the client only. It has no entries.
 
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.

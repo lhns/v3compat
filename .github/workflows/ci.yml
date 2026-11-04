@@ -30,6 +30,8 @@ jobs:
           path: ~/.cache/v3compat
           # The file holds the pinned commit and the build options.
           key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: DynamoRIO build dependencies
+        run: sudo apt-get install -y zlib1g-dev
       - name: Configure
         run: cmake -S . -B build -DV3COMPAT_SEMANTIC=ON
       - name: Build
