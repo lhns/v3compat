@@ -69,8 +69,7 @@ int main(int argc, char **argv) {
     if (!strcmp(n, "cpuid-xsavec")) {
         unsigned a, b, c, d;
         __cpuid_count(0xd, 1, a, b, c, d);
-        printf("xsave-extras=%u
-", (a >> 1) & 7);
+        printf("xsave-extras=%u\n", (a >> 1) & 7);
         return (a >> 1) & 7;
     }
     if (!strcmp(n, "not-executed")) {
