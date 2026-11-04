@@ -230,8 +230,7 @@ static void pre_open_like(void *dc, tls_t *t, int sysnum, int pi, int fi) {
 static bool event_filter(void *dc, int sysnum) {
     int pi, fi;
     (void)dc;
-    return sysnum == V3C_SYS_clone3 || sysnum == V3C_SYS_execve || sysnum == V3C_SYS_execveat ||
-           open_like(sysnum, &pi, &fi);
+    return sysnum == V3C_SYS_execve || sysnum == V3C_SYS_execveat || open_like(sysnum, &pi, &fi);
 }
 
 static bool event_pre(void *dc, int sysnum) {
@@ -239,10 +238,6 @@ static bool event_pre(void *dc, int sysnum) {
     int pi, fi;
     t->rewritten = false;
     t->dupfd = -1;
-    /* Stopgap, for every clone3 and nothing else: a static glibc posix_spawn child dies under DR's clone3 and
-     * the cause is open (docs/plan.md, "Launcher, exec follow"). libcs fall back to clone, as under Docker's
-     * default seccomp. Remove it once DR's clone3 is fixed. */
-    if (sysnum == V3C_SYS_clone3) return fail_with(dc, 38 /* ENOSYS */);
     if (sysnum == V3C_SYS_execve) return pre_execve(dc, t);
     if (sysnum == V3C_SYS_execveat) return pre_execveat(dc, t);
     if (open_like(sysnum, &pi, &fi)) pre_open_like(dc, t, sysnum, pi, fi);

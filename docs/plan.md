@@ -279,6 +279,11 @@ is mapped **[measured]**; a subset also in a scratch image with `--read-only`, u
 | `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
 | `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
 
+glibc's `posix_spawn` passes `CLONE_CLEAR_SIGHAND` to `clone3`, which would reset DynamoRIO's own handlers in the child, so a fault it
+expects to catch kills it: the safe read past a static binary's TLS while the child starts, and the dead child's thread record then hangs
+the parent at exit. The fork takes the flag off the real syscall and applies it to the app's handler table (`test/clone3.c`). A vfork
+child killed from outside before it execs is not covered: its record stays too **[source]**.
+
 Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
 change nothing natively.
 
@@ -290,8 +295,6 @@ Still differs from native **[measured]**:
   fixing that needs `CAP_SYS_RESOURCE`.
 - `DYNAMORIO_EXE_PATH`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
   `/proc/self/fd`.
-- `clone3` returns `ENOSYS`, as under Docker's default seccomp: a static glibc `posix_spawn` child dies with SIGSEGV under DynamoRIO's
-  `clone3`, with or without this client. The cause is open and this is a stopgap, to be removed with it; libcs fall back to `clone`.
 - `readlink` of `/proc/self/exe` into a buffer shorter than the path fails with -1 under DynamoRIO's own virtualization; the kernel
   truncates. Not fixed here; the test does not cover it **[measured]**.
 - `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
