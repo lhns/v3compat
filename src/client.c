@@ -3,6 +3,7 @@
 #include "drmgr.h"
 #include "allow.h"
 #include "expand.h"
+#include "execpolicy.h"
 
 static const char *const cls_name[C_N] = {"avx2", "fma", "bmi", "lzcnt", "tzcnt", "movbe", "instrs"};
 static uint64 counts[C_N];
@@ -102,5 +103,6 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_bb_app2app_event(event_app2app, NULL);
     drmgr_register_signal_event(event_signal);
+    exec_policy_init();
     dr_register_exit_event(event_exit);
 }

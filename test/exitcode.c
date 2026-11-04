@@ -2,8 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-/* exitcode 42 | exitcode term: exit status or fatal signal must reach the caller unchanged. */
+/* exitcode [N | term | kill | segv | abrt]: end with that status or signal (default 42); it must reach the caller unchanged. */
 int main(int argc, char **argv) {
-    if (argc > 1 && !strcmp(argv[1], "term")) { kill(getpid(), SIGTERM); pause(); }
-    return 42;
+    const char *a = argc > 1 ? argv[1] : "42";
+    if (!strcmp(a, "term")) { kill(getpid(), SIGTERM); pause(); }
+    if (!strcmp(a, "kill")) { kill(getpid(), SIGKILL); pause(); }
+    if (!strcmp(a, "abrt")) abort();
+    if (!strcmp(a, "segv")) { signal(SIGSEGV, SIG_DFL); *(volatile int *)0 = 1; }
+    return atoi(a);
 }
