@@ -14,6 +14,7 @@
 typedef struct {
     ymm256 save[3];
     ymm256 a, b, c, out;
+    uint64 pending;   /* unmasked FP flags a call left; outside both ranges event_restore reads */
     uint64 gsave[2];
     uint64 self;
 } tls_t;
@@ -39,6 +40,7 @@ static inline tls_t *my_tls(void) {
 }
 
 static reg_id_t xmm_of(reg_id_t y) { return (reg_id_t)(y - DR_REG_YMM0 + DR_REG_XMM0); }
+static reg_id_t ymm_of(reg_id_t r) { return reg_is_ymm(r) ? r : (reg_id_t)(r - DR_REG_XMM0 + DR_REG_YMM0); }
 static opnd_t reg(reg_id_t r) { return opnd_create_reg(r); }
 
 /* Emission state for one application instruction. */
@@ -127,6 +129,9 @@ static void expand_inline(emit_t *e, instr_t *in) {
     reg_id_t a = opnd_get_reg(ao);
     bool shift = opc == OP_vpsrlq || opc == OP_vpsllq;
     bool mem = opnd_is_memory_reference(b);
+    /* DR gives a shift count the vector's width: it is xmm or m128 for ymm as well. */
+    if (shift && mem) opnd_set_size(&b, OPSZ_16);
+    if (shift && opnd_is_reg(b)) b = reg(xmm_of(ymm_of(opnd_get_reg(b))));
     reg_id_t t0 = e->scratch[0], t1 = e->scratch[1], t2 = e->scratch[2];
     reg_id_t t0x = xmm_of(t0), t1x = xmm_of(t1), t2x = xmm_of(t2);
 
@@ -163,16 +168,70 @@ static void refuse_call(app_pc pc, int opc) {
 
 /* ---- Vector helpers, through the raw-TLS frame ---- */
 
-typedef struct { int opc; vex_op op; } form_t;
+/* How a form's DR operands (immediate set aside, the rest in order r0 r1 r2) map to vec_exec's a, b, c. */
+enum {
+    K_3,     /* a=r0 b=r1; plus an imm for the 3-operand imm forms (palignr, blend, insert) */
+    K_SH,    /* a=r0, count b=r1, or the immediate as the count */
+    K_BI,    /* b=r0, imm (pshufd, permq) */
+    K_AI,    /* a=r0, imm (pslldq) */
+    K_A,     /* a=r0 (pabs) */
+    K_B,     /* b=r0 (broadcast, pmovzx/sx) */
+    K_4,     /* a=r0 b=r1 c=r2 (pblendvb) */
+    K_FMA,   /* a=r0 b=r1 c=old destination; MXCSR and pending exceptions */
+    K_MSK,   /* b=r0, result to a GPR */
+};
+typedef struct { int opc; vex_op op; uint8_t kind, type; } form_t;
 
-/* ymm = op(ymm, ymm/m256): vec_exec's a is src0 and b is src1. Shifts take a count in b. */
+#define F3(n, op) {OP_##n, op, K_3, 0}
+#define FMA4(n, op) {OP_##n##ps, op, K_FMA, FT_PS}, {OP_##n##pd, op, K_FMA, FT_PD}, \
+                    {OP_##n##ss, op, K_FMA, FT_SS}, {OP_##n##sd, op, K_FMA, FT_SD}
+/* The ymm and AVX2-only forms; vec_exec's operand convention is in vexops.h. */
 static const form_t vec_forms[] = {
-    {OP_vpaddb, VPADDB}, {OP_vpaddw, VPADDW}, {OP_vpaddd, VPADDD}, {OP_vpaddq, VPADDQ},
-    {OP_vpsubb, VPSUBB}, {OP_vpsubw, VPSUBW}, {OP_vpsubd, VPSUBD}, {OP_vpsubq, VPSUBQ},
-    {OP_vpand, VPAND}, {OP_vpandn, VPANDN}, {OP_vpor, VPOR}, {OP_vpxor, VPXOR},
-    {OP_vpcmpeqb, VPCMPEQB}, {OP_vpcmpeqw, VPCMPEQW}, {OP_vpcmpeqd, VPCMPEQD}, {OP_vpcmpeqq, VPCMPEQQ},
-    {OP_vpcmpgtb, VPCMPGTB}, {OP_vpcmpgtw, VPCMPGTW}, {OP_vpcmpgtd, VPCMPGTD}, {OP_vpcmpgtq, VPCMPGTQ},
-    {OP_vpmuludq, VPMULUDQ}, {OP_vpsrlq, VPSRLQ}, {OP_vpsllq, VPSLLQ},
+    F3(vpaddb, VPADDB), F3(vpaddw, VPADDW), F3(vpaddd, VPADDD), F3(vpaddq, VPADDQ),
+    F3(vpsubb, VPSUBB), F3(vpsubw, VPSUBW), F3(vpsubd, VPSUBD), F3(vpsubq, VPSUBQ),
+    F3(vpaddsb, VPADDSB), F3(vpaddsw, VPADDSW), F3(vpaddusb, VPADDUSB), F3(vpaddusw, VPADDUSW),
+    F3(vpsubsb, VPSUBSB), F3(vpsubsw, VPSUBSW), F3(vpsubusb, VPSUBUSB), F3(vpsubusw, VPSUBUSW),
+    F3(vpand, VPAND), F3(vpandn, VPANDN), F3(vpor, VPOR), F3(vpxor, VPXOR),
+    F3(vpcmpeqb, VPCMPEQB), F3(vpcmpeqw, VPCMPEQW), F3(vpcmpeqd, VPCMPEQD), F3(vpcmpeqq, VPCMPEQQ),
+    F3(vpcmpgtb, VPCMPGTB), F3(vpcmpgtw, VPCMPGTW), F3(vpcmpgtd, VPCMPGTD), F3(vpcmpgtq, VPCMPGTQ),
+    F3(vpminub, VPMINUB), F3(vpminuw, VPMINUW), F3(vpminud, VPMINUD),
+    F3(vpminsb, VPMINSB), F3(vpminsw, VPMINSW), F3(vpminsd, VPMINSD),
+    F3(vpmaxub, VPMAXUB), F3(vpmaxuw, VPMAXUW), F3(vpmaxud, VPMAXUD),
+    F3(vpmaxsb, VPMAXSB), F3(vpmaxsw, VPMAXSW), F3(vpmaxsd, VPMAXSD),
+    F3(vpmullw, VPMULLW), F3(vpmulld, VPMULLD), F3(vpmulhw, VPMULHW), F3(vpmulhuw, VPMULHUW),
+    F3(vpmulhrsw, VPMULHRSW), F3(vpmuldq, VPMULDQ), F3(vpmuludq, VPMULUDQ),
+    F3(vpmaddwd, VPMADDWD), F3(vpmaddubsw, VPMADDUBSW),
+    F3(vpavgb, VPAVGB), F3(vpavgw, VPAVGW), F3(vpsadbw, VPSADBW),
+    F3(vpsignb, VPSIGNB), F3(vpsignw, VPSIGNW), F3(vpsignd, VPSIGND), F3(vphaddd, VPHADDD),
+    F3(vpshufb, VPSHUFB), F3(vpalignr, VPALIGNR), F3(vpblendw, VPBLENDW), F3(vinserti128, VINSERTI128),
+    F3(vpacksswb, VPACKSSWB), F3(vpackssdw, VPACKSSDW), F3(vpackuswb, VPACKUSWB), F3(vpackusdw, VPACKUSDW),
+    F3(vpunpcklbw, VPUNPCKLBW), F3(vpunpckhbw, VPUNPCKHBW), F3(vpunpcklwd, VPUNPCKLWD),
+    F3(vpunpckhwd, VPUNPCKHWD), F3(vpunpckldq, VPUNPCKLDQ), F3(vpunpckhdq, VPUNPCKHDQ),
+    F3(vpunpcklqdq, VPUNPCKLQDQ), F3(vpunpckhqdq, VPUNPCKHQDQ),
+    F3(vpermd, VPERMD), F3(vpermps, VPERMPS),
+    F3(vpsllvd, VPSLLVD), F3(vpsllvq, VPSLLVQ), F3(vpsrlvd, VPSRLVD), F3(vpsrlvq, VPSRLVQ),
+    F3(vpsravd, VPSRAVD),
+    {OP_vpsllw, VPSLLW, K_SH, 0}, {OP_vpslld, VPSLLD, K_SH, 0}, {OP_vpsllq, VPSLLQ, K_SH, 0},
+    {OP_vpsrlw, VPSRLW, K_SH, 0}, {OP_vpsrld, VPSRLD, K_SH, 0}, {OP_vpsrlq, VPSRLQ, K_SH, 0},
+    {OP_vpsraw, VPSRAW, K_SH, 0}, {OP_vpsrad, VPSRAD, K_SH, 0},
+    {OP_vpslldq, VPSLLDQ, K_AI, 0}, {OP_vpsrldq, VPSRLDQ, K_AI, 0},
+    {OP_vpshufd, VPSHUFD, K_BI, 0}, {OP_vpshuflw, VPSHUFLW, K_BI, 0}, {OP_vpshufhw, VPSHUFHW, K_BI, 0},
+    {OP_vpermq, VPERMQ, K_BI, 0}, {OP_vpermpd, VPERMPD, K_BI, 0},
+    {OP_vpabsb, VPABSB, K_A, 0}, {OP_vpabsw, VPABSW, K_A, 0}, {OP_vpabsd, VPABSD, K_A, 0},
+    {OP_vpbroadcastb, VPBROADCASTB, K_B, 0}, {OP_vpbroadcastw, VPBROADCASTW, K_B, 0},
+    {OP_vpbroadcastd, VPBROADCASTD, K_B, 0}, {OP_vpbroadcastq, VPBROADCASTQ, K_B, 0},
+    /* The register-source vbroadcastss/sd are AVX2 and broadcast like vpbroadcastd/q. */
+    {OP_vbroadcastss, VPBROADCASTD, K_B, 0}, {OP_vbroadcastsd, VPBROADCASTQ, K_B, 0},
+    {OP_vpmovzxbw, VPMOVZXBW, K_B, 0}, {OP_vpmovzxbd, VPMOVZXBD, K_B, 0}, {OP_vpmovzxbq, VPMOVZXBQ, K_B, 0},
+    {OP_vpmovzxwd, VPMOVZXWD, K_B, 0}, {OP_vpmovzxwq, VPMOVZXWQ, K_B, 0}, {OP_vpmovzxdq, VPMOVZXDQ, K_B, 0},
+    {OP_vpmovsxbw, VPMOVSXBW, K_B, 0}, {OP_vpmovsxbd, VPMOVSXBD, K_B, 0}, {OP_vpmovsxbq, VPMOVSXBQ, K_B, 0},
+    {OP_vpmovsxwd, VPMOVSXWD, K_B, 0}, {OP_vpmovsxwq, VPMOVSXWQ, K_B, 0}, {OP_vpmovsxdq, VPMOVSXDQ, K_B, 0},
+    {OP_vpblendvb, VPBLENDVB, K_4, 0},
+    {OP_vpmovmskb, VPMOVMSKB, K_MSK, 0},
+    FMA4(vfmadd132, VFMADD132), FMA4(vfmadd213, VFMADD213), FMA4(vfmadd231, VFMADD231),
+    FMA4(vfmsub132, VFMSUB132), FMA4(vfmsub213, VFMSUB213), FMA4(vfmsub231, VFMSUB231),
+    FMA4(vfnmadd132, VFNMADD132), FMA4(vfnmadd213, VFNMADD213), FMA4(vfnmadd231, VFNMADD231),
+    FMA4(vfnmsub132, VFNMSUB132), FMA4(vfnmsub213, VFNMSUB213), FMA4(vfnmsub231, VFNMSUB231),
 };
 
 /* Scalars, through the mcontext: they are rare, and flags and registers commit atomically. */
@@ -190,39 +249,179 @@ static const form_t *find(const form_t *t, size_t n, int opc) {
 }
 #define FIND(t, opc) find((t), sizeof(t) / sizeof((t)[0]), (opc))
 
-static void vec_call(int op) {
-    tls_t *t = my_tls();
-    uint64_t gpr;
-    uint32_t mx = 0x1F80;   /* the forms here do not use MXCSR */
-    if (vec_exec((vex_op)op, 0, &t->a, &t->b, &t->c, 0, &t->out, &gpr, &mx) != 1)
-        dr_exit_process(V3COMPAT_REFUSED);
+/* vec_call descriptor: op | type<<8 | imm<<16 | flags<<24 */
+enum {
+    D_MXCSR = 1,    /* FP form: run with the application's masks, OR the raised flags back */
+    D_NARROW = 2,   /* VEX.128: stale upper lanes must not compute or raise flags; a mask has 16 bits */
+    D_COUNT = 4,    /* the immediate is a shift count, in b */
+    D_GPR = 8,      /* the result goes to out's first 8 bytes */
+};
+
+static uint32_t fbits(float f) {
+    uint32_t u;
+    __builtin_memcpy(&u, &f, 4);
+    return u;
 }
 
-static void expand_vec(emit_t *e, instr_t *in, const form_t *f) {
-    opnd_t ao, b;
-    vec_srcs(in, &ao, &b);
-    reg_id_t a = opnd_get_reg(ao);
-    put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(a), reg(a)));
-    if (opnd_is_memory_reference(b)) {
+/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` (as fp_fault in
+ * avxemu's emulate.c): the application then gets the SIGFPE of that kind. */
+static void pending_operands(tls_t *t, uint32_t ex) {
+    uint32_t x, y;
+    if (ex & 1) { x = fbits(0.0f); y = fbits(0.0f); }                  /* IE */
+    else if (ex & 2) { x = 1; y = fbits(1.0f); }                       /* DE: a denormal */
+    else if (ex & 4) { x = fbits(1.0f); y = fbits(0.0f); }             /* ZE */
+    else if (ex & 8) { x = fbits(3e38f); y = fbits(1e-30f); }          /* OE */
+    else if (ex & 16) { x = fbits(1e-30f); y = fbits(3e38f); }         /* UE */
+    else { x = fbits(1.0f); y = fbits(3.0f); }                         /* PE */
+    for (int i = 0; i < 32; i++) t->a.b[i] = t->b.b[i] = 0;
+    for (int i = 0; i < 4; i++) {
+        t->a.b[i] = (uint8_t)(x >> (8 * i));
+        t->b.b[i] = (uint8_t)(y >> (8 * i));
+    }
+}
+
+static void vec_call(uint64 d) {
+    tls_t *t = my_tls();
+    uint fl = (uint)(d >> 24);
+    uint8_t imm = (uint8_t)(d >> 16);
+    if ((fl & D_NARROW) && !(fl & D_GPR))
+        for (int i = 16; i < 32; i++) t->a.b[i] = t->b.b[i] = t->c.b[i] = 0;
+    if (fl & D_COUNT) {
+        for (int i = 0; i < 32; i++) t->b.b[i] = 0;
+        t->b.b[0] = imm;
+    }
+    uint32_t csr = 0, mx = 0x1F80;
+    if (fl & D_MXCSR) {
+        csr = __builtin_ia32_stmxcsr();
+        mx = csr & ~0x3Fu;
+        t->pending = 0;
+    }
+    uint64_t gpr = 0;
+    int r = vec_exec((vex_op)(d & 0xff), (int)((d >> 8) & 3), &t->a, &t->b, &t->c, imm, &t->out, &gpr, &mx);
+    uint32_t raised = mx & 0x3Fu;
+    if ((fl & D_MXCSR) && raised) __builtin_ia32_ldmxcsr(csr | raised);
+    if (r == AVXEMU_FP_PENDING) {
+        uint32_t ex = raised & ~(csr >> 7) & 0x3Fu;
+        if (ex == 0) dr_exit_process(V3COMPAT_REFUSED);
+        pending_operands(t, ex);
+        t->pending = ex;
+        return;
+    }
+    if (r != 1) dr_exit_process(V3COMPAT_REFUSED);
+    if (fl & D_GPR) {
+        if (fl & D_NARROW) gpr &= 0xFFFFu;
+        for (int i = 0; i < 8; i++) t->out.b[i] = (uint8_t)(gpr >> (8 * i));
+    }
+}
+
+static void refuse_pending(void) {
+    dr_fprintf(STDERR, "v3compat: the pending FP exception did not fault\n");
+    dr_exit_process(V3COMPAT_REFUSED);
+}
+
+/* A vec_exec operand into the frame: a register's whole ymm (as emulate.c copies it), or a real load. */
+static void stage(emit_t *e, opnd_t o, size_t off, bool count) {
+    opnd_t slot = tls_opnd(off, OPSZ_32);
+    if (opnd_is_memory_reference(o)) {
+        if (count) opnd_set_size(&o, OPSZ_16);   /* a shift count is xmm/m128 even for ymm */
         reg_id_t t = e->scratch[2];
         save_y(e, 2);
-        load_mem(e, b, t);
-        put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(b), reg(t)));
+        load_mem(e, o, t);
+        put(e, INSTR_CREATE_vmovdqu(e->dc, slot, reg(t)));
         reload_y(e, 2);
-    } else if (opnd_is_immed_int(b)) {
-        put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(DR_REG_RAX)));
-        instrlist_insert_mov_immed_ptrsz(e->dc, opnd_get_immed_int(b) & 0xff, reg(DR_REG_RAX), e->bb, e->where,
-                                         NULL, NULL);
-        put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, b), OPSZ_8), reg(DR_REG_RAX)));
-        put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RAX), SAVE_G(0)));
-    } else if (reg_is_ymm(opnd_get_reg(b))) {
-        put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(b), b));
     } else {
-        put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME_X(b), b));
+        put(e, INSTR_CREATE_vmovdqu(e->dc, slot, reg(ymm_of(opnd_get_reg(o)))));
     }
+}
+
+static bool vec_operand(opnd_t o) {
+    return opnd_is_memory_reference(o) || (opnd_is_reg(o) && (reg_is_ymm(opnd_get_reg(o)) || reg_is_xmm(opnd_get_reg(o))));
+}
+
+/* After the call: if it left an unmasked exception, nothing is committed and the application gets
+ * the SIGFPE at P from a vdivss that raises the same kind (pending_operands). */
+static void insert_pending_check(emit_t *e) {
+    instr_t *ok = INSTR_CREATE_label(e->dc);
+    reg_id_t t = e->scratch[0], tx = xmm_of(t);
+    put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(DR_REG_RCX)));
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RCX), tls_opnd(offsetof(tls_t, pending), OPSZ_8)));
+    /* jrcxz reaches 127 bytes only, less than the block with its out-of-line call. */
+    instr_t *skip = INSTR_CREATE_label(e->dc), *block = INSTR_CREATE_label(e->dc);
+    put(e, INSTR_CREATE_jecxz(e->dc, opnd_create_instr(skip)));
+    put(e, INSTR_CREATE_jmp(e->dc, opnd_create_instr(block)));
+    put(e, skip);
+    put(e, INSTR_CREATE_jmp(e->dc, opnd_create_instr(ok)));
+    put(e, block);
+    put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, pending), OPSZ_8), OPND_CREATE_INT32(0)));
+    save_y(e, 0);
+    put(e, INSTR_CREATE_vmovd(e->dc, reg(tx), tls_opnd(offsetof(tls_t, a), OPSZ_4)));
+    put(e, INSTR_CREATE_vdivss(e->dc, reg(tx), reg(tx), tls_opnd(offsetof(tls_t, b), OPSZ_4)));
+    dr_insert_clean_call_ex(e->dc, e->bb, e->where, (void *)refuse_pending, DR_CLEANCALL_ALWAYS_OUT_OF_LINE, 0);
+    reload_y(e, 0);
+    put(e, ok);
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RCX), SAVE_G(1)));
+}
+
+/* Returns false if the operands are not the shape the form expects. */
+static bool expand_vec(emit_t *e, instr_t *in, const form_t *f) {
+    opnd_t r[3], dst = instr_get_dst(in, 0);
+    int n = 0;
+    bool has_imm = false;
+    uint imm = 0;
+    for (int i = 0; i < instr_num_srcs(in); i++) {
+        opnd_t o = instr_get_src(in, i);
+        if (opnd_is_immed_int(o)) {
+            has_imm = true;
+            imm = (uint)opnd_get_immed_int(o) & 0xff;
+        } else if (n < 3 && vec_operand(o)) {
+            r[n++] = o;
+        } else {
+            return false;
+        }
+    }
+    uint fl = 0;
+    int ia = -1, ib = -1, ic = -1;   /* which r feeds a, b, c */
+    bool count = false;
+    switch (f->kind) {
+    case K_3: case K_FMA: ia = 0; ib = 1; break;
+    case K_SH:
+        ia = 0;
+        if (has_imm) fl |= D_COUNT;
+        else { ib = 1; count = true; }
+        break;
+    case K_BI: case K_B: ib = 0; break;
+    case K_AI: case K_A: ia = 0; break;
+    case K_4: ia = 0; ib = 1; ic = 2; break;
+    case K_MSK: ib = 0; fl |= D_GPR; break;
+    }
+    int need = ic >= 0 ? 3 : ib >= 0 && ia >= 0 ? 2 : 1;
+    if (n < need || !opnd_is_reg(dst)) return false;
+    reg_id_t d = opnd_get_reg(dst);
+    bool ydst = reg_is_ymm(d);
+    if (f->kind == K_MSK ? !reg_is_gpr(d) : !(ydst || reg_is_xmm(d))) return false;
+    if (f->kind == K_FMA) {
+        fl |= D_MXCSR;
+        if (!ydst) fl |= D_NARROW;
+    }
+    if (f->kind == K_MSK && !opnd_is_reg(r[0])) return false;
+    if (f->kind == K_MSK && !reg_is_ymm(opnd_get_reg(r[0]))) fl |= D_NARROW;
+
+    if (ia >= 0) stage(e, r[ia], offsetof(tls_t, a), false);
+    if (ib >= 0) stage(e, r[ib], offsetof(tls_t, b), count);
+    if (ic >= 0) stage(e, r[ic], offsetof(tls_t, c), false);
+    if (f->kind == K_FMA) put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(c), reg(ymm_of(d))));
+    uint64 desc = (uint64)f->op | ((uint64)f->type << 8) | ((uint64)imm << 16) | ((uint64)fl << 24);
     dr_insert_clean_call_ex(e->dc, e->bb, e->where, (void *)vec_call, DR_CLEANCALL_ALWAYS_OUT_OF_LINE, 1,
-                            OPND_CREATE_INT32((int)f->op));
-    put(e, INSTR_CREATE_vmovdqu(e->dc, reg(opnd_get_reg(instr_get_dst(in, 0))), FRAME(out)));   /* commit */
+                            OPND_CREATE_INT64(desc));
+    if (fl & D_MXCSR) insert_pending_check(e);
+    /* Commit: one write. A VEX.128 load zeroes the destination's upper half. */
+    if (f->kind == K_MSK)
+        put(e, INSTR_CREATE_mov_ld(e->dc, reg(reg_resize_to_opsz(d, OPSZ_4)), tls_opnd(offsetof(tls_t, out), OPSZ_4)));
+    else if (ydst)
+        put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), FRAME(out)));
+    else
+        put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), FRAME_X(out)));
+    return true;
 }
 
 /* Source codes in a descriptor: a pointer-sized DR GPR id, or one of these. */
@@ -314,14 +513,17 @@ static void expand_bmi(emit_t *e, instr_t *in, const form_t *f) {
     int d1 = (int)reg_to_pointer_sized(dst), d2 = S_NONE, s1, s2 = S_NONE;
     uint imm = 0;
     if (opc == OP_mulx) {
-        /* DR: dst0 high, dst1 low, src0 rm. bmi_exec: *dst low, *dst2 high, s1 rdx. */
-        d2 = d1;
-        d1 = (int)reg_to_pointer_sized(opnd_get_reg(instr_get_dst(in, 1)));
+        /* DR: dst0 low (vvvv), dst1 high, src0 rm. bmi_exec: *dst low, *dst2 high, s1 rdx. */
+        d2 = (int)reg_to_pointer_sized(opnd_get_reg(instr_get_dst(in, 1)));
         s1 = S_RDX;
         s2 = src_code(instr_get_src(in, 0));
     } else {
         s1 = src_code(instr_get_src(in, 0));
-        if (opc != OP_blsi && opc != OP_blsr && opc != OP_blsmsk && opc != OP_tzcnt && opc != OP_lzcnt &&
+        /* DR lists pdep/pext as (rm, vvvv); bmi_exec wants (vvvv, rm). */
+        if (opc == OP_pdep || opc == OP_pext) {
+            s1 = src_code(instr_get_src(in, 1));
+            s2 = src_code(instr_get_src(in, 0));
+        } else if (opc != OP_blsi && opc != OP_blsr && opc != OP_blsmsk && opc != OP_tzcnt && opc != OP_lzcnt &&
             opc != OP_movbe)
             s2 = src_code(instr_get_src(in, 1));
     }
@@ -385,25 +587,76 @@ static bool vec_shape_ok(instr_t *in) {
     return opnd_is_reg(d) && reg_is_ymm(opnd_get_reg(d)) && opnd_is_reg(a) && reg_is_ymm(opnd_get_reg(a));
 }
 
+/* EVEX has no DR flag in this version: it is opcode 0x62 after any legacy padding. */
+bool instr_is_evex_encoded(void *dc, instr_t *in) {
+    if (!instr_raw_bits_valid(in)) return false;
+    const byte *p = instr_get_raw_bits(in);
+    for (uint i = 0; i < instr_length(dc, in); i++, p++) {
+        if (*p == 0x2e || *p == 0x36 || *p == 0x3e || *p == 0x26 || *p == 0x64 || *p == 0x65 || *p == 0x67) continue;
+        return *p == 0x62;
+    }
+    return false;
+}
+
+/*
+ * AVX1 has the same operation under another opcode for these, faults and all, so the application
+ * instruction stays and only its opcode changes. DR's vmovntdqa and the store forms of the masked
+ * moves list their operands in the other order.
+ */
+static bool substitute(instr_t *in) {
+    int to = OP_INVALID;
+    bool mem_src = instr_num_srcs(in) > 0 && opnd_is_memory_reference(instr_get_src(in, 0));
+    bool ydst = instr_num_dsts(in) > 0 && opnd_is_reg(instr_get_dst(in, 0)) && reg_is_ymm(opnd_get_reg(instr_get_dst(in, 0)));
+    switch (instr_get_opcode(in)) {
+    case OP_vextracti128: to = OP_vextractf128; break;
+    case OP_vinserti128: to = OP_vinsertf128; break;
+    case OP_vperm2i128: to = OP_vperm2f128; break;
+    case OP_vbroadcasti128: to = OP_vbroadcastf128; break;
+    case OP_vpmaskmovd: to = OP_vmaskmovps; break;
+    case OP_vpmaskmovq: to = OP_vmaskmovpd; break;
+    case OP_vpblendd: to = OP_vblendps; break;
+    case OP_vpbroadcastd: if (mem_src) to = OP_vbroadcastss; break;
+    case OP_vpbroadcastq: if (mem_src && ydst) to = OP_vbroadcastsd; break;
+    case OP_vmovntdqa: to = OP_vmovdqa; break;
+    }
+    if (to == OP_INVALID) return false;
+    int from = instr_get_opcode(in);
+    instr_set_opcode(in, to);
+    if ((from == OP_vpmaskmovd || from == OP_vpmaskmovq) && opnd_is_memory_reference(instr_get_dst(in, 0))) {
+        opnd_t s0 = instr_get_src(in, 0);
+        instr_set_src(in, 0, instr_get_src(in, 1));
+        instr_set_src(in, 1, s0);
+    }
+    if (from == OP_vmovntdqa && opnd_is_memory_reference(instr_get_dst(in, 0))) {
+        opnd_t d = instr_get_dst(in, 0);
+        instr_set_dst(in, 0, instr_get_src(in, 0));
+        instr_set_src(in, 0, d);
+    }
+    return true;
+}
+
 void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
     int opc = instr_get_opcode(in);
     if (!lacked && opc != OP_cpuid) return;
+    if (lacked && !instr_is_evex_encoded(dc, in) && substitute(in)) return;
     emit_t e = {dc, bb, in, instr_get_app_pc(in), {DR_REG_NULL}};
     instrlist_set_translation_target(bb, e.pc);
     const form_t *f;
     if (opc == OP_cpuid) {
         dr_insert_clean_call_ex(dc, bb, in, (void *)cpuid_call,
                                 DR_CLEANCALL_READS_APP_CONTEXT | DR_CLEANCALL_WRITES_APP_CONTEXT, 0);
-    } else if (!all_mem_supported(in)) {
+    } else if (instr_is_evex_encoded(dc, in) || !all_mem_supported(in)) {
         dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(e.pc),
                              OPND_CREATE_INT32(opc));
     } else if ((f = FIND(bmi_forms, opc)) != NULL) {
         pick_scratch(&e, in);
         expand_bmi(&e, in, f);
-    } else if ((f = FIND(vec_forms, opc)) != NULL && vec_shape_ok(in)) {
+    } else if ((f = FIND(vec_forms, opc)) != NULL) {
         pick_scratch(&e, in);
-        if (inline_form(opc) && !helpers_only) expand_inline(&e, in);
-        else expand_vec(&e, in, f);
+        if (inline_form(opc) && !helpers_only && vec_shape_ok(in)) expand_inline(&e, in);
+        else if (!expand_vec(&e, in, f))
+            dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(e.pc),
+                                 OPND_CREATE_INT32(opc));
     } else {
         dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(e.pc),
                              OPND_CREATE_INT32(opc));

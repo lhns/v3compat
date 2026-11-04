@@ -10,4 +10,6 @@ bool expand_init(bool helpers_only);
 void expand_exit(void);
 /* Replaces `in` if this CPU cannot run it; refuses it if `lacked` and nothing handles it. */
 void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked);
+/* EVEX (AVX-512) is never emulated: it is refused. */
+bool instr_is_evex_encoded(void *dc, instr_t *in);
 #endif

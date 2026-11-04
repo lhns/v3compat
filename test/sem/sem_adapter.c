@@ -101,6 +101,7 @@ int main(int argc, char **argv) {
             printf("CRASH: signal %d in form %s\n", WTERMSIG(st), f->name);
             bad = 1;
         } else if (!was_refused && WEXITSTATUS(st) != EX_OK) {
+            if (WEXITSTATUS(st) != EX_MISMATCH) printf("FAIL: exit %d in form %s\n", WEXITSTATUS(st), f->name);
             bad = 1;
         }
     }

@@ -38,8 +38,9 @@ static bool has_ymm(instr_t *in) {
 }
 
 /* Classes the CPU lacks on AVX-only parts; BMI/AVX2 opcodes are matched by DR opcode or mnemonic. */
-static int classify(instr_t *in) {
+static int classify(void *dc, instr_t *in) {
     int op = instr_get_opcode(in);
+    if (instr_is_evex_encoded(dc, in)) return C_AVX2;
     switch (op) {
     case OP_lzcnt: return C_LZCNT;
     case OP_tzcnt: return C_TZCNT;
@@ -58,6 +59,8 @@ static int classify(instr_t *in) {
         return C_AVX2;
     case OP_vbroadcastss: case OP_vbroadcastsd:   /* the register-source form is AVX2 */
         return opnd_is_reg(instr_get_src(in, 0)) ? C_AVX2 : C_N;
+    case OP_vmovntdqa:   /* the ymm load is AVX2 */
+        return has_ymm(in) ? C_AVX2 : C_N;
     default: break;
     }
     const char *n = decode_opcode_name(op);
@@ -78,7 +81,7 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
     instr_t *next;
     for (instr_t *in = instrlist_first_app(bb); in != NULL; in = next) {
         next = instr_get_next_app(in);
-        int c = classify(in);
+        int c = classify(drcontext, in);
         if (stats_on) {
             if (c != C_N) {
                 n[c]++;
