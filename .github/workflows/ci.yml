@@ -1,0 +1,41 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require AVX2 (CPUID)
+        run: |
+          cat > cpuid.c <<'C'
+          #include <cpuid.h>
+          #include <stdio.h>
+          int main(void) {
+              unsigned a, b, c, d;
+              __cpuid_count(7, 0, a, b, c, d);
+              printf("AVX2=%u BMI1=%u BMI2=%u\n", (b >> 5) & 1, (b >> 3) & 1, (b >> 8) & 1);
+              return !((b >> 5) & 1);
+          }
+          C
+          gcc cpuid.c -o cpuid && ./cpuid
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-release_11.3.0-1
+      - name: Configure
+        run: cmake -S . -B build -DV3COMPAT_SEMANTIC=ON
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Tarball
+        run: |
+          cmake --build build --target package-tarball
+          tar tzf build/v3compat-*-linux-x86_64.tar.gz
