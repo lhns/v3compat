@@ -108,7 +108,9 @@ Rules:
 - **Unknown instructions are refused.** Every translated form is looked up by DR opcode, encoding bits and operand
   classes ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)). Native keys run as they are, emulated keys go through
   the expansions, and anything else exits with status 86 if executed. Evidence and exclusions:
-  [allowlist.md](allowlist.md). Regenerate with `test/allow/regen.sh`. The lookup is at translation only.
+  [allowlist.md](allowlist.md). Regenerate with `test/allow/regen.sh`. The lookup is at translation only: about 0.25 s
+  of duckdb's 5.7 s startup, 480,000 translated instructions at about 1,400 cycles each **[measured]**. hello, zstd and
+  duckdb's three queries translate no form off the list **[measured]**.
 - **Signals** map the code-cache PC back to the application instruction. An expansion must be rewindable or
   commit its result last, and a signal-injection test must prove it.
 - **JIT and self-modifying code**: translated pages are write-protected, and a write invalidates them.

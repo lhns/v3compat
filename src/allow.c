@@ -162,7 +162,11 @@ uint64 allow_key(void *dc, instr_t *in, char *text) {
 #include "allowlist.inc"
 
 static bool in_table(const uint64 *t, size_t n, uint64 k) {
-    size_t lo = 0, hi = n;
+    /* Hashes are uniform, so start near where the key would be: this runs for every translated instruction. */
+    const size_t window = 256;
+    size_t guess = (size_t)(((k >> 32) * n) >> 32), lo = guess > window ? guess - window : 0;
+    size_t hi = n - guess > window ? guess + window : n;
+    if ((lo > 0 && t[lo] > k) || (hi < n && t[hi] < k)) { lo = 0; hi = n; }
     while (lo < hi) {
         size_t m = lo + (hi - lo) / 2;
         if (t[m] == k) return true;

@@ -6,14 +6,15 @@ A key is DR opcode, encoding bits and operand classes (`src/allow.c`). Native ke
 keys go through the expansions, and anything else exits with status 86 if executed (ADR 0008).
 
 - Ivy Bridge evidence: `GenuineIntel family=6 model=58`
-- AVX2 evidence: `GenuineIntel family=6 model=58`
+- AVX2 evidence: `AuthenticAMD family=25 model=17`
 - Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9886 native keys, 832 emulated keys.
+- Listed: 9719 native keys, 832 emulated keys.
 
 ## Rows by outcome
 
 | Outcome | Rows |
 |---|---|
+| differs-on-avx2 | 403 |
 | dr-invalid | 1017 |
 | emulated | 1216 |
 | excluded:far-control-flow | 168 |
@@ -22,10 +23,11 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | excluded:privileged | 672 |
 | excluded:segment-state | 184 |
 | excluded:state-layout | 4 |
-| faults-on-both | 934 |
+| faults-on-both | 916 |
+| ivy-faults | 18 |
 | lacked-not-in-emulation-suite | 1156 |
 | native-faults | 72 |
-| native-tested | 44076 |
+| native-tested | 43673 |
 | native-untested | 152 |
 | not-on-ivy-bridge | 1247 |
 
@@ -147,11 +149,21 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 
 ## Refused because the machines differ
 
-None.
+`call_near`, `dpps`, `f2xm1`, `jb`, `jbe`, `jl`, `jle`, `jmp`, `jnb`, `jnbe`, `jnl`, `jnle`, `jno`, `jnp`, `jns`, `jnz`, `jo`, `jp`, `jrcxz`, `js`, `jz`, `loop`, `loope`, `loopne`, `pause`, `rcpps`, `rcpss`, `ret_near`, `rsqrtps`, `rsqrtss`, `smsw`, `vdpps`, `vrcpps`, `vrcpss`, `vrsqrtps`, `vrsqrtss`
 
 ## Keys with a refused form among listed ones: the whole key is refused
 
-None.
+- `dpps 66 d:x s:x,i,x`: DPPS:differs-on-avx2, DPPS:native-tested
+- `dpps 66 rexw d:x s:x,i,x`: DPPS:differs-on-avx2, DPPS:native-tested
+- `smsw d:g16 s:`: SMSW:differs-on-avx2, SMSW:native-tested
+- `smsw f2 d:g16 s:`: SMSW:differs-on-avx2, SMSW:native-tested
+- `smsw f3 d:g16 s:`: SMSW:differs-on-avx2, SMSW:native-tested
+- `vdpps vex d:x s:x,x,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
+- `vdpps vex l d:y s:y,m33,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
+- `vdpps vex l d:y s:y,y,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
+- `vdpps vex w d:x s:x,x,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
+- `vdpps vex w l d:y s:y,m33,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
+- `vdpps vex w l d:y s:y,y,i`: VDPPS:differs-on-avx2, VDPPS:native-tested
 
 ## Unverified
 
