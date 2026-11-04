@@ -289,6 +289,8 @@ the descriptor would not be what runs the app; the fork's `dr_syscall_set_exec_f
 instead of being handed to the kernel, which would run it itself. `test/setuid.sh` races this, `test/exec_identity.sh` compares what a
 program sees of its exec with a native run. What remains, none of which gives rights since the kernel never execs the file **[source]**:
 
+- A process caught by a swap or a loss of read permission after the check can die at startup, before any app code, with status 255: DynamoRIO's
+  rseq scan reopens the executable by name, and the loader reopens the descriptor through `/proc`, which checks permissions again **[measured]**.
 - A write to the same file, as nothing denies writes to it the way a real exec does: `ETXTBSY` is not returned, to the exec or a writer.
 - `chmod` or `chown` after the check, indistinguishable from one just after a native exec.
 - A script: its interpreter opens it by name, natively too, which is why the kernel ignores setuid on one. The ELF interpreter (`PT_INTERP`)
