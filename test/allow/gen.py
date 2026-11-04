@@ -2,11 +2,14 @@
 """Builds src/allowlist.inc and docs/allowlist.md from the evidence in test/allow/evidence.
 
 gen.py build                 regenerate both from the committed evidence
+gen.py sweep BIN ROWS OUT    run probe BIN over ROWS in every order into OUT, marking a row whose result
+                             changes with the order "nd": what a machine's evidence is
 gen.py check PROBE KEYS      CI: both are up to date, DR still decodes every row to its key, and
                              this CPU's PROBE matches the Ivy Bridge results on every tested row
 """
 import gzip
 import pathlib
+import subprocess
 import sys
 from collections import Counter, defaultdict
 
@@ -17,6 +20,8 @@ INC = ROOT / "src" / "allowlist.inc"
 DOC = ROOT / "docs" / "allowlist.md"
 C_N = "7"  # enum cls in src/allow.h: not one of the classes the CPU lacks
 ALL_FAULT = "1f"
+NONDET = "nd"
+ORDERS = ([], ["-r"], ["-s", "1"], ["-s", "2"], ["-f"])  # in sequence, reversed, shuffled twice, each row alone
 
 
 def lines(path):
@@ -54,6 +59,8 @@ def status(r, pol, emulated):
         return "native-untested" if kind == "untested" else "excluded:" + r["notrun"]
     if r["ivb"] != "same" and kind != "hint":
         return "decodes-differently" if r["ivb"].startswith("as:") else "not-on-ivy-bridge"
+    if NONDET in (r["isig"], r["asig"]):
+        return "nondeterministic"
     if r["isig"] == "ff":
         return "killed-harness"
     if kind == "approx" and ALL_FAULT not in (r["isig"], r["asig"]) and (r["isig"] != r["asig"] or r["ih"] != r["ah"]):
@@ -121,6 +128,7 @@ def doc_text(rows, pol, native, emulated, mixed):
          "keys go through the expansions, and anything else exits with status 86 if executed (ADR 0008).", "",
          f"- Ivy Bridge evidence: `{cpu_of(EV / 'ivybridge.tsv.gz')}`",
          f"- AVX2 evidence: `{cpu_of(EV / 'avx2.tsv.gz')}`",
+         "- Each machine's results held with the rows in sequence, reversed, shuffled twice and each in its own process.",
          f"- Universe: {len(rows)} test rows, {forms} XED iforms reached of {len(iforms)} in XED's tables.",
          f"- Listed: {len(native)} native keys, {len(emulated)} emulated keys.", "",
          "## Rows by outcome", "", "| Outcome | Rows |", "|---|---|"]
@@ -144,7 +152,7 @@ def doc_text(rows, pol, native, emulated, mixed):
     for (c, a), v in sorted(silent.items()):
         ran = "yes" if any(x[0] for x in v) else "no"
         o.append(f"| `{c.lower()}` | `{a.lower()}` | {ran} | {', '.join(sorted(x[1] for x in v))} |")
-    ran_ud = sorted({r["iclass"].lower() for r in rows if r["ivb"] == "ud" and r["isig"] not in (ALL_FAULT, "-", "ff") and r["st"] != "emulated"})
+    ran_ud = sorted({r["iclass"].lower() for r in rows if r["ivb"] == "ud" and r["isig"] not in (ALL_FAULT, "-", "ff", NONDET) and r["st"] != "emulated"})
     o += ["", "## Not on Ivy Bridge by XED's tables, yet the CPU did not fault on every seed", "",
           "Refused unless policy says it is a hint: " + ", ".join(f"`{c}`" for c in ran_ud), "",
           "## Policy: listed against the default rule", "", "| Instruction | Kind | Why |", "|---|---|---|"]
@@ -153,6 +161,7 @@ def doc_text(rows, pol, native, emulated, mixed):
     for st in sorted(k for k in per if k.startswith("excluded:")):
         o.append(f"- **{st[9:]}**: {classes(st)}")
     o += ["", "## Refused because the machines differ", "", classes("differs-on-avx2") or "None.", "",
+          "## Refused because a result changed with the order of the rows", "", classes("nondeterministic") or "None.", "",
           "## Keys with a refused form among listed ones: the whole key is refused", ""]
     o += [f"- `{t}`: {', '.join(s)}" for t, s in sorted(mixed)] or ["None."]
     o += ["", "## Unverified", "",
@@ -175,7 +184,26 @@ def build():
     return inc_text(native, emulated), doc_text(rows, pol, native, emulated, mixed), rows, native
 
 
+def sweep(probe, rows, out):
+    runs = []
+    for opts in ORDERS:
+        with open(rows) as f:
+            runs.append(subprocess.run([probe, *opts], stdin=f, stdout=subprocess.PIPE, text=True, check=True).stdout.splitlines())
+    if len({len(r) for r in runs}) != 1 or len({r[0] for r in runs}) != 1:
+        sys.exit("the runs do not line up")
+    hexes = [l.split("\t")[0] for l in pathlib.Path(rows).read_text().splitlines()]
+    merged, unstable = [runs[0][0]], []
+    for i, results in enumerate(zip(*(r[1:] for r in runs))):
+        if len(set(results)) > 1:
+            unstable.append(hexes[i])
+        merged.append(results[0] if len(set(results)) == 1 else f"{NONDET}\t-")
+    pathlib.Path(out).write_text("\n".join(merged) + "\n", newline="\n")
+    print(f"{runs[0][0]}: {len(merged) - 1} rows, {len(ORDERS)} orders, {len(unstable)} differ: {' '.join(unstable[:50])}")
+
+
 def main():
+    if len(sys.argv) >= 5 and sys.argv[1] == "sweep":
+        return sweep(*sys.argv[2:5])
     if len(sys.argv) < 2 or sys.argv[1] not in ("build", "check"):
         sys.exit(__doc__)
     inc, doc, rows, native = build()
@@ -200,7 +228,8 @@ def main():
         print("probe row count differs")
         bad += 1
     else:
-        diff = [r for r, f in zip(rows, fresh) if r["st"] == "native-tested" and (r["isig"], r["ih"]) != (f[0], f[1])]
+        diff = [r for r, f in zip(rows, fresh) if (r["st"] == "native-tested" and (r["isig"], r["ih"]) != (f[0], f[1])) or
+                (r["st"].startswith("native") and f[0] == NONDET)]
         for r in diff[:30]:
             print("differs here:", r["hex"], r["iform"], r["text"])
         bad += bool(diff)

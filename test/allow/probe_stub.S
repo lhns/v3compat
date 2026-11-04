@@ -1,4 +1,6 @@
-/* Loads a seed state, runs the code page, captures every register. No stack use in between. */
+/* Loads a seed state, runs the code page, captures every register. No stack use in between. Rows reach all of
+ * this: every component in XCR0 but AMX's goes back to the seed or to init (k registers, PKRU), and the flags to
+ * a known value before the C code runs (a row's popf leaves AC set). AMX cannot leave init without arch_prctl. */
 #define G(n) (p_regs + 8 * n)(%rip)
 #define S(n) (p_seed_regs + 8 * n)(%rip)
 .text
@@ -7,7 +9,7 @@
 run_slot:
     push %rbx; push %rbp; push %r12; push %r13; push %r14; push %r15
     mov %rsp, p_host_rsp(%rip)
-    mov $7, %eax; xor %edx, %edx
+    mov $0xfff9ffff, %eax; mov $-1, %edx
     mov p_seed_xs(%rip), %rcx
     xrstor (%rcx)
     pushq p_seed_flags(%rip); popfq
@@ -28,7 +30,7 @@ p_capture:
     xsave (%rcx)
 p_recover:   /* a fault's handler resumes here */
     mov p_host_rsp(%rip), %rsp
-    cld
+    pushq $0x202; popfq
     mov $7, %eax; xor %edx, %edx
     mov p_host_xs(%rip), %rcx
     xrstor (%rcx)

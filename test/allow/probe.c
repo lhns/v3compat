@@ -1,7 +1,9 @@
 /*
  * probe.c: runs every row of the sweep on this CPU from fixed seed states and prints, per row,
  * which seeds faulted and a digest of all registers, flags and memory afterwards. No XED, no DR:
- * this is what runs on each machine being compared. Usage: probe < rows.tsv > results.tsv
+ * this is what runs on each machine being compared. Usage: probe [-r | -s N | -f] < rows.tsv > results.tsv
+ * Rows run in order, reversed (-r), shuffled by N (-s) or each in its own process (-f); the output is in row
+ * order whichever: nothing a row leaves may reach the next, and `gen.py sweep` holds it to that.
  * `probe -v HEX [UNDEFMASK]` prints the state per seed, to look into a mismatch.
  */
 #define _GNU_SOURCE
@@ -135,16 +137,17 @@ static uint64_t mix(uint64_t h, const void *p, size_t n) {
 /* One row, one seed: the state's digest, or the fault's identity. */
 static uint64_t run_one(const uint8_t *code, int len, uint32_t undef, int s, int *sig, int verbose) {
     memcpy((void *)P_DATA, seed_mem[s], P_DATASZ);
+    /* The whole page, every time: seed 3's pointers let a row write here (movdir64b does) and let later ones read it. */
+    memset((void *)P_CODE, 0, P_CODESZ);
     memset((void *)P_CODE, 0x90, 64);
     memcpy((void *)P_CODE, code, len);
-    /* Rewritten every time: a seed's pointer may have let the last row write here. jmp *disp(%rip), and
-     * the address far off, as seed 3 has registers point here and the build's addresses must not show. */
-    uint8_t *land = (uint8_t *)P_LAND;
+    /* jmp *disp(%rip), and the address far off: it is the build's, so it must not reach a result. */
+    uint8_t *land = (uint8_t *)P_LAND, *slot = land + 6 + 0x800;
     uint32_t disp = 0x800;
     uint64_t cap = (uint64_t)p_capture;
     land[0] = 0xff; land[1] = 0x25;
     memcpy(land + 2, &disp, 4);
-    memcpy(land + 6 + disp, &cap, 8);
+    memcpy(slot, &cap, 8);
     memcpy(p_seed_regs, seed_regs[s], sizeof p_seed_regs);
     p_seed_flags = seed_flags[s];
     p_seed_xs = seed_xs[s];
@@ -170,6 +173,8 @@ static uint64_t run_one(const uint8_t *code, int len, uint32_t undef, int s, int
     h = mix(h, &f, 8);
     h = mix(h, p_xs, 576 + 256);
     h = mix(h, (void *)P_DATA, P_DATASZ);
+    memset(slot, 0, 8);
+    h = mix(h, (void *)P_CODE, P_CODESZ);
     if (verbose) {
         printf("seed %d flags=%lx masked=%lx\n", s, p_flags, f);
         for (int i = 0; i < 16; i++) printf(" r%d=%lx", i, p_regs[i]);
@@ -196,7 +201,7 @@ struct res { uint64_t h; uint32_t sigmask; int done; };
 
 static void setup(void) {
     if (mmap((void *)P_DATA, P_DATASZ, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED ||
-        mmap((void *)P_CODE, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED) {
+        mmap((void *)P_CODE, P_CODESZ, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == MAP_FAILED) {
         perror("mmap");
         exit(2);
     }
@@ -227,6 +232,11 @@ static void run_row(const struct row *r, struct res *o) {
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOFBF, 1 << 20);
+    int rev = 0, each = 0;
+    uint64_t shuf = 0;
+    if (argc >= 2 && !strcmp(argv[1], "-r")) rev = 1;
+    if (argc >= 2 && !strcmp(argv[1], "-f")) each = 1;
+    if (argc >= 3 && !strcmp(argv[1], "-s")) shuf = strtoull(argv[2], NULL, 0) * 2 + 1;
     if (argc >= 3 && !strcmp(argv[1], "-v")) {
         struct row r = {0};
         r.len = parse_hex(argv[2], r.code);
@@ -252,21 +262,34 @@ int main(int argc, char **argv) {
         r->run = strrchr(line, '\t')[1] == '-';
     }
     struct res *res = mmap(NULL, (n + 1) * sizeof *res, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    size_t *ord = malloc((n + 1) * sizeof *ord);
+    for (size_t i = 0; i < n; i++) ord[i] = rev ? n - 1 - i : i;
+    for (size_t i = n; shuf && i > 1; i--) { /* its own generator: rng() makes the seeds, which no order may change */
+        shuf ^= shuf << 13; shuf ^= shuf >> 7; shuf ^= shuf << 17;
+        size_t j = shuf % i, t = ord[i - 1];
+        ord[i - 1] = ord[j];
+        ord[j] = t;
+    }
     /* A row can end its process however it likes; that costs the row only ("ff": killed its worker). */
     for (size_t at = 0; at < n;) {
         pid_t c = fork();
         if (c == 0) {
             setup();
-            for (; at < n; at++) {
-                if (rows[at].run) run_row(&rows[at], &res[at]);
-                res[at].done = 1;
+            for (size_t end = each ? at + 1 : n; at < end; at++) {
+                struct row *r = &rows[ord[at]];
+                if (r->run) run_row(r, &res[ord[at]]);
+                res[ord[at]].done = 1;
             }
             _exit(0);
         }
         int st;
         waitpid(c, &st, 0);
-        while (at < n && res[at].done) at++;
-        if (at < n) { res[at].sigmask = 0xff; res[at].done = 1; at++; }
+        while (at < n && res[ord[at]].done) at++;
+        if (at < n && !(each && WIFEXITED(st) && WEXITSTATUS(st) == 0)) {
+            res[ord[at]].sigmask = 0xff;
+            res[ord[at]].done = 1;
+            at++;
+        }
     }
     unsigned a, b, cc, d, name[4] = {0};
     __cpuid(0, a, name[0], name[2], name[1]);
