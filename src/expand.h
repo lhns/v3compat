@@ -5,6 +5,8 @@
 
 /* Exit status when a program executes an instruction nothing handles (ADR 0001). */
 #define V3COMPAT_REFUSED 86
+/* Exit status when an exec is refused: DynamoRIO cannot run that program (src/exec_check.h). */
+#define V3COMPAT_REFUSED_EXEC 87
 
 bool expand_init(bool helpers_only);
 void expand_exit(void);

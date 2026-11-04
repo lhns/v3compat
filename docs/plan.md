@@ -3,7 +3,7 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** Phase 1. DynamoRIO is decided, built only from our fork. Emulation runs; see "Phase 1 results".
+**Status:** Phase 1. DynamoRIO is decided, built only from our fork. Emulation, the launcher and exec follow run; see "Phase 1 results".
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -259,6 +259,46 @@ against 3 s, which passes. Startup is measured separately and gated by Phase 3's
 after the fact, user-approved, and recorded as such, like the Phase 0 revision. **Still unmet in Phase 1:** the whole-process
 time, until Phase 3; the mixed workload's 11x; the thread-creation stress test, not settled.
 
+### Launcher, exec follow, `/proc/self/exe`
+
+[ADR 0009](adr/0009-static-launcher-no-drrun.md). The launcher is a static, freestanding binary that execs `libdynamorio.so` with
+its options in the environment, with no drrun, config file, shell or libc in the image. Statuses: 86 refused instruction, 87 refused
+exec, 125 launcher failure, 126 and 127 as in a shell; app statuses and signals pass through.
+
+All below on Ivy Bridge with no AVX2, under Docker's default seccomp and no ptrace, each child running `lzcnt` and checking DynamoRIO
+is mapped **[measured]**; a subset also in a scratch image with `--read-only`, uid 65534 and the install mounted read-only.
+
+| What | DynamoRIO alone | Now |
+|---|---|---|
+| `execve`, threads, `vfork`, `posix_spawn`, shebang, empty or NULL env, closed fds 0-2; glibc, static, static-PIE, musl in the directions tested | Follows | Same |
+| `execveat`, `fexecve`, also on a memfd or a close-on-exec fd | Child runs untranslated, silently | Follows |
+| `execve` with NULL argv | Child untranslated, or DynamoRIO crashes on a script | Follows |
+| Executable but unreadable file | Child untranslated, silently [source] | Refused, 87 |
+| setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, 87, also from a thread or `vfork` child |
+| 32-bit child | `execve` fails `ENOENT` [source] | Refused, 87 |
+| `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
+| `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
+
+Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
+change nothing natively.
+
+Still differs from native **[measured]**:
+
+- `/proc/self/maps` lists DynamoRIO and the client too, and for a PIE the first named mapping is the client. Not filtered: a program
+  choosing addresses from it must see what is occupied.
+- `/proc/self/auxv` has the loader's values (`getauxval` is right). `/proc/<pid>/exe` read from another process shows the loader;
+  fixing that needs `CAP_SYS_RESOURCE`.
+- `DYNAMORIO_EXE_PATH`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
+  `/proc/self/fd`.
+- `clone3` returns `ENOSYS`, as under Docker's default seccomp: a static glibc `posix_spawn` child dies with SIGSEGV under DynamoRIO's
+  `clone3`, with or without this client. The cause is open and this is a stopgap, to be removed with it; libcs fall back to `clone`.
+- `readlink` of `/proc/self/exe` into a buffer shorter than the path fails with -1 under DynamoRIO's own virtualization; the kernel
+  truncates. Not fixed here; the test does not cover it **[measured]**.
+- `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
+
+Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
+to a directory fd is not rewritten **[source]**.
+
 ### The hang
 
 Settled in [lhns/dynamorio](https://github.com/lhns/dynamorio), branch `fix-pending-signal-self-link`. **[measured]**, on
@@ -297,12 +337,10 @@ only if the numbers justify it.
 
 - **The speed target is an estimate.** Dense AVX2 cost is unproven by anything measured so far.
 - **Dependency on DynamoRIO.** Large and mature, with its own bugs in every executed instruction path.
-- **Static injection** under default seccomp without ptrace: the plan is wrapper argv plus self-loading **[memory]**.
 - **The fork.** Its signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a
   syscall in a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment.
   The lock change affects every thread running during exit and is the one most worth a review.
 - **JIT-heavy programs** may regress past AVXEmu's 1.2x. Measured: Node 2.4x, Java 13x.
-- **setuid children** lose privilege under a launcher: refuse them rather than run them with the wrong rights.
 - **FMA** under correct rounding stays slow. FMA-heavy programs may not reach the targets.
 
 ## License
