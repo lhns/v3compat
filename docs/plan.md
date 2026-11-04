@@ -292,6 +292,8 @@ Still differs from native **[measured]**:
   `/proc/self/fd`.
 - `clone3` returns `ENOSYS`, as under Docker's default seccomp: a static glibc `posix_spawn` child dies with SIGSEGV under DynamoRIO's
   `clone3`, with or without this client. The cause is open and this is a stopgap, to be removed with it; libcs fall back to `clone`.
+- `readlink` of `/proc/self/exe` into a buffer shorter than the path fails with -1 under DynamoRIO's own virtualization; the kernel
+  truncates. Not fixed here; the test does not cover it **[measured]**.
 - `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
 
 Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
