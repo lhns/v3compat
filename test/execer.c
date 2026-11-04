@@ -46,8 +46,7 @@ static long execveat_(int fd, const char *path, char **argv, char **envp, int fl
 static void *thread_exec(void *p) {
     const char *child = p;
     execve(child, mkargv(child), environ);
-    printf("FAIL exec thread: %s
-", strerror(errno));
+    printf("FAIL exec thread: %s\n", strerror(errno));
     exit(1);
 }
 
