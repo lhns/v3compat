@@ -68,7 +68,7 @@ def load():
     avx2 = table(EV / "avx2.tsv.gz")
     assert len(rows) == len(keys) == len(ivb) == len(avx2), "evidence files out of step"
     pol = policy()
-    emu = set((HERE / "emulated-iforms.txt").read_text().split())
+    emu = {l for l in (HERE / "emulated-iforms.txt").read_text().splitlines() if not l.startswith("#")}
     out = []
     for r, k, i, a in zip(rows, keys, ivb, avx2):
         d = dict(hex=r[0], iform=r[2], iclass=r[3], isa=r[4], ivb=r[5], notrun=r[6], key=k[0], cls=k[1], text=k[2],
@@ -155,7 +155,13 @@ def doc_text(rows, pol, native, emulated, mixed):
           "The AVX2 evidence is not Intel AVX2 hardware, as those references are not approved. So a native key means Ivy",
           "Bridge and that CPU agree on these seeds, and Intel AVX2 silicon is assumed to as well. That matters most where",
           "vendors are known to diverge: NaN priority, undefined outputs the SDM leaves open. Forms listed as `untested`",
-          "above carry no differential evidence at all. Five seed states are strong evidence, not proof (ADR 0001).", ""]
+          "above carry no differential evidence at all. Five seed states are strong evidence, not proof (ADR 0001).", "",
+          "The Ivy Bridge evidence comes from a KVM guest: what the hypervisor intercepts is seen as it presents it.", "",
+          "`allowlist-check` compares each runner with the Ivy Bridge results on every listed form, and runners vary in",
+          "CPU model. A failure there is a real disagreement, not a flake: rerun `regen.sh` with that run's `allow-probe`",
+          "artifact, which makes the list stricter.", "",
+          "On hosts with more features, `cpuid` leaves still passed through (1, 0xD.0, 0x80000001 EDX, 0x80000007/8) could",
+          "steer a program to a form the list refuses. That exits 86, cleanly, and only CI's AMD runners have tried it.", ""]
     return "\n".join(o)
 
 

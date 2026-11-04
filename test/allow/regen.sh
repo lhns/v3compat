@@ -10,6 +10,9 @@ mkdir -p "$ev"
 grep -q 'model\s*: 58$' /proc/cpuinfo || { echo "not Ivy Bridge (model 58): results would be mislabelled" >&2; exit 1; }
 gcc -O2 -I"$xed/include/xed" -I"$xed/include" -I"$here" "$here/sweep.c" "$xed/lib/libxed.a" -o "$t/sweep"
 gcc -O1 -static -fno-stack-protector -I"$here" "$here/probe.c" "$here/probe_stub.S" -o "$t/probe"
+# Every form avxemu's suite accounts for, tested or refused: the expansion stage handles or refuses these itself.
+{ echo "# From lhns/avxemu test/spec/manifest.tsv at the pinned commit: forms the expansion stage handles or refuses itself."
+  tail -n +2 "$b/_deps/avxemu-src/test/spec/manifest.tsv" | cut -f1 | cut -d@ -f1 | LC_ALL=C sort -u; } > "$here/emulated-iforms.txt"
 "$t/sweep" > "$t/rows.tsv"
 "$t/sweep" iforms > "$t/iforms.tsv"
 "$b/tools/allow_dkey" < "$t/rows.tsv" > "$t/keys.tsv"

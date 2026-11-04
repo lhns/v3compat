@@ -1,3 +1,4 @@
+# From lhns/avxemu test/spec/manifest.tsv at the pinned commit: forms the expansion stage handles or refuses itself.
 ANDN_GPR32d_GPR32d_GPR32d
 ANDN_GPR32d_GPR32d_MEMd
 ANDN_GPR64q_GPR64q_GPR64q

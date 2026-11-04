@@ -171,3 +171,12 @@ The AVX2 evidence is not Intel AVX2 hardware, as those references are not approv
 Bridge and that CPU agree on these seeds, and Intel AVX2 silicon is assumed to as well. That matters most where
 vendors are known to diverge: NaN priority, undefined outputs the SDM leaves open. Forms listed as `untested`
 above carry no differential evidence at all. Five seed states are strong evidence, not proof (ADR 0001).
+
+The Ivy Bridge evidence comes from a KVM guest: what the hypervisor intercepts is seen as it presents it.
+
+`allowlist-check` compares each runner with the Ivy Bridge results on every listed form, and runners vary in
+CPU model. A failure there is a real disagreement, not a flake: rerun `regen.sh` with that run's `allow-probe`
+artifact, which makes the list stricter.
+
+On hosts with more features, `cpuid` leaves still passed through (1, 0xD.0, 0x80000001 EDX, 0x80000007/8) could
+steer a program to a form the list refuses. That exits 86, cleanly, and only CI's AMD runners have tried it.
