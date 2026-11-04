@@ -571,6 +571,9 @@ static void cpuid_call(void) {
          * in a segment and does not mangle rdgsbase or wrgsbase, and they are off the list. */
         b = sub != 0 ? 0 : (b & ((1u << 7) | (1u << 9) | (1u << 10))) | (1u << 3) | (1u << 5) | (1u << 8);
         a = c = d = 0;
+    } else if (leaf == 0xd && sub == 1) {
+        a &= 1u;                        /* XSAVEOPT kept; XSAVEC, XGETBV1, XSAVES hidden: Ivy Bridge lacks them, and glibc's resolver would pick them */
+        c = d = 0;
     } else if (leaf == 0x80000001) {
         c = (c & 1u) | (1u << 5);       /* LAHF kept; LZCNT set */
     }

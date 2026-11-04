@@ -66,6 +66,13 @@ int main(int argc, char **argv) {
         printf("fsgsbase=%u\n", b & 1);
         return b & 1;
     }
+    if (!strcmp(n, "cpuid-xsavec")) {
+        unsigned a, b, c, d;
+        __cpuid_count(0xd, 1, a, b, c, d);
+        printf("xsave-extras=%u
+", (a >> 1) & 7);
+        return (a >> 1) & 7;
+    }
     if (!strcmp(n, "not-executed")) {
         /* A refused form behind a branch always taken: the program must not notice it. */
         int z = 1;

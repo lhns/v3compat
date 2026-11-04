@@ -61,6 +61,7 @@ foreach(f pause rep-ret-next endbr64 prefetchw popcnt crc32 aesenc vcvtph2ps rdr
   v3test(listed-${f} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(listed-${f} PROPERTIES TIMEOUT 120)
 endforeach()
+v3test(cpuid-hides-xsavec stdout-has xsave-extras=0 exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> cpuid-xsavec)
 v3test(cpuid-hides-fsgsbase stdout-has fsgsbase=0 exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> cpuid-fsgsbase)
 
 # The list: evidence and generated files agree, DR decodes every row to its key, and this CPU matches the
