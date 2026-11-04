@@ -55,11 +55,18 @@ head -c 100 "$HELLO" > "$t/trunc"; chmod 755 "$t/trunc"
 check truncated-elf 126 'v3compat-run: ' -- "$INST/bin/v3compat-run" -- "$t/trunc"
 # The same files exec'd by a program under the client: refused, or the exec fails and the program goes on.
 out=$("$INST/bin/v3compat-run" -- "$B/execer_static" plain "$t/elf32" 2>&1); st=$?
-[ "$st" = 87 ] && echo "$out" | grep -q 32-bit && echo "ok exec of 32-bit refused" || { echo "FAIL exec of 32-bit: $st '$out'"; bad=1; }
+[ "$st" = 1 ] && echo "$out" | grep -q 'refusing to exec.*32-bit' && echo "$out" | grep -q '^FAIL exec plain: Exec format error' && echo "ok exec of 32-bit fails with ENOEXEC and a message" || { echo "FAIL exec of 32-bit: $st '$out'"; bad=1; }
+out=$("$INST/bin/v3compat-run" -- "$B/execer_static" regs "$t/elf32" 2>/dev/null); st=$?
+[ "$st" = 0 ] && [ "$out" = PASS ] && echo "ok a refused exec leaves the registers as a failed one" || { echo "FAIL refused exec registers: $st '$out'"; bad=1; }
 for f in arm trunc nointerp; do
   out=$("$INST/bin/v3compat-run" -- "$B/execer_static" plain "$t/$f" 2>&1); st=$?
   [ "$st" = 1 ] && echo "$out" | grep -q '^FAIL exec plain: ' && echo "ok exec of $f fails, the program goes on" || { echo "FAIL exec of $f: $st '$out'"; bad=1; }
 done
+
+# ENOEXEC sends glibc's execvp to /bin/sh, which must fail on the file rather than run it.
+mkdir "$t/pe"; cp "$t/elf32" "$t/pe/elf32"
+out=$(PATH="$t/pe:$PATH" "$INST/bin/v3compat-run" -- "$B/execer_dyn" execvp elf32 2>&1); st=$?
+[ "$st" != 0 ] && echo "$out" | grep -q 'refusing to exec.*32-bit' && ! echo "$out" | grep -q '^hello' && echo "ok execvp of 32-bit: the shell fallback fails too" || { echo "FAIL execvp of 32-bit: $st '$out'"; bad=1; }
 
 # V3COMPAT_NATIVE=1 skips every check, also in an install that is broken.
 out=$(V3COMPAT_NATIVE=1 "$t/broken/bin/v3compat-run" -- "$HELLO" 2>&1); st=$?
