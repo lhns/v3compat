@@ -24,7 +24,7 @@ target_include_directories(avxemu_helpers PUBLIC "${AVXEMU_SRC}/src")
 target_compile_options(avxemu_helpers PRIVATE -O2 -std=c11 -w -mavx -mno-avx2 -mno-fma -mno-f16c -mno-bmi -mno-bmi2
   -mno-lzcnt -mno-movbe -mtune=ivybridge -fPIC -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
 
-add_library(v3compat SHARED src/client.c src/expand.c)
+add_library(v3compat SHARED src/client.c src/expand.c src/allow.c)
 target_link_libraries(v3compat avxemu_helpers)
 configure_DynamoRIO_client(v3compat)
 # drmgr is BSD; its shared build is installed beside the client (the static one pulls in fortified libc calls DR cannot resolve).
@@ -37,6 +37,12 @@ set_target_properties(v3compat PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINA
 # DynamoRIO pieces the launcher needs, under libexec/v3compat/dynamorio.
 set(DR_RUNTIME_DIR libexec/v3compat/dynamorio)
 configure_file(launcher/v3compat-run "${CMAKE_BINARY_DIR}/bin/v3compat-run" COPYONLY)
+
+# Keys of the sweep's rows, for the allowlist (test/allow/regen.sh); ctest checks them against the committed ones.
+add_executable(allow_dkey test/allow/dkey.c src/allow.c)
+target_include_directories(allow_dkey PRIVATE src)
+set_target_properties(allow_dkey PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
+configure_DynamoRIO_standalone(allow_dkey)
 
 include(GNUInstallDirs)
 install(TARGETS v3compat LIBRARY DESTINATION libexec/v3compat)

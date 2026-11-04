@@ -5,6 +5,7 @@
 #   V3COMPAT_DR_OPTS   extra DynamoRIO options, appended to DEFAULT_DR_OPTS
 #   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals to stderr at exit
 #   V3COMPAT_HELPERS_ONLY=1   no inline expansions, to compare them with the helpers
+#   V3COMPAT_AUDIT=1   print forms off the audited list at translation; run the native ones anyway
 set -eu
 
 # The one place to change DynamoRIO's defaults.
@@ -29,6 +30,7 @@ fi
 client_opts=""
 [ "${V3COMPAT_STATS:-}" = 1 ] && client_opts="-stats"
 [ "${V3COMPAT_HELPERS_ONLY:-}" = 1 ] && client_opts="$client_opts -helpers-only"
+[ "${V3COMPAT_AUDIT:-}" = 1 ] && client_opts="$client_opts -audit"
 
 # Unquoted on purpose: both option lists are space-separated words.
 set -f

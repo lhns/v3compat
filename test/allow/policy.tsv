@@ -1,0 +1,40 @@
+# iclass, kind, why. untested: listed with no differential evidence. hint: XED's Ivy Bridge tables disagree, but it has no
+# result; the machines must still agree. faults: faulting on every seed is what it means.
+ENDBR64	hint	NOP without CET, which nothing here enables
+ENDBR32	hint	NOP without CET
+RDSSPD	hint	NOP without CET, by design: leaves the register, which is how software detects it off
+RDSSPQ	hint	as rdsspd
+BNDMOV	hint	MPX: NOP space, and no kernel enables MPX
+BNDCL	hint	as bndmov
+BNDCU	hint	as bndmov
+BNDCN	hint	as bndmov
+BNDMK	hint	as bndmov
+BNDLDX	hint	as bndmov
+BNDSTX	hint	as bndmov
+PREFETCHIT0	hint	code prefetch hint; no result
+PREFETCHIT1	hint	as prefetchit0
+PREFETCHRST2	hint	as prefetchit0
+CLDEMOTE	hint	cache hint; no result
+IBHF	hint	branch history hint; no result
+PREFETCHW	hint	cache hint; no result. Ivy Bridge runs it as a NOP
+PREFETCHWT1	hint	as prefetchw
+UD2	faults	faulting is its meaning: compilers emit it as a trap
+UD1	faults	as ud2; sanitizers emit it
+UD0	faults	as ud2
+SYSCALL	untested	would leave the harness; DR handles it, and the kernel's interface is not an ISA question
+INT3	untested	same trap everywhere; would leave the harness
+HLT	untested	privileged: faults everywhere, and libc's abort path ends in it
+XGETBV	untested	nondeterministic by design; AVX2 adds no XCR0 bits (plan)
+RDTSC	untested	nondeterministic; its meaning does not change with ISA level
+RDTSCP	untested	as rdtsc
+RDRAND	untested	nondeterministic; Ivy Bridge has it, cpuid reports it
+XSAVE	untested	layout comes from cpuid, which reports this CPU's; dynamic linkers save state with it
+XSAVE64	untested	as xsave
+XRSTOR	untested	as xsave
+XRSTOR64	untested	as xsave
+XSAVEOPT	untested	as xsave; Ivy Bridge has it
+XSAVEOPT64	untested	as xsave
+FXSAVE	untested	FIP and FDP differ by CPU, the rest is fixed
+FXSAVE64	untested	as fxsave
+FXRSTOR	untested	as fxsave
+FXRSTOR64	untested	as fxsave
