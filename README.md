@@ -23,7 +23,7 @@ build/inst/bin/v3compat-run [--] prog args...
 - `V3COMPAT_DR_OPTS="..."` adds DynamoRIO options; defaults live in `launcher/v3compat-run.c`.
 - `V3COMPAT_STATS=1` prints, at exit to stderr, how many distinct instructions of each class (AVX2, FMA, BMI,
   LZCNT, TZCNT, MOVBE) were translated. It counts translations, not executions.
-- The exit status and signals are the program's own. A program that would change privileges when exec'd (setuid, setgid, file capabilities) is refused with status 87 (see the plan).
+- The exit status and signals are the program's own. A program that would change privileges when exec'd (setuid, setgid, file capabilities) is refused: its `execve` fails with `EPERM` and a message on stderr, or the launcher exits 87 if it was the program named on the command line (see the plan).
 
 ### Semantic suite (opt-in)
 

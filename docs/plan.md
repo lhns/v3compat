@@ -262,8 +262,9 @@ time, until Phase 3; the mixed workload's 11x; the thread-creation stress test, 
 ### Launcher, exec follow, `/proc/self/exe`
 
 [ADR 0009](adr/0009-static-launcher-no-drrun.md). The launcher is a static, freestanding binary that execs `libdynamorio.so` with
-its options in the environment, with no drrun, config file, shell or libc in the image. Statuses: 86 refused instruction, 87 refused
-exec, 125 launcher failure, 126 and 127 as in a shell; app statuses and signals pass through.
+its options in the environment, with no drrun, config file, shell or libc in the image. Statuses: 86 refused instruction, 87 the
+launcher itself refused the program (it has no caller to return an error to), 125 launcher failure, 126 and 127 as in a shell; app
+statuses and signals pass through. An exec refused under the client fails with an errno and a message on stderr, and the caller goes on.
 
 All below on Ivy Bridge with no AVX2, under Docker's default seccomp and no ptrace, each child running `lzcnt` and checking DynamoRIO
 is mapped **[measured]**; a subset also in a scratch image with `--read-only`, uid 65534 and the install mounted read-only.
@@ -273,11 +274,12 @@ is mapped **[measured]**; a subset also in a scratch image with `--read-only`, u
 | `execve`, threads, `vfork`, `posix_spawn`, shebang, empty or NULL env, closed fds 0-2; glibc, static, static-PIE, musl in the directions tested | Follows | Same |
 | `execveat`, `fexecve`, also on a memfd or a close-on-exec fd | Child runs untranslated, silently | Follows |
 | `execve` with NULL argv | Child untranslated, or DynamoRIO crashes on a script | Follows |
-| Executable but unreadable file | Child untranslated, silently [source] | Refused, 87 |
-| setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, 87, also from a thread or `vfork` child |
-| 32-bit child | `execve` fails `ENOENT` [source] | Refused, 87 |
+| Executable but unreadable file | Child untranslated, silently [source] | Refused, `EPERM` |
+| setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, `EPERM`, also from a thread or `vfork` child |
+| 32-bit child | `execve` fails `ENOENT` [source] | Refused, `ENOEXEC` |
 | `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
 | `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
+| `readlink`, `readlinkat` of any of them into a buffer shorter than the path | -1 | The kernel's answer, by rewriting to the client's descriptor: truncates, `EINVAL` on size 0 |
 
 glibc's `posix_spawn` passes `CLONE_CLEAR_SIGHAND` to `clone3`, which would reset DynamoRIO's own handlers in the child, so a fault it
 expects to catch kills it: the safe read past a static binary's TLS while the child starts, and the dead child's thread record then hangs
@@ -288,17 +290,29 @@ parent, which the kernel holds until the child is gone **[measured]**.
 Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
 change nothing natively.
 
+A check and the exec cannot be separated by a swap: each exec opens the file once, checks that descriptor (`fstat`, `fgetxattr`, the header)
+and has DynamoRIO load from it through `/proc/self/fd`. The kernel's `execve` under DynamoRIO is of `libdynamorio.so`, so an `execveat` of
+the descriptor would not be what runs the app; the fork's `dr_syscall_set_exec_file` is. A file that cannot be judged fails the exec
+instead of being handed to the kernel, which would run it itself. `test/setuid.sh` races this, `test/exec_identity.sh` compares what a
+program sees of its exec with a native run. What remains, none of which gives rights since the kernel never execs the file **[source]**:
+
+- A process caught by a swap or a loss of read permission after the check can die at startup, before any app code, with status 255: DynamoRIO's
+  rseq scan reopens the executable by name, and the loader reopens the descriptor through `/proc`, which checks permissions again **[measured]**.
+- A write to the same file, as nothing denies writes to it the way a real exec does: `ETXTBSY` is not returned, to the exec or a writer.
+- `chmod` or `chown` after the check, indistinguishable from one just after a native exec.
+- A script: its interpreter opens it by name, natively too, which is why the kernel ignores setuid on one. The ELF interpreter (`PT_INTERP`)
+  is opened by name as well.
+- A `fork` in another thread between the pin and the exec, or a `vfork` with `CLONE_FILES`, keeps a read-only copy of the descriptor.
+- The exec needs a free descriptor (`EMFILE` otherwise), and what only `binfmt_misc` could run fails with `ENOEXEC`.
+
 Still differs from native **[measured]**:
 
 - `/proc/self/maps` lists DynamoRIO and the client too, and for a PIE the first named mapping is the client. Not filtered: a program
   choosing addresses from it must see what is occupied.
 - `/proc/self/auxv` has the loader's values (`getauxval` is right). `/proc/<pid>/exe` read from another process shows the loader;
   fixing that needs `CAP_SYS_RESOURCE`.
-- `DYNAMORIO_EXE_PATH`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
+- `DYNAMORIO_EXE_PATH`, `_EXE_FD`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
   `/proc/self/fd`.
-- `readlink` of `/proc/self/exe` into a buffer shorter than the path fails with -1 under DynamoRIO's own virtualization; the kernel
-  truncates. Not fixed here; the test does not cover it **[measured]**.
-- `AT_EXECFN` after `fexecve` is a path, not `/dev/fd/N`.
 
 Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
 to a directory fd is not rewritten **[source]**.

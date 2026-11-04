@@ -182,7 +182,7 @@ foreach(sig term=15 kill=9 segv=11 abrt=6)
   v3test(signal-exec-${sn} signal ${sv} -- ${RUN} -- $<TARGET_FILE:execer_static> plain $<TARGET_FILE:exitcode> ${sn})
 endforeach()
 
-# What the app sees of its own executable (the client rewrites the opens; DR virtualizes readlink).
+# What the app sees of its own executable (the client rewrites the calls that name it).
 foreach(k dyn static spie nopie)
   v3test(selfprobe-${k} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:selfprobe_${k}> $<TARGET_FILE:selfprobe_${k}>)
 endforeach()
@@ -203,6 +203,8 @@ if(MUSL_GCC)
   endforeach()
 endif()
 
+add_executable(swapper swapper.c)
+add_test(NAME exec-identity COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/exec_identity.sh" ${INST}/bin/v3compat-run ${B})
 add_test(NAME launcher-failures COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/launcher.sh" ${INST} $<TARGET_FILE:hello_dyn> ${B})
 add_test(NAME setuid COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/setuid.sh" ${INST} ${B})
 add_test(NAME docker COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/docker.sh" ${INST} ${B})
