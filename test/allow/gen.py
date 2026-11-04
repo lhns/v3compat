@@ -56,6 +56,8 @@ def status(r, pol, emulated):
         return "decodes-differently" if r["ivb"].startswith("as:") else "not-on-ivy-bridge"
     if r["isig"] == "ff":
         return "killed-harness"
+    if kind == "approx" and ALL_FAULT not in (r["isig"], r["asig"]) and (r["isig"] != r["asig"] or r["ih"] != r["ah"]):
+        return "native-approx"
     if r["isig"] != r["asig"] or r["ih"] != r["ah"]:
         return "ivy-faults" if r["isig"] == ALL_FAULT else "differs-on-avx2"
     if r["isig"] == ALL_FAULT:
@@ -89,7 +91,7 @@ def decide(rows):
     native, emulated, mixed = {}, {}, []
     for k, rs in by_key.items():
         sts = {r["st"] for r in rs}
-        if sts <= {"native-tested", "native-faults", "native-untested"}:
+        if sts <= {"native-tested", "native-faults", "native-untested", "native-approx"}:
             native[k] = rs[0]["text"]
         elif sts == {"emulated"}:
             emulated[k] = rs[0]["text"]
