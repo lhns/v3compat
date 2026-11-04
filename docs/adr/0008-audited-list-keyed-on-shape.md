@@ -33,3 +33,9 @@ CI fails until then.
 Policy kind `approx`: forms whose results are approximations by definition (`rcpps`, `rsqrtps` and their scalar and VEX
 forms, `f2xm1`, `dpps`/`vdpps`) are listed when Ivy Bridge does not fault, though the AVX2 machine differs. Their
 difference is bounded in `test/approx.c`, which states each margin and runs under the client; `allowlist-check` skips them.
+
+## Amendment 2026-11-04
+A machine's evidence is what holds in every order: rows in sequence, reversed, shuffled twice and each in its own process
+(`gen.py sweep`). The probe resets what a row can reach before each seed: data and code pages, registers, flags and every
+XCR0 component but AMX. A row whose result changes with the order is `nondeterministic` and refused; policy cannot list
+it as tested. The probe's digest covers the code page as well.

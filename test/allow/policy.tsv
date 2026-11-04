@@ -40,7 +40,6 @@ FXSAVE	untested	FIP and FDP differ by CPU, the rest is fixed
 FXSAVE64	untested	as fxsave
 FXRSTOR	untested	as fxsave
 FXRSTOR64	untested	as fxsave
-REPNE_CMPSQ	refused	A CI runner (Intel family 6 model 207) stopped where Ivy Bridge and AMD fault, on one seed; unexplained, and no compiler emits it
 RCPPS	approx	relative error at most 1.5*2^-12 per the SDM; vendors differ
 RCPSS	approx	as rcpps
 RSQRTPS	approx	as rcpps
