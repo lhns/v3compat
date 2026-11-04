@@ -19,3 +19,7 @@ target_compile_definitions(semhw PRIVATE SEM_MANIFEST="" SEM_KNOWN="")
 add_test(NAME semantic-hw COMMAND ${RUN} -- $<TARGET_FILE:semhw>
          "${S}/test/spec/manifest.tsv" "${S}/test/reference/semantics.ref" smoke)
 set_tests_properties(semantic-hw PROPERTIES TIMEOUT 900 LABELS semantic)
+# Control: the same cases without DynamoRIO, to tell client-induced differences from the host's.
+add_test(NAME semantic-hw-native COMMAND ${CMAKE_COMMAND} -E env V3COMPAT_NATIVE=1 ${RUN} -- $<TARGET_FILE:semhw>
+         "${S}/test/spec/manifest.tsv" "${S}/test/reference/semantics.ref" smoke)
+set_tests_properties(semantic-hw-native PROPERTIES TIMEOUT 900 LABELS semantic)
