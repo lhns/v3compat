@@ -121,7 +121,7 @@ static void run_dp(int f, int imm, const float *a, const float *b, float *out) {
     void *code = stubs + (f * 256 + imm) * 16;
     __asm__ volatile("vmovups (%1), %%ymm1\n\tvmovups (%2), %%ymm2\n\tvxorps %%ymm0, %%ymm0, %%ymm0\n\t"
                      "lea -128(%%rsp), %%rsp\n\tcall *%3\n\tlea 128(%%rsp), %%rsp\n\tvmovups %%ymm0, (%0)\n\tvzeroupper"
-                     : : "r"(out), "r"(a), "r"(b), "r"(code) : "xmm0", "xmm1", "xmm2", "memory", "cc");
+                     : : "r"(out), "r"(s1), "r"(b), "r"(code), "r"(a) : "xmm0", "xmm1", "xmm2", "memory", "cc");
 }
 static void t_dpps(void) {
     static const char *nm[3] = { "dpps", "vdpps-x", "vdpps-y" };
