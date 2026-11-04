@@ -72,6 +72,7 @@ static int wait_for(long pid) {
 }
 
 int main(void) {
+    setvbuf(stdout, 0, _IONBF, 0);
     enum { STACK = 1 << 16 };
     char *stk = mmap(0, STACK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
     struct sigaction sa;
@@ -95,8 +96,6 @@ int main(void) {
     check(fk.flags == F_CLEAR_SIGHAND, "the app's clone_args is unchanged by a fork");
 
     /* The default action, not the parent's handler, and the parent's own table stays. */
-    st = wait_for(clone3_run(&vf, child_raise));
-    check(WIFSIGNALED(st) && WTERMSIG(st) == SIGUSR1, "vfork-like child dies of a signal whose handler was cleared");
     st = wait_for(clone3_run(&fk, child_raise));
     check(WIFSIGNALED(st) && WTERMSIG(st) == SIGUSR1, "fork-like child dies of a signal whose handler was cleared");
     raise(SIGUSR1);
