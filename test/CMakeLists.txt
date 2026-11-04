@@ -53,11 +53,11 @@ set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynam
 
 # ADR 0008: off the audited list exits 86, on it runs, whatever this CPU would do with it.
 foreach(f xop-bextr-imm vmpsadbw-ymm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
-          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd)
+          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb)
   v3test(refused-${f} exit 86 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(refused-${f} PROPERTIES TIMEOUT 120)
 endforeach()
-foreach(f rep-ret-next endbr64 prefetchw popcnt crc32 aesenc vcvtph2ps rdrand not-executed)
+foreach(f pause rep-ret-next endbr64 prefetchw popcnt crc32 aesenc vcvtph2ps rdrand not-executed)
   v3test(listed-${f} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(listed-${f} PROPERTIES TIMEOUT 120)
 endforeach()

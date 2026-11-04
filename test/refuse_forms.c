@@ -34,7 +34,10 @@ static const struct form { const char *name; const unsigned char *b; size_t n; }
     FORM("vzeroupper-w1", 0xc4, 0xe1, 0xf8, 0x77),  /* #UD on Ivy Bridge, though XED accepts it */
     FORM("vmmcall", 0x0f, 0x01, 0xd9),              /* runs on a hypervisor's Ivy Bridge instead of faulting */
     FORM("cmpccxadd", 0xc4, 0xe2, 0x71, 0xe0, 0x0b), /* DR has no decoding: the client sees only the SIGILL */
+    FORM("jz-66", 0x66, 0x74, 0x00),                /* Intel ignores the 66, AMD truncates RIP to 16 bits */
+    FORM("pause-rexb", 0xf3, 0x41, 0x90),           /* CPUs disagree whether it is xchg r8, rax */
     /* Run natively, listed. */
+    FORM("pause", 0xf3, 0x90),
     FORM("rep-ret-next", 0xf3, 0xc3),
     FORM("endbr64", 0xf3, 0x0f, 0x1e, 0xfa),
     FORM("prefetchw", 0x0f, 0x0d, 0x0b),

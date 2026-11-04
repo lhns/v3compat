@@ -74,7 +74,8 @@ static void try_form(uint8_t *b, int n, const char *dims) {
     if (!first(k)) return;
     int len = xed_decoded_inst_get_length(&x), iw = xed_decoded_inst_get_immediate_width(&x);
     xed_category_enum_t c = xed_decoded_inst_get_category(&x);
-    if (xed_decoded_inst_get_iclass(&x) == XED_ICLASS_MOV && xed_decoded_inst_get_memory_displacement_width(&x, 0) == 8) {
+    xed_iclass_enum_t ic = xed_decoded_inst_get_iclass(&x);
+    if (ic == XED_ICLASS_MOV && xed_decoded_inst_get_memory_displacement_width(&x, 0) == 8) {
         uint64_t a = P_RBX; /* moffs: the absolute address must land in the scratch area */
         memcpy(b + len - 8, &a, 8);
         emit(b, len, &x);
@@ -84,10 +85,9 @@ static void try_form(uint8_t *b, int n, const char *dims) {
     int rel = xed_decoded_inst_get_branch_displacement_width(&x);
     if (rel) memset(b + len - rel, 0, rel);
     /* Shift by 1 has an implicit immediate: a width and no bytes. */
+    if (xed_decoded_inst_get_iclass(&x) == XED_ICLASS_ENTER) memset(b + len - 3, 0, 3); /* else it allocates 50 KB */
     if (iw == 0 || rel || strstr(xed_iform_enum_t2str(xed_decoded_inst_get_iform_enum(&x)), "_ONE") ||
-        xed_decoded_inst_get_second_immediate(&x) != 0) {
-        /* enter's and extrq's two immediates stay 0: the byte tried as a modrm would allocate 50 KB. */
-        if (iw && xed_decoded_inst_get_second_immediate(&x) != 0) memset(b + len - iw - 1, 0, iw + 1);
+        xed_decoded_inst_get_second_immediate(&x) != 0 || xed_decoded_inst_get_iclass(&x) == XED_ICLASS_ENTER) {
         emit(b, len, &x);
         return;
     }
@@ -96,6 +96,10 @@ static void try_form(uint8_t *b, int n, const char *dims) {
     for (size_t v = 0; v < (iw == 1 ? sizeof vals : 3); v++) {
         memset(b + len - iw, 0, iw);
         b[len - iw] = vals[v * (iw == 1 ? 1 : 2)];
+        /* A 16-bit double shift past 16 is undefined by the SDM, and the CPUs do differ: no meaning to compare. */
+        if ((ic == XED_ICLASS_SHLD || ic == XED_ICLASS_SHRD) && xed_decoded_inst_get_operand_width(&x) == 16 &&
+            (vals[v * (iw == 1 ? 1 : 2)] & 0x1f) > 16)
+            continue;
         if (decode(b, 15, &x, XED_CHIP_ALL) && xed_decoded_inst_get_iform_enum(&x) == form) emit(b, len, &x);
     }
 }

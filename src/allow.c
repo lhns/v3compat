@@ -100,6 +100,8 @@ static char *put_bits(void *dc, instr_t *in, char *o, const char *end) {
     if (f3) o = put(o, end, " f3");
     if (lock) o = put(o, end, " lock");
     if (p < stop && (*p & 0xf8) == 0x48) o = put(o, end, " rexw");
+    /* With REX.B, 90 is xchg r8, rax. DR calls F3 41 90 pause either way, and CPUs disagree. */
+    if (p + 1 < stop && (*p & 0xf1) == 0x41 && p[1] == 0x90) o = put(o, end, " rexb");
     /* In 64-bit mode C4 and C5 cannot be LES and LDS. */
     if (p + 2 < stop && *p == 0xc5) {
         o = put(o, end, " vex");

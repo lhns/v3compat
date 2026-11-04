@@ -7,8 +7,8 @@ keys go through the expansions, and anything else exits with status 86 if execut
 
 - Ivy Bridge evidence: `GenuineIntel family=6 model=58`
 - AVX2 evidence: `GenuineIntel family=6 model=58`
-- Universe: 51476 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9862 native keys, 832 emulated keys.
+- Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
+- Listed: 9886 native keys, 832 emulated keys.
 
 ## Rows by outcome
 
@@ -22,10 +22,10 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | excluded:privileged | 672 |
 | excluded:segment-state | 184 |
 | excluded:state-layout | 4 |
-| faults-on-both | 958 |
+| faults-on-both | 934 |
 | lacked-not-in-emulation-suite | 1156 |
 | native-faults | 72 |
-| native-tested | 44172 |
+| native-tested | 44076 |
 | native-untested | 152 |
 | not-on-ivy-bridge | 1247 |
 
@@ -151,18 +151,7 @@ None.
 
 ## Keys with a refused form among listed ones: the whole key is refused
 
-- `enter 66 d:g64,m3,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter 66 f2 d:g64,m3,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter 66 f2 rexw d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter 66 f3 d:g64,m3,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter 66 f3 rexw d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter 66 rexw d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter f2 d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter f2 rexw d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter f3 d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter f3 rexw d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
-- `enter rexw d:g64,m6,g64 s:i,i,g64,g64`: ENTER:faults-on-both, ENTER:native-tested
+None.
 
 ## Unverified
 

@@ -30,7 +30,7 @@ build/inst/bin/v3compat-run [--] prog args...
 `cmake -S . -B build -DV3COMPAT_SEMANTIC=ON` adds `semantic-hw`: it fetches a pinned
 [avxemu](https://github.com/lhns/avxemu) commit and runs its instruction-form cases under the client against
 the digests recorded on AVX2 hardware, also with inline expansions off. `test/sem/refused.txt` lists the forms still
-refused, and has to be exact. A program that executes something nothing handles exits with status 86.
+refused, and has to be exact. A program that executes a form off the [audited list](docs/allowlist.md) exits with status 86; `V3COMPAT_AUDIT=1` lists such forms instead.
 
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.
