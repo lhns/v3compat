@@ -1,5 +1,6 @@
 # iclass, kind, why. untested: listed with no differential evidence. hint: XED's Ivy Bridge tables disagree, but it has no
-# result; the machines must still agree. faults: faulting on every seed is what it means.
+# result; the machines must still agree. faults: faulting on every seed is what it means. refused: off the list
+# although the two evidence machines agree.
 ENDBR64	hint	NOP without CET, which nothing here enables
 ENDBR32	hint	NOP without CET
 RDSSPD	hint	NOP without CET, by design: leaves the register, which is how software detects it off
@@ -38,3 +39,4 @@ FXSAVE	untested	FIP and FDP differ by CPU, the rest is fixed
 FXSAVE64	untested	as fxsave
 FXRSTOR	untested	as fxsave
 FXRSTOR64	untested	as fxsave
+REPNE_CMPSQ	refused	A CI runner (Intel family 6 model 207) stopped where Ivy Bridge and AMD fault, on one seed; unexplained, and no compiler emits it

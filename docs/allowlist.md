@@ -8,7 +8,7 @@ keys go through the expansions, and anything else exits with status 86 if execut
 - Ivy Bridge evidence: `GenuineIntel family=6 model=58`
 - AVX2 evidence: `AuthenticAMD family=25 model=17`
 - Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9719 native keys, 832 emulated keys.
+- Listed: 9717 native keys, 832 emulated keys.
 
 ## Rows by outcome
 
@@ -27,9 +27,10 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | ivy-faults | 18 |
 | lacked-not-in-emulation-suite | 1156 |
 | native-faults | 72 |
-| native-tested | 43673 |
+| native-tested | 43669 |
 | native-untested | 152 |
 | not-on-ivy-bridge | 1247 |
+| refused-by-policy | 4 |
 
 ## Iforms never reached by the sweep, by ISA set: all refused
 
@@ -126,6 +127,7 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 | `rdsspq` | hint | as rdsspd |
 | `rdtsc` | untested | nondeterministic; its meaning does not change with ISA level |
 | `rdtscp` | untested | as rdtsc |
+| `repne_cmpsq` | refused | A CI runner (Intel family 6 model 207) stopped where Ivy Bridge and AMD fault, on one seed; unexplained, and no compiler emits it |
 | `syscall` | untested | would leave the harness; DR handles it, and the kernel's interface is not an ISA question |
 | `ud0` | faults | as ud2 |
 | `ud1` | faults | as ud2; sanitizers emit it |

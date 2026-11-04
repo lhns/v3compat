@@ -48,6 +48,8 @@ def status(r, pol, emulated):
     if r["cls"] != C_N:
         return "emulated" if r["iform"] in emulated else "lacked-not-in-emulation-suite"
     kind, _ = pol.get(r["iclass"], (None, None))
+    if kind == "refused":
+        return "refused-by-policy"
     if r["notrun"] != "-":
         return "native-untested" if kind == "untested" else "excluded:" + r["notrun"]
     if r["ivb"] != "same" and kind != "hint":
