@@ -70,6 +70,10 @@ static int run_hw_suite(const char *manifest, const char *refpath, int full) {
                 for (int b = 0; b < c.len; b++) sprintf(hx + 2 * b, "%02x", c.code[b]);
                 printf("case %s k=%d place=%d code=%s kind=%d fault=%llx h=%016llx\n", f->name, k, c.place, hx, ho.kind,
                        (unsigned long long)ho.fault_page, (unsigned long long)fnv(ph, nh, REF_FNV_OFFSET));
+                printf("  gpr");
+                for (int r = 0; r < 16; r++) printf(" %llx", (unsigned long long)ho.st.gpr[r]);
+                printf(" fl=%llx mx=%x mem=%llx ymm=%llx\n", (unsigned long long)ho.st.rflags, ho.st.mxcsr,
+                       (unsigned long long)ho.mem_hash, (unsigned long long)fnv(ho.st.ymm, sizeof ho.st.ymm, REF_FNV_OFFSET));
             }
             dh_f = fnv(ph, nh, dh_f); cf++;
             if (smoke) { dh_s = fnv(ph, nh, dh_s); cs++; }

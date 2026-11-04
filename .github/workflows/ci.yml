@@ -46,4 +46,4 @@ jobs:
           SEM_DUMP=1 V3COMPAT_NATIVE=1 build/inst/bin/v3compat-run -- $B/semhw $D/spec/manifest.tsv $D/reference/semantics.ref > n.txt || true
           SEM_DUMP=1 build/inst/bin/v3compat-run -- $B/semhw $D/spec/manifest.tsv $D/reference/semantics.ref > d.txt || true
           wc -l n.txt d.txt
-          diff n.txt d.txt | head -12
+          diff n.txt d.txt | cut -c1-330 | head -24
