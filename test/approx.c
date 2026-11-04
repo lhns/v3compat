@@ -119,7 +119,8 @@ static void build_stubs(void) {
 }
 static void run_dp(int f, int imm, const float *a, const float *b, float *out) {
     void *code = stubs + (f * 256 + imm) * 16;
-    __asm__ volatile("vmovups (%1), %%ymm1\n\tvmovups (%2), %%ymm2\n\tvxorps %%ymm0, %%ymm0, %%ymm0\n\t"
+    const float *s1 = f ? a : b;   // dpps xmm0, xmm1: a in xmm0, b in xmm1. vdpps xmm0, xmm1, xmm2: a in xmm1, b in xmm2
+    __asm__ volatile("vmovups (%4), %%ymm0\n\tvmovups (%1), %%ymm1\n\tvmovups (%2), %%ymm2\n\t"
                      "lea -128(%%rsp), %%rsp\n\tcall *%3\n\tlea 128(%%rsp), %%rsp\n\tvmovups %%ymm0, (%0)\n\tvzeroupper"
                      : : "r"(out), "r"(s1), "r"(b), "r"(code), "r"(a) : "xmm0", "xmm1", "xmm2", "memory", "cc");
 }
