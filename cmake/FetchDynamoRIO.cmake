@@ -25,7 +25,8 @@ if(NOT V3COMPAT_DR_ROOT)
     _v3compat_run(git -C "${_work}/src" checkout -q FETCH_HEAD)
     # Only the core, drrun and the extensions: the clients and tests are what need the submodules.
     _v3compat_run(${CMAKE_COMMAND} -S "${_work}/src" -B "${_work}/build"
-      -DCMAKE_INSTALL_PREFIX=${V3COMPAT_DR_ROOT} -DDEBUG=OFF -DBUILD_DOCS=OFF -DBUILD_TESTS=OFF
+      # DynamoRIO's checks want gas itself, and newer CMake picks the compiler driver.
+      -DCMAKE_ASM_COMPILER=as -DCMAKE_INSTALL_PREFIX=${V3COMPAT_DR_ROOT} -DDEBUG=OFF -DBUILD_DOCS=OFF -DBUILD_TESTS=OFF
       -DBUILD_SAMPLES=OFF -DBUILD_CLIENTS=OFF)
     include(ProcessorCount)
     ProcessorCount(_jobs)
