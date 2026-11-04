@@ -3,7 +3,7 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** design. Phase 0 measured. The decision on DynamoRIO waits on the hang below. No emulation is built yet.
+**Status:** Phase 1. DynamoRIO is decided, built only from our fork. No emulation is built yet.
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -152,8 +152,9 @@ rename, a size cap, and stale or corrupt entries rejected. Never shared writable
 The tests matter more than the design: with a translator, every executed instruction passes through it, which
 is a larger correctness surface than patching a few sites.
 
-Status: stages 1, 2, 3 and 6 are built. Of 578 forms from XED, 340 match real AVX2 hardware, 154 fail (144 of them FMA),
-and 84 are refused. Stages 4 and 5 are not built, as they depend on the mechanism.
+Status: stages 1, 2, 3 and 6 are built. Of 578 forms from XED, 84 are refused. The rest match the recorded references on
+the helper-fixes branch, apart from `mem_read` zero-fill, left for the translator. References come from AMD EPYC, so Intel NaN
+priority is unverified until a recording on Intel AVX2 hardware. Stages 4 and 5 are not built, as they depend on the mechanism.
 
 Developed in the AVXEmu fork, independent of the mechanism:
 
@@ -170,13 +171,14 @@ This gives strong evidence, not proof. Keep storage and database primaries off i
 
 ## Order of work
 
-1. Settle the hang, then decide on DynamoRIO.
-2. Merge the test suite.
+1. Settle the hang, then decide on DynamoRIO. Done.
+2. Merge the test suite. Done.
 3. Scaffold `v3compat`: a DynamoRIO client, pinned, with no emulation; the launcher; CI; the semantic suite running through
    the client. Done when a test runs through it and fails only because emulation is missing.
 4. Expose the helper interface in the fork: the emulation core as a library, with no decoder or preload parts.
 5. Fix the helpers against their tests: FMA, half-written stores, `vcvtph2ps`.
-6. Phase 1 below.
+6. Phase 1 below, starting by building the client against our fork, and by finding why four forms lose OF under plain
+   DynamoRIO (`test/sem/known-dr.txt`).
 
 The scaffold comes first because it decides how helpers are called. The preload's decoder bugs are not fixed unless the
 preload stays.
@@ -219,30 +221,25 @@ DynamoRIO 11.3.0, no emulation yet, on AVX2 runners unless noted **[measured]**.
 
 ### The hang
 
-Goroutines in a tight loop with no function calls, while the garbage collector stops the world **[measured]**. Ordinary
-Go programs do not hit it: hello, thousands of goroutines, GC stress, `signal.Notify` and `net/http` each ran 20 of 20.
+Settled in [lhns/dynamorio](https://github.com/lhns/dynamorio), branch `fix-pending-signal-self-link`. **[measured]**, on
+GitHub runners, not Ivy Bridge.
 
-| Configuration | Hangs of 20 |
-|---|---|
-| Native | 0 |
-| DynamoRIO default | 6 |
-| `GOAMD64=v3` | 12 |
-| `GOMAXPROCS=1` | 3 |
-| `-disable_traces` | 6 |
-| `-thread_private` | 0 |
-| `-no_early_inject` | 0, but it does not follow static programs, so this proves nothing |
+Not specific to Go: a C reproducer hangs too. When two threads get a signal in one shared fragment, the first unlinks it
+and the second sees it already unlinked and records nothing. The first then relinks it, and the second loops forever
+with its signal pending. Fixing that exposed two more stock bugs: a shared lock leaked once exit begins, and a thread
+cloned during exit that deadlocks with the exit synch.
 
-A hung process has one thread spinning in a small self-loop in the code cache, with others waiting on it. No signal is
-pending or blocked at the kernel, and no `tgkill` is seen. Go sends its preemption signal once per thread and waits
-**[memory]**. **Suspected, not proven:** DynamoRIO takes the signal and never delivers it to a thread looping in a linked
-fragment of the shared cache. If so, any program with such a loop that relies on an async signal can hang, not only Go.
-[DynamoRIO #4431](https://github.com/DynamoRIO/dynamorio/issues/4431) is a similar open bug.
+| Test | Stock | Fork | Native |
+|---|---|---|---|
+| Go tight loop + GC | 356/1000 | 0/1000 | 0/1000 |
+| Same, `GOAMD64=v3` | not run | 0/1000 | 0/1000 |
+| Go thread churn, no preemption | 3/1000 | 0/1000 | not run |
+| C reproducer, 8 threads | 30/30 | 0/200 | 0/30 |
 
-`GODEBUG=asyncpreemptoff=1` is no fix, as the same program hangs natively with it.
-
-**To settle before deciding:** 100 runs of `-thread_private` directly and under Docker, its cost in memory and startup
-with about 100 threads, and a C reproducer. If `-thread_private` holds at an acceptable cost, use it and report the bug
-upstream. If the bug is general and it does not hold, this blocks the plan without a fix in DynamoRIO.
+DynamoRIO's 33 signal and thread tests pass, with no measurable cost. **Not settled:** a stress test creating threads
+without limit near exit died after 50 minutes on stock and fork, but passed natively; the cause is unknown and the test
+is to return with a thread cap. `-thread_private` is not a fallback: it hung too, costing about 25% more time and 50%
+more memory on 100 threads of duckdb.
 
 **Criterion revised after seeing results.** The original go/no-go was startup under 1 s and under 2x native. Startup
 was 18-84x, so it failed. The 2x limit cannot hold for a program that natively starts in 0.04 s, as translation is
@@ -261,8 +258,9 @@ only if the numbers justify it.
 - **The speed target is an estimate.** Dense AVX2 cost is unproven by anything measured so far.
 - **Dependency on DynamoRIO.** Large and mature, with its own bugs in every executed instruction path.
 - **Static injection** under default seccomp without ptrace: the plan is wrapper argv plus self-loading **[memory]**.
-- **The hang:** see Phase 0 results. Possibly not limited to Go.
-- **`-thread_private`**, if needed, multiplies code caches per thread; the cost is unmeasured.
+- **The fork.** Its signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a
+  syscall in a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment.
+  The lock change affects every thread running during exit and is the one most worth a review.
 - **JIT-heavy programs** may regress past AVXEmu's 1.2x. Measured: Node 2.4x, Java 13x.
 - **setuid children** lose privilege under a launcher: refuse them rather than run them with the wrong rights.
 - **FMA** under correct rounding stays slow. FMA-heavy programs may not reach the targets.
