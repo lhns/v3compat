@@ -1,13 +1,12 @@
 /*
- * Adapter over lhns/avxemu's test/spec/sem_test.c: runs its instruction-form cases on the real
- * CPU only (no avxemu emulator) and checks their digests against the reference recorded on AVX2
- * silicon. Built to run under the v3compat client. sem_test.c is included, not modified.
+ * Adapter over lhns/avxemu's test/spec/sem_test.c: runs its instruction-form cases on the CPU, under
+ * the client, and checks their digests against the reference recorded on AVX2 silicon. sem_test.c
+ * is included, not modified. Each form runs in its own process, as a refused form ends it.
  *
- *   semhw MANIFEST REF [smoke|full] [KNOWN]   env SEM_ONLY=glob restricts the forms, SEM_DUMP=1 dumps cases
- *   KNOWN: file of form names whose mismatch is tolerated (differences DynamoRIO itself causes)
+ *   semhw MANIFEST REF [smoke|full] [REFUSED]   env SEM_ONLY=glob restricts the forms, SEM_DUMP=1 dumps cases
+ *   REFUSED: file of the forms the client still refuses; the list has to be exact.
  *
- * Exit: 0 match, 1 mismatch, 3 emulation missing (SIGILL, or a silent lzcnt/tzcnt-style
- * difference on a form the host lacks), 2 usage/setup.
+ * Exit: 0 all as expected, 1 mismatch or a refusal list that is out of date, 2 usage/setup.
  */
 #define main sem_orig_main
 #include "sem_test.c"
@@ -20,13 +19,11 @@ int decode(const uint8_t *p, decoded *d) { (void)p; (void)d; return 0; }
 int avxemu_emulate(const decoded *d, avxemu_regfile *rf) { (void)d; (void)rf; return 0; }
 size_t avxemu_page_size(void) { return PAGE; }
 
-enum { EX_OK = 0, EX_MISMATCH = 1, EX_USAGE = 2, EX_MISSING = 3 };
-static char *g_form;
-static const char *g_known;   /* path of the tolerated-forms file, or NULL */
+enum { EX_OK = 0, EX_MISMATCH = 1, EX_USAGE = 2, EX_REFUSED = 86 /* V3COMPAT_REFUSED */ };
 
-static int is_known(const char *form) {
+static int listed(const char *path, const char *form) {
     char line[128];
-    FILE *k = g_known ? fopen(g_known, "r") : NULL;
+    FILE *k = path ? fopen(path, "r") : NULL;
     int hit = 0;
     while (k && fgets(line, sizeof line, k)) {
         line[strcspn(line, "\r\n")] = 0;
@@ -34,101 +31,80 @@ static int is_known(const char *form) {
     }
     if (k) fclose(k);
     return hit;
-}     /* shared with the parent: form being run when the child died */
-
-static int host_lacks(const specform *f) {
-    unsigned a, b, c, d;
-    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(7), "c"(0));
-    int avx2 = (b >> 5) & 1, bmi1 = (b >> 3) & 1, bmi2 = (b >> 8) & 1;
-    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(1), "c"(0));
-    int fma = (c >> 12) & 1, movbe = (c >> 22) & 1, f16c = (c >> 29) & 1;
-    __asm__ volatile("cpuid" : "=a"(a), "=b"(b), "=c"(c), "=d"(d) : "a"(0x80000001), "c"(0));
-    int abm = (c >> 5) & 1;
-    const char *i = f->isa;
-    if (!strncmp(i, "AVX2", 4)) return !avx2;
-    if (!strcmp(i, "FMA")) return !fma;
-    if (!strcmp(i, "BMI1")) return !bmi1;
-    if (!strcmp(i, "BMI2")) return !bmi2;
-    if (!strcmp(i, "LZCNT")) return !abm;
-    if (!strcmp(i, "MOVBE")) return !movbe;
-    if (!strcmp(i, "F16C")) return !f16c;
-    return 0;
 }
 
-static int run_hw_suite(const char *manifest, const char *refpath, int full) {
-    specform *forms;
-    int nf = spec_load(manifest, &forms);
-    if (nf < 0) return EX_USAGE;
-    if (map_arena() < 0) { perror("arena"); return EX_USAGE; }
-    install_handlers();
-    if (ref_begin(REF_CHECK, "semantics", refpath) != 0) { fprintf(stderr, "cannot read reference %s\n", refpath); return EX_USAGE; }
-    long nforms = 0, ncases = 0; int bad = 0;
-    for (int i = 0; i < nf; i++) {
-        const specform *f = &forms[i];
-        if (!strcmp(f->status, "refused")) continue;
-        if (getenv("SEM_ONLY") && fnmatch(getenv("SEM_ONLY"), f->name, 0)) continue;
-        snprintf(g_form, 128, "%s", f->name);
-        nforms++;
-        FLAGS_MASK = flags_mask(f);
-        uint64_t dh_s = REF_FNV_OFFSET, dh_f = REF_FNV_OFFSET; unsigned long cs = 0, cf = 0;
-        int total = full_cases(f);
-        for (int k = 0; k < total; k++) {
-            int smoke = is_smoke(k);
-            if (!full && !smoke) continue;
-            sem_case c; sem_out ho; uint8_t ph[1024];
-            gen_case(f, k, &c);
-            run_hw(&c, &ho);
-            size_t nh = pack(&ho, ph);
-            if (getenv("SEM_DUMP")) {     /* per-case line, to diff a native run against a client run */
-                char hx[80] = "";
-                for (int b = 0; b < c.len; b++) sprintf(hx + 2 * b, "%02x", c.code[b]);
-                printf("case %s k=%d place=%d code=%s kind=%d fault=%llx h=%016llx\n", f->name, k, c.place, hx, ho.kind,
-                       (unsigned long long)ho.fault_page, (unsigned long long)fnv(ph, nh, REF_FNV_OFFSET));
-                printf("  gpr");
-                for (int r = 0; r < 16; r++) printf(" %llx", (unsigned long long)ho.st.gpr[r]);
-                printf(" fl=%llx mx=%x mem=%llx ymm=%llx\n", (unsigned long long)ho.st.rflags, ho.st.mxcsr,
-                       (unsigned long long)ho.mem_hash, (unsigned long long)fnv(ho.st.ymm, sizeof ho.st.ymm, REF_FNV_OFFSET));
-            }
-            dh_f = fnv(ph, nh, dh_f); cf++;
-            if (smoke) { dh_s = fnv(ph, nh, dh_s); cs++; }
-            ncases++;
+static int run_form(const specform *f, int full) {
+    FLAGS_MASK = flags_mask(f);
+    uint64_t dh_s = REF_FNV_OFFSET, dh_f = REF_FNV_OFFSET; unsigned long cs = 0, cf = 0;
+    int total = full_cases(f), bad = 0;
+    for (int k = 0; k < total; k++) {
+        int smoke = is_smoke(k);
+        if (!full && !smoke) continue;
+        sem_case c; sem_out ho; uint8_t ph[1024];
+        gen_case(f, k, &c);
+        run_hw(&c, &ho);
+        size_t nh = pack(&ho, ph);
+        if (getenv("SEM_DUMP")) {     /* per-case line, to diff a native run against a client run */
+            char hx[80] = "";
+            for (int b = 0; b < c.len; b++) sprintf(hx + 2 * b, "%02x", c.code[b]);
+            printf("case %s k=%d place=%d code=%s kind=%d fault=%llx h=%016llx\n", f->name, k, c.place, hx, ho.kind,
+                   (unsigned long long)ho.fault_page, (unsigned long long)fnv(ph, nh, REF_FNV_OFFSET));
+            printf("  gpr");
+            for (int r = 0; r < 16; r++) printf(" %llx", (unsigned long long)ho.st.gpr[r]);
+            printf(" fl=%llx mx=%x mem=%llx ymm=%llx\n", (unsigned long long)ho.st.rflags, ho.st.mxcsr,
+                   (unsigned long long)ho.mem_hash, (unsigned long long)fnv(ho.st.ymm, sizeof ho.st.ymm, REF_FNV_OFFSET));
         }
-        for (int pass = 0; pass < 2; pass++) {
-            if (pass && !full) continue;
-            char nm[64]; unsigned long rc; uint64_t rd;
-            snprintf(nm, sizeof nm, "%s:%c", f->name, pass ? 'f' : 's');
-            uint64_t mine = pass ? dh_f : dh_s; unsigned long mc = pass ? cf : cs;
-            if (!ref_get(nm, &rc, &rd) || mc != rc || mine != rd) {
-                if (host_lacks(f)) {
-                    printf("EMULATION MISSING: %s runs without faulting but gives a different result (silent)\n", f->name);
-                    return EX_MISSING;
-                }
-                if (is_known(f->name)) { printf("known client difference: %s\n", nm); continue; }
-                printf("MISMATCH: %s digest %016llx (%lu cases) != recorded %016llx (%lu)\n", nm,
-                       (unsigned long long)mine, mc, (unsigned long long)rd, rc);
-                bad = 1;
-            }
+        dh_f = fnv(ph, nh, dh_f); cf++;
+        if (smoke) { dh_s = fnv(ph, nh, dh_s); cs++; }
+    }
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass && !full) continue;
+        char nm[64]; unsigned long rc; uint64_t rd;
+        snprintf(nm, sizeof nm, "%s:%c", f->name, pass ? 'f' : 's');
+        uint64_t mine = pass ? dh_f : dh_s; unsigned long mc = pass ? cf : cs;
+        if (!ref_get(nm, &rc, &rd) || mc != rc || mine != rd) {
+            printf("MISMATCH: %s digest %016llx (%lu cases) != recorded %016llx (%lu)\n", nm,
+                   (unsigned long long)mine, mc, (unsigned long long)rd, rc);
+            bad = 1;
         }
     }
-    printf("semantics on the real CPU (%s): %ld forms, %ld cases, %s\n", full ? "full" : "smoke", nforms, ncases, bad ? "MISMATCH" : "match");
     return bad ? EX_MISMATCH : EX_OK;
 }
 
 int main(int argc, char **argv) {
-    if (argc < 3) { fprintf(stderr, "usage: semhw MANIFEST REF [smoke|full]\n"); return EX_USAGE; }
+    if (argc < 3) { fprintf(stderr, "usage: semhw MANIFEST REF [smoke|full] [REFUSED]\n"); return EX_USAGE; }
     int full = argc > 3 && !strcmp(argv[3], "full");
-    g_known = argc > 4 ? argv[4] : NULL;
-    g_form = mmap(0, 128, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (g_form == MAP_FAILED) return EX_USAGE;
-    fflush(NULL);
-    pid_t pid = fork();
-    if (pid == 0) { int rc = run_hw_suite(argv[1], argv[2], full); fflush(NULL); _exit(rc); }
-    int st;
-    waitpid(pid, &st, 0);
-    if (WIFSIGNALED(st) && WTERMSIG(st) == SIGILL) {
-        printf("EMULATION MISSING: SIGILL in form '%s' (first missing instruction); nothing emulates it yet\n", g_form);
-        return EX_MISSING;
+    const char *refused = argc > 4 ? argv[4] : NULL;
+    specform *forms;
+    int nf = spec_load(argv[1], &forms);
+    if (nf < 0) return EX_USAGE;
+    if (map_arena() < 0) { perror("arena"); return EX_USAGE; }
+    install_handlers();
+    if (ref_begin(REF_CHECK, "semantics", argv[2]) != 0) { fprintf(stderr, "cannot read reference %s\n", argv[2]); return EX_USAGE; }
+    int bad = 0, nforms = 0, nrefused = 0;
+    for (int i = 0; i < nf; i++) {
+        const specform *f = &forms[i];
+        if (!strcmp(f->status, "refused")) continue;
+        if (getenv("SEM_ONLY") && fnmatch(getenv("SEM_ONLY"), f->name, 0)) continue;
+        nforms++;
+        fflush(NULL);
+        pid_t pid = fork();
+        if (pid == 0) { int rc = run_form(f, full); fflush(NULL); _exit(rc); }
+        int st;
+        waitpid(pid, &st, 0);
+        int was_refused = WIFEXITED(st) && WEXITSTATUS(st) == EX_REFUSED, expected = listed(refused, f->name);
+        if (was_refused) nrefused++;
+        if (was_refused != expected) {
+            printf("REFUSAL LIST: %s %s\n", f->name, was_refused ? "refused, not listed" : "listed, not refused");
+            bad = 1;
+        } else if (!was_refused && WIFSIGNALED(st)) {
+            printf("CRASH: signal %d in form %s\n", WTERMSIG(st), f->name);
+            bad = 1;
+        } else if (!was_refused && WEXITSTATUS(st) != EX_OK) {
+            if (WEXITSTATUS(st) != EX_MISMATCH) printf("FAIL: exit %d in form %s\n", WEXITSTATUS(st), f->name);
+            bad = 1;
+        }
     }
-    if (WIFSIGNALED(st)) { printf("CRASH: signal %d in form '%s'\n", WTERMSIG(st), g_form); return EX_MISMATCH; }
-    return WEXITSTATUS(st);
+    printf("semantics (%s): %d forms, %d refused, %s\n", full ? "full" : "smoke", nforms, nrefused, bad ? "FAIL" : "ok");
+    return bad ? EX_MISMATCH : EX_OK;
 }

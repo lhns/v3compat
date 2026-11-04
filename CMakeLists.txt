@@ -12,7 +12,20 @@ include(cmake/FetchDynamoRIO.cmake)
 set(CMAKE_CXX_SIZEOF_DATA_PTR ${CMAKE_C_SIZEOF_DATA_PTR})
 find_package(DynamoRIO REQUIRED)
 
-add_library(v3compat SHARED src/client.c)
+# lhns/avxemu's emulation core: its archive's flags, checked by its guard script (test/CMakeLists.txt).
+include(FetchContent)
+set(AVXEMU_COMMIT 836323eb8367c7cd2b3c11bfb155d92e4c3654ca)
+FetchContent_Declare(avxemu GIT_REPOSITORY https://github.com/lhns/avxemu GIT_TAG ${AVXEMU_COMMIT}
+                     SOURCE_SUBDIR no-cmake-project)
+FetchContent_MakeAvailable(avxemu)
+set(AVXEMU_SRC "${avxemu_SOURCE_DIR}")
+add_library(avxemu_helpers STATIC "${AVXEMU_SRC}/src/exec.c" "${AVXEMU_SRC}/src/exec_bmi.c" "${AVXEMU_SRC}/src/softfma.c")
+target_include_directories(avxemu_helpers PUBLIC "${AVXEMU_SRC}/src")
+target_compile_options(avxemu_helpers PRIVATE -O2 -std=c11 -w -mavx -mno-avx2 -mno-fma -mno-f16c -mno-bmi -mno-bmi2
+  -mno-lzcnt -mno-movbe -mtune=ivybridge -fPIC -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
+
+add_library(v3compat SHARED src/client.c src/expand.c)
+target_link_libraries(v3compat avxemu_helpers)
 configure_DynamoRIO_client(v3compat)
 # drmgr is BSD; its shared build is installed beside the client (the static one pulls in fortified libc calls DR cannot resolve).
 use_DynamoRIO_extension(v3compat drmgr)

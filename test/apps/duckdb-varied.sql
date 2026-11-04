@@ -1,0 +1,11 @@
+create table t as select range as id, hash(range) % 1000 as k, md5(range::varchar) as h, 'name_' || (range % 50000) as name, (range * 37) % 1013 as v from range(3000000);
+create table u as select range as id, 'name_' || range as name, range % 97 as g from range(50000);
+select count(*), sum(t.v), sum(u.g) from t join u on t.name = u.name;
+select g, count(*) c, sum(v) s from t join u using (name) group by g order by g limit 5;
+select count(*), sum(id % 7) from (select * from t order by h, id);
+select sum(rn), sum(s) from (select row_number() over (partition by k order by v, id) rn, sum(v) over (partition by k order by id rows between 5 preceding and current row) s from t);
+select count(*) from t where regexp_matches(name, '^name_[0-9]*7$');
+select sum(length(regexp_replace(h, '[a-f]', 'X', 'g'))) from t;
+select count(distinct upper(name) || substr(h, 1, 3)) from t;
+select md5(string_agg(h, ',' order by id)) from (select * from t where id < 200000);
+select sum(length(md5(h || name))) from t;

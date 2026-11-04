@@ -31,13 +31,20 @@ jobs:
           # The file holds the pinned commit and the build options.
           key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
       - name: DynamoRIO build dependencies
-        run: sudo apt-get install -y zlib1g-dev
+        run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev
       - name: Configure
         run: cmake -S . -B build -DV3COMPAT_SEMANTIC=ON
       - name: Build
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: duckdb, native against the client
+        run: |
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+          sh test/apps/duckdb.sh "" ./duckdb | tee native.txt
+          sh test/apps/duckdb.sh "build/inst/bin/v3compat-run --" ./duckdb | tee client.txt
+          diff <(sed 's/ wall.*//' native.txt) <(sed 's/ wall.*//' client.txt)
       - name: Tarball
         run: |
           cmake --build build --target package-tarball
