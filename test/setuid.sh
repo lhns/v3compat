@@ -1,6 +1,6 @@
 #!/bin/sh
-# setuid.sh INST BUILD: programs that would change privileges when exec'd are refused (status 87), and
-# the ones that would not are run. Needs root or `sudo -n`; V3COMPAT_CI=1 makes a missing prerequisite a failure.
+# setuid.sh INST BUILD: programs that would change privileges when exec'd are refused (the launcher exits 87,
+# an exec under the client fails and the caller goes on), and the ones that would not are run. Needs root or `sudo -n`; V3COMPAT_CI=1 makes a missing prerequisite a failure.
 INST=$1; B=$2; RUN=$INST/bin/v3compat-run
 skip() { echo "SKIP: $*"; [ "$V3COMPAT_CI" = 1 ] && exit 1; exit 77; }
 if [ "$(id -u)" = 0 ]; then S=; elif sudo -n true 2>/dev/null; then S="sudo -n"; else skip "needs root or sudo -n"; fi
@@ -18,9 +18,13 @@ mk() { # mk NAME MODE OWNER:GROUP: a copy of ids
 }
 # status MSG-REGEX NAME CMD...: runs as root; stdout in $out, stderr in $err
 run() { out=$($S "$@" 2>"$t/err"); st=$?; err=$(cat "$t/err"); }
-refused() { # refused NAME CMD...
+refused() { # refused NAME CMD...: by the launcher, which has no caller to return an error to
   name=$1; shift; run "$@"
-  if [ "$st" = 87 ] && echo "$err" | grep -q 'v3compat.*refusing to exec'; then ok "$name"; else fail "$name: status $st stdout '$out' stderr '$err'"; fi
+  if [ "$st" = 87 ] && [ -z "$out" ] && echo "$err" | grep -q 'v3compat.*refusing to exec'; then ok "$name"; else fail "$name: status $st stdout '$out' stderr '$err'"; fi
+}
+failed() { # failed NAME STATUS STDOUT-REGEX CMD...: the exec failed with the message, nothing ran, and the caller reports it
+  name=$1; want=$2; re=$3; shift 3; run "$@"
+  if [ "$st" = "$want" ] && echo "$out" | grep -q "$re" && echo "$err" | grep -q 'v3compat.*refusing to exec' && ! echo "$out" | grep -q 'refusing\|euid='; then ok "$name"; else fail "$name: status $st stdout '$out' stderr '$err'"; fi
 }
 ran() { # ran NAME WANT-REGEX CMD...
   name=$1; want=$2; shift 2; run "$@"
@@ -36,14 +40,18 @@ mk sgid_nobody 2755 nobody:nogroup
 run env V3COMPAT_NATIVE=1 "$RUN" "$t/sgid_nobody"
 case $out in *egid=65534*) ok "native setgid changes the group" ;; *) skip "setgid has no effect here: $out" ;; esac
 refused "setgid file, root to nogroup" "$RUN" "$t/sgid_nobody"
-refused "setuid file, from execve in a program" "$RUN" "$B/execer_static" plain "$t/suid_nobody"
-refused "setuid file, from a thread" "$RUN" "$B/execer_dyn" thread "$t/suid_nobody"
-refused "setuid file, by execveat" "$RUN" "$B/execer_dyn" execveat-path "$t/suid_nobody"
-# A vfork child is refused; its parent goes on and sees the status.
-run "$RUN" "$B/execer_dyn" vfork "$t/suid_nobody"
-if [ "$st" = 87 ] && echo "$out" | grep -q 'child exited 87' && echo "$err" | grep -q 'refusing to exec'; then ok "setuid file, from a vfork child"; else fail "vfork child: status $st stdout '$out' stderr '$err'"; fi
-run "$RUN" "$B/execer_dyn" spawn "$t/suid_nobody"
-if [ "$st" = 87 ] && echo "$out" | grep -q 'child exited 87'; then ok "setuid file, from posix_spawn"; else fail "spawn: status $st stdout '$out' stderr '$err'"; fi
+EPERM='Operation not permitted'
+failed "setuid file, from execve in a program" 1 "FAIL exec plain: $EPERM" "$RUN" "$B/execer_static" plain "$t/suid_nobody"
+failed "setuid file, from a thread" 1 "FAIL exec thread: $EPERM" "$RUN" "$B/execer_dyn" thread "$t/suid_nobody"
+failed "setuid file, by execveat" 1 "FAIL exec execveat-path: $EPERM" "$RUN" "$B/execer_dyn" execveat-path "$t/suid_nobody"
+failed "setgid file, from execve in a program" 1 "FAIL exec plain: $EPERM" "$RUN" "$B/execer_static" plain "$t/sgid_nobody"
+# A vfork child's exec fails and the child exits; posix_spawn hands the error to its parent.
+failed "setuid file, from a vfork child" 127 'child exited 127' "$RUN" "$B/execer_dyn" vfork "$t/suid_nobody"
+failed "setuid file, from posix_spawn" 2 "spawn failed: $EPERM" "$RUN" "$B/execer_dyn" spawn "$t/suid_nobody"
+# execvp stops at EPERM: the refused file's namesake later in PATH does not run in its place.
+$S mkdir "$t/pa" "$t/pb"; $S cp "$t/suid_nobody" "$t/pa/prog"; $S chown nobody:nogroup "$t/pa/prog"; $S chmod 4755 "$t/pa/prog"
+$S cp "$B/ids_static" "$t/pb/prog"
+failed "setuid file in PATH, no fallback to the next" 1 "FAIL exec execvp: $EPERM" env "PATH=$t/pa:$t/pb" "$RUN" "$B/execer_dyn" execvp prog
 
 # What natively changes nothing is run: root running a setuid-root file, no_new_privs, a script.
 mk suid_root 4755 root:root
@@ -54,6 +62,7 @@ ran "setuid script is not refused (the kernel ignores the bit)" PASS "$RUN" "$t/
 # The interpreter is what counts.
 printf '#!%s\n' "$t/suid_nobody" > "$t/script2"; chmod 755 "$t/script2"
 refused "script whose interpreter is setuid" "$RUN" "$t/script2"
+failed "script whose interpreter is setuid, exec'd by a program" 1 "FAIL exec plain: $EPERM" "$RUN" "$B/execer_static" plain "$t/script2"
 
 # File capabilities: refused for a user they would change, fine for root.
 mk cap_file 755 root:root
@@ -66,6 +75,7 @@ if [ $capok = 1 ]; then
   ran "file capabilities, run by root" 'euid=0 .*translated=1' "$RUN" "$t/cap_file" translated
   if command -v setpriv >/dev/null; then
     refused "file capabilities, run by an ordinary user" setpriv --reuid=65534 --regid=65534 --clear-groups "$RUN" "$t/cap_file"
+    failed "file capabilities, exec'd by a program" 1 "FAIL exec plain: $EPERM" setpriv --reuid=65534 --regid=65534 --clear-groups "$RUN" "$B/execer_static" plain "$t/cap_file"
   else
     part_skip "setpriv not found"
   fi
@@ -78,7 +88,59 @@ mk unreadable 711 root:root; $S chmod 111 "$t/unreadable"
 if command -v setpriv >/dev/null; then
   as_user="setpriv --reuid=65534 --regid=65534 --clear-groups"
   refused "executable but unreadable file" $as_user "$RUN" "$t/unreadable"
-  refused "executable but unreadable file, exec'd by a program" $as_user "$RUN" "$B/execer_static" plain "$t/unreadable"
+  failed "executable but unreadable file, exec'd by a program" 1 "FAIL exec plain: $EPERM" $as_user "$RUN" "$B/execer_static" plain "$t/unreadable"
+  # Not EACCES, on which execvp would run the next file in PATH.
+  $S mkdir "$t/qa" "$t/qb"; mk unreadable2 711 root:root; $S mv "$t/unreadable2" "$t/qa/prog"; $S chmod 111 "$t/qa/prog"; $S cp "$B/ids_static" "$t/qb/prog"
+  failed "unreadable file in PATH, no fallback to the next" 1 "FAIL exec execvp: $EPERM" $as_user env "PATH=$t/qa:$t/qb" "$RUN" "$B/execer_dyn" execvp prog
+else
+  part_skip "setpriv not found"
+fi
+
+# The check and the exec race a swap of the name or a change of the mode. Whatever the timing, a refused file never
+# runs, and the kernel never runs a file itself: that would give its rights or an untranslated run.
+N=${V3COMPAT_RACE_N:-150}
+sw=$B/swapper
+race() { # race NAME BAD-REGEX FLIPPER-ARGS -- CMD...: N runs of CMD with the flipper running
+  name=$1; badre=$2; shift 2
+  fa=
+  while [ "$1" != -- ]; do fa="$fa $1"; shift; done; shift
+  $S "$sw" $fa & sp=$!
+  sleep 0.1
+  allowed=0 denied=0 other=0 wrong=0
+  i=0
+  while [ "$i" -lt "$N" ]; do
+    i=$((i + 1))
+    o=$("$@" 2>&1)
+    case $o in
+      *"Operation not permitted"*) denied=$((denied + 1)) ;;
+      *PASS*|*euid=*) allowed=$((allowed + 1)) ;;
+      *) other=$((other + 1)) ;;
+    esac
+    if echo "$o" | grep -q "$badre"; then wrong=$((wrong + 1)); echo "WRONG: $o" | head -3; fi
+  done
+  $S pkill -f "^$sw " 2>/dev/null || $S kill "$sp" 2>/dev/null
+  wait "$sp" 2>/dev/null
+  echo "$name: $N runs, ran $allowed, refused $denied, other $other, wrong $wrong"
+  [ "$wrong" = 0 ] || fail "$name: a refused file ran"
+  [ "$allowed" -gt 0 ] && [ "$denied" -gt 0 ] || part_skip "$name: the race did not exercise both sides"
+}
+# Each name in turn: an allowed program, and one that must be refused.
+cp "$B/lz_static" "$t/race_ok"; mk race_suid 4755 nobody:nogroup
+race "swap of an allowed program and a setuid one" 'euid=' swap "$t/race_ok" "$t/race_suid" -- \
+  $S "$RUN" "$B/execer_static" plain "$t/race_ok" translated
+printf '#!%s translated\n' "$B/lz_dyn" > "$t/race_script"; chmod 755 "$t/race_script"
+mk race_suid2 4755 nobody:nogroup
+race "swap of a script and a setuid program" 'euid=' swap "$t/race_script" "$t/race_suid2" -- \
+  $S "$RUN" "$B/execer_static" plain "$t/race_script"
+# The same file, its setuid bit coming and going: it may run without the bit's rights, never with them.
+mk race_mode 4755 nobody:nogroup
+race "setuid bit flipping" 'euid=65534' chmod "$t/race_mode" 4755 755 -- \
+  $S "$RUN" "$B/execer_static" plain "$t/race_mode" translated
+# Readability flipping: refused or translated, never run by the kernel behind DynamoRIO's back.
+mk race_read 755 root:root
+if command -v setpriv >/dev/null; then
+  race "read permission flipping" 'translated=0' chmod "$t/race_read" 755 111 -- \
+    $S setpriv --reuid=65534 --regid=65534 --clear-groups "$RUN" "$B/execer_static" plain "$t/race_read" translated
 else
   part_skip "setpriv not found"
 fi

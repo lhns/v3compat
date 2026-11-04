@@ -3,15 +3,16 @@
 #ifndef V3COMPAT_EXEC_CHECK_H
 #define V3COMPAT_EXEC_CHECK_H
 
+/* The launcher's status for a refusal; under the client the exec itself fails, with x->err (ADR 0009). */
 #ifndef V3COMPAT_REFUSED_EXEC
 #define V3COMPAT_REFUSED_EXEC 87 /* also in expand.h */
 #endif
 
 enum { V3C_MAXSHEBANG = 4, V3C_HDR = 256 };
-/* PASS: not our business, the real exec reports it (err says how, for the launcher).
- * FAIL: the kernel would fail it but DynamoRIO would not notice; err says how.
- * REFUSE: the kernel would run it and DynamoRIO cannot. */
-enum { V3C_OK, V3C_PASS, V3C_FAIL, V3C_REFUSE };
+/* OK: fd is the file to run, open and close-on-exec, and nothing else may be run instead of it.
+ * FAIL: the exec fails as the kernel's would; err says how, why may say more.
+ * REFUSE: the kernel would run it and DynamoRIO cannot; err is what the exec fails with. */
+enum { V3C_OK, V3C_FAIL, V3C_REFUSE };
 
 struct v3c_exec {
     int verdict, err;
@@ -19,7 +20,8 @@ struct v3c_exec {
     const char *why;  /* static reason for FAIL and REFUSE */
     int n;            /* shebang levels */
     const char *interp[V3C_MAXSHEBANG], *arg[V3C_MAXSHEBANG]; /* arg may be 0 */
-    const char *final; /* the file that is really run */
+    const char *final; /* the name of the file that is really run */
+    long fd;           /* that file, for OK; -1 otherwise */
     char hdr[V3C_MAXSHEBANG + 1][V3C_HDR + 4];
 };
 
@@ -39,11 +41,12 @@ enum {
     V3C_SYS_getegid = 108, V3C_SYS_fstatfs = 138, V3C_SYS_prctl = 157, V3C_SYS_fgetxattr = 193,
     V3C_SYS_execve = 59, V3C_SYS_exit_group = 231, V3C_SYS_openat = 257,
     V3C_SYS_newfstatat = 262, V3C_SYS_faccessat = 269, V3C_SYS_execveat = 322, V3C_SYS_statx = 332,
-    V3C_SYS_clone3 = 435, V3C_SYS_openat2 = 437, V3C_SYS_faccessat2 = 439
+    V3C_SYS_openat2 = 437, V3C_SYS_faccessat2 = 439
 };
 enum {
     V3C_AT_FDCWD = -100, V3C_AT_SYMLINK_NOFOLLOW = 0x100, V3C_AT_EACCESS = 0x200, V3C_AT_EMPTY_PATH = 0x1000,
-    V3C_O_CLOEXEC = 02000000, V3C_X_OK = 1, V3C_R_OK = 4,
+    V3C_O_CLOEXEC = 02000000, V3C_O_NONBLOCK = 04000, V3C_O_NOFOLLOW = 0400000, V3C_O_PATH = 010000000,
+    V3C_X_OK = 1, V3C_R_OK = 4,
     V3C_ENOENT = 2, V3C_EACCES = 13, V3C_ENOEXEC = 8, V3C_ELOOP = 40, V3C_ENOSYS = 38, V3C_EPERM = 1,
     V3C_EBADF = 9, V3C_EINVAL = 22
 };
@@ -55,11 +58,39 @@ struct v3c_stat { /* x86-64 kernel struct stat */
     long size, blksize, blocks, t[6], unused[3];
 };
 
-static inline long v3c_openat(const char *p) { return V3C_SC(V3C_SYS_openat, V3C_AT_FDCWD, p, V3C_O_CLOEXEC); }
+/* O_NONBLOCK: a FIFO must fail the exec, not block the open. */
+static inline long v3c_openat(int dirfd, const char *p, int flags) {
+    return v3c_sc(V3C_SYS_openat, dirfd, (long)p, flags | V3C_O_CLOEXEC | V3C_O_NONBLOCK, 0, 0, 0);
+}
 static inline long v3c_faccess(const char *p, int mode) {
     long r = v3c_sc(V3C_SYS_faccessat2, V3C_AT_FDCWD, (long)p, mode, V3C_AT_EACCESS, 0, 0);
     /* An old kernel or seccomp profile may not know faccessat2. */
     if (r == -V3C_ENOSYS || r == -V3C_EPERM) r = V3C_SC(V3C_SYS_faccessat, V3C_AT_FDCWD, p, mode);
+    return r;
+}
+
+/* "/proc/self/fd/<fd>", which reaches that very file whatever has happened to its name. */
+static inline void v3c_fd_path(char *out, long fd) {
+    static const char pre[] = "/proc/self/fd/";
+    char t[24];
+    int n = 0;
+    for (const char *q = pre; *q;) *out++ = *q++;
+    do { t[n++] = (char)('0' + fd % 10); fd /= 10; } while (fd);
+    while (n) *out++ = t[--n];
+    *out = 0;
+}
+static inline long v3c_faccess_fd(long fd, int mode) {
+    char p[40];
+    v3c_fd_path(p, fd);
+    return v3c_faccess(p, mode);
+}
+
+/* The judged descriptor as it must be for the exec: surviving it, at a high number so that the first opens in the new
+ * process are what they would be, until its client closes it. Takes over fd; negative errno. */
+static inline long v3c_pin(long fd) {
+    long r = v3c_sc(V3C_SYS_fcntl, fd, 0 /* F_DUPFD */, 1000, 0, 0, 0);
+    if (r < 0) r = v3c_sc(V3C_SYS_fcntl, fd, 0 /* F_DUPFD */, 3, 0, 0, 0);
+    V3C_SC(V3C_SYS_close, fd, 0, 0);
     return r;
 }
 
@@ -106,30 +137,43 @@ static inline void v3c_set(struct v3c_exec *x, int verdict, int err, const char 
     x->verdict = verdict; x->err = err; x->why = why;
 }
 
-/* Judges the program at path, following shebangs. Always sets x->final. */
-static inline void v3c_judge(const char *path, struct v3c_exec *x) {
+/* Why open-for-read failed on a name: a file the caller may run but not read cannot be loaded. O_PATH reaches it
+ * without read permission and is enough for fstat and access, which is all this needs. */
+static inline void v3c_unopenable(struct v3c_exec *x, int dirfd, const char *cur, int oflags, long err) {
+    struct v3c_stat st;
+    long fd = err == -V3C_EACCES ? v3c_openat(dirfd, cur, oflags | V3C_O_PATH) : -1;
+    if (fd < 0) { v3c_set(x, V3C_FAIL, (int)-err, 0); return; }
+    if (V3C_SC(V3C_SYS_fstat, fd, &st, 0) == 0 && (st.mode & 0170000) == 0100000 && v3c_faccess_fd(fd, V3C_X_OK) == 0)
+        /* EPERM, not EACCES: execvp would take EACCES as a reason to run the next file in PATH. */
+        v3c_set(x, V3C_REFUSE, V3C_EPERM, "it is executable but not readable, so DynamoRIO cannot load it");
+    else
+        v3c_set(x, V3C_FAIL, V3C_EACCES, 0);
+    V3C_SC(V3C_SYS_close, fd, 0, 0);
+}
+
+/* Judges the program at dirfd/path, opened once (oflags: O_NOFOLLOW for the first name if asked), following
+ * shebangs, and on OK leaves the final file open in x->fd: every check is on that descriptor, so whatever the
+ * name means by the time of the exec does not matter. Always sets x->final. */
+static inline void v3c_judge(int dirfd, const char *path, int oflags, struct v3c_exec *x) {
     const char *cur = path;
-    x->n = 0; x->level = 0; x->final = path;
+    x->n = 0; x->level = 0; x->final = path; x->fd = -1;
     v3c_set(x, V3C_OK, 0, 0);
     for (int lvl = 0;; lvl++) {
         struct v3c_stat st;
         unsigned char *h = (unsigned char *)x->hdr[lvl];
         long fd, n;
         x->level = lvl; x->final = cur;
-        fd = v3c_openat(cur);
+        fd = v3c_openat(dirfd, cur, oflags);
         if (fd < 0) {
-            /* DR would fail to open it too, and then let the kernel run it untranslated. */
-            if (v3c_faccess(cur, V3C_X_OK) == 0)
-                v3c_set(x, V3C_REFUSE, 0, "it is executable but not readable, so DynamoRIO cannot load it");
-            else
-                v3c_set(x, V3C_PASS, (int)-fd, 0);
+            v3c_unopenable(x, dirfd, cur, oflags, fd);
             return;
         }
-        if (V3C_SC(V3C_SYS_fstat, fd, &st, 0) != 0 || (st.mode & 0170000) != 0100000) {
-            v3c_set(x, V3C_PASS, V3C_EACCES, 0);
+        /* An interpreter's name is the kernel's, relative to the working directory. */
+        dirfd = V3C_AT_FDCWD; oflags = 0;
+        if (V3C_SC(V3C_SYS_fstat, fd, &st, 0) != 0 || (st.mode & 0170000) != 0100000 || v3c_faccess_fd(fd, V3C_X_OK) != 0) {
+            v3c_set(x, V3C_FAIL, V3C_EACCES, 0);
             goto done;
         }
-        if (v3c_faccess(cur, V3C_X_OK) != 0) { v3c_set(x, V3C_PASS, V3C_EACCES, 0); goto done; }
         n = v3c_sc(V3C_SYS_pread64, fd, (long)h, V3C_HDR, 0, 0, 0);
         if (n < 0) n = 0;
         h[n] = 0;
@@ -137,7 +181,7 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
             /* The kernel ignores setuid on a script and honours it on the interpreter. */
             if (x->n == V3C_MAXSHEBANG) { v3c_set(x, V3C_FAIL, V3C_ELOOP, "shebang chain too deep"); goto done; }
             if (!v3c_shebang((char *)h, n, &x->interp[x->n], &x->arg[x->n])) {
-                v3c_set(x, V3C_PASS, V3C_ENOEXEC, 0);
+                v3c_set(x, V3C_FAIL, V3C_ENOEXEC, 0);
                 goto done;
             }
             cur = x->interp[x->n++];
@@ -148,7 +192,7 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
             unsigned long phoff = 0;
             unsigned phnum, phsz;
             int machine = h[18] | (h[19] << 8), type = h[16] | (h[17] << 8);
-            if (h[4] == 1) { v3c_set(x, V3C_REFUSE, 0, "it is a 32-bit program"); goto done; }
+            if (h[4] == 1) { v3c_set(x, V3C_REFUSE, V3C_ENOEXEC, "it is a 32-bit program"); goto done; }
             if (n < 64 || h[4] != 2 || h[5] != 1 || machine != 62 || (type != 2 && type != 3)) {
                 v3c_set(x, V3C_FAIL, V3C_ENOEXEC, "not an x86-64 executable");
                 goto done;
@@ -178,7 +222,7 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
                     }
                     ip[sz] = 0;
                     {
-                        long ifd = v3c_openat(ip);
+                        long ifd = v3c_openat(V3C_AT_FDCWD, ip, 0);
                         if (ifd < 0) {
                             v3c_set(x, V3C_FAIL, V3C_ENOENT, "its ELF interpreter cannot be opened");
                             goto done;
@@ -189,10 +233,12 @@ static inline void v3c_judge(const char *path, struct v3c_exec *x) {
                 }
             }
             x->why = v3c_priv_change((int)fd, &st);
-            if (x->why) v3c_set(x, V3C_REFUSE, 0, x->why);
-            goto done;
+            if (x->why) { v3c_set(x, V3C_REFUSE, V3C_EPERM, x->why); goto done; }
+            x->fd = fd;
+            return;
         }
-        v3c_set(x, V3C_PASS, V3C_ENOEXEC, 0);
+        /* binfmt_misc could still take it, natively; nothing but an ELF file can run under DynamoRIO. */
+        v3c_set(x, V3C_FAIL, V3C_ENOEXEC, 0);
     done:
         V3C_SC(V3C_SYS_close, fd, 0, 0);
         return;

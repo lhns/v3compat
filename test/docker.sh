@@ -63,7 +63,7 @@ expect "setuid-root file natively gives euid 0 (the case is real)" 0 'euid=0'
 r "$id-static" -- /t/ids_suid
 if [ "$st" = 87 ] && [ -z "$out" ] && echo "$err" | grep -q 'refusing to exec'; then echo "ok setuid-root file as uid 65534 is refused"; else echo "FAIL setuid: status $st stdout '$out' stderr '$err'"; bad=1; fi
 r "$id-static" -- /t/execer_static plain /t/ids_suid
-if [ "$st" = 87 ] && echo "$err" | grep -q 'refusing to exec'; then echo "ok setuid-root file exec'd by a program is refused"; else echo "FAIL setuid exec: status $st stdout '$out' stderr '$err'"; bad=1; fi
+if [ "$st" = 1 ] && echo "$out" | grep -q 'FAIL exec plain: Operation not permitted' && echo "$err" | grep -q 'refusing to exec'; then echo "ok setuid-root file exec'd by a program fails with EPERM"; else echo "FAIL setuid exec: status $st stdout '$out' stderr '$err'"; bad=1; fi
 r "$id-static" -e V3COMPAT_NATIVE=1 -- /t/ids_static translated
 expect "native bypass runs without DynamoRIO" 0 "euid=65534 .*translated=0"
 r "$id-dyn" -- /t/lz_dyn translated
