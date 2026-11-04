@@ -8,8 +8,8 @@ instructions the CPU lacks. Whether it is fast enough is being measured.
 
 ## Build and run
 
-Linux x86-64 only. Needs cmake 3.18+ and a C compiler. DynamoRIO `release_11.3.0-1` is downloaded at configure
-time (sha256 checked, cached in `~/.cache/v3compat`); `-DV3COMPAT_DR_ROOT=<dir>` uses an extracted copy instead.
+Linux x86-64 only. Needs cmake 3.18+, git and C and C++ compilers. Our DynamoRIO fork is built from its pinned commit at
+configure time (cached in `~/.cache/v3compat`); `-DV3COMPAT_DR_ROOT=<dir>` uses an existing install instead.
 
 ```sh
 cmake -S . -B build && cmake --build build

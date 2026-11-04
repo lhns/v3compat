@@ -1,25 +1,37 @@
-# DynamoRIO is pinned and downloaded at configure time, never committed.
-# V3COMPAT_DR_ROOT points at an existing extracted release instead (offline builds).
-set(V3COMPAT_DR_TAG release_11.3.0-1)
-set(V3COMPAT_DR_ASSET DynamoRIO-Linux-11.3.0.tar.gz)
-set(V3COMPAT_DR_SHA256 ae02049df5c4daeb82d4087aaa0d38bf58cdd26b38fb6042dccf27cbc32ceed9)
-set(V3COMPAT_DR_URL https://github.com/DynamoRIO/dynamorio/releases/download/${V3COMPAT_DR_TAG}/${V3COMPAT_DR_ASSET})
-set(V3COMPAT_DR_ROOT "" CACHE PATH "Use this extracted DynamoRIO release instead of downloading")
-# Outside the build tree so a fresh build dir does not refetch 400 MB.
-set(V3COMPAT_DR_CACHE "$ENV{HOME}/.cache/v3compat" CACHE PATH "Download and extraction cache")
+# DynamoRIO is built from our fork at a pinned commit at configure time (ADR 0003), release config only.
+# V3COMPAT_DR_ROOT points at an existing install instead (offline builds).
+set(V3COMPAT_DR_REPO https://github.com/lhns/dynamorio)
+set(V3COMPAT_DR_COMMIT b5cfdb02790199c832336b99d4d4250e496b4d71)
+set(V3COMPAT_DR_ROOT "" CACHE PATH "Use this DynamoRIO install instead of building the pinned commit")
+# Outside the build tree so a fresh build dir does not rebuild it.
+set(V3COMPAT_DR_CACHE "$ENV{HOME}/.cache/v3compat" CACHE PATH "DynamoRIO source build cache")
+
+function(_v3compat_run)
+  execute_process(COMMAND ${ARGN} RESULT_VARIABLE _rc)
+  if(_rc)
+    message(FATAL_ERROR "DynamoRIO build step failed (${_rc}): ${ARGN}")
+  endif()
+endfunction()
 
 if(NOT V3COMPAT_DR_ROOT)
-  set(_tgz "${V3COMPAT_DR_CACHE}/${V3COMPAT_DR_SHA256}.tar.gz")
-  set(_dir "${V3COMPAT_DR_CACHE}/dr-${V3COMPAT_DR_SHA256}")
-  if(NOT EXISTS "${_dir}/.done")
-    message(STATUS "Fetching DynamoRIO ${V3COMPAT_DR_TAG}")
-    file(DOWNLOAD "${V3COMPAT_DR_URL}" "${_tgz}" EXPECTED_HASH SHA256=${V3COMPAT_DR_SHA256} SHOW_PROGRESS)
-    file(REMOVE_RECURSE "${_dir}")
-    file(ARCHIVE_EXTRACT INPUT "${_tgz}" DESTINATION "${_dir}")
-    file(WRITE "${_dir}/.done" "")
-    file(REMOVE "${_tgz}")
+  set(V3COMPAT_DR_ROOT "${V3COMPAT_DR_CACHE}/dr-${V3COMPAT_DR_COMMIT}")
+  if(NOT EXISTS "${V3COMPAT_DR_ROOT}/.done")
+    message(STATUS "Building DynamoRIO ${V3COMPAT_DR_COMMIT}")
+    set(_work "${V3COMPAT_DR_ROOT}.work")
+    file(REMOVE_RECURSE "${V3COMPAT_DR_ROOT}" "${_work}")
+    file(MAKE_DIRECTORY "${_work}/src")
+    _v3compat_run(git -C "${_work}/src" init -q)
+    _v3compat_run(git -C "${_work}/src" fetch -q --depth 1 ${V3COMPAT_DR_REPO} ${V3COMPAT_DR_COMMIT})
+    _v3compat_run(git -C "${_work}/src" checkout -q FETCH_HEAD)
+    # Only the core, drrun and the extensions: the clients and tests are what need the submodules.
+    _v3compat_run(${CMAKE_COMMAND} -S "${_work}/src" -B "${_work}/build"
+      -DCMAKE_INSTALL_PREFIX=${V3COMPAT_DR_ROOT} -DDEBUG=OFF -DBUILD_DOCS=OFF -DBUILD_TESTS=OFF
+      -DBUILD_SAMPLES=OFF -DBUILD_CLIENTS=OFF)
+    include(ProcessorCount)
+    ProcessorCount(_jobs)
+    _v3compat_run(${CMAKE_COMMAND} --build "${_work}/build" --target install --parallel ${_jobs})
+    file(WRITE "${V3COMPAT_DR_ROOT}/.done" "")
+    file(REMOVE_RECURSE "${_work}")
   endif()
-  file(GLOB _top "${_dir}/DynamoRIO-Linux-*")
-  list(GET _top 0 V3COMPAT_DR_ROOT)
 endif()
 set(DynamoRIO_DIR "${V3COMPAT_DR_ROOT}/cmake" CACHE PATH "" FORCE)
