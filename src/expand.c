@@ -4,6 +4,7 @@
  * is read by one real load with translation P, so a fault is the real fault at P. Inline code
  * leaves flags alone; only the mcontext path writes them, in its atomic commit.
  */
+#include "allow.h"
 #include "expand.h"
 #include "drmgr.h"
 #include "avxemu_helpers.h"
@@ -162,7 +163,14 @@ static void expand_inline(emit_t *e, instr_t *in) {
 }
 
 static void refuse_call(app_pc pc, int opc) {
-    dr_fprintf(STDERR, "v3compat: refusing %s at %p: not emulated\n", decode_opcode_name(opc), pc);
+    void *dc = dr_get_current_drcontext();
+    char text[ALLOW_TEXT_MAX] = "?";
+    instr_t in;
+    instr_init(dc, &in);
+    if (decode(dc, pc, &in) != NULL && instr_valid(&in)) allow_key(dc, &in, text);
+    instr_free(dc, &in);
+    dr_fprintf(STDERR, "v3compat: refusing %s at %p: not on the audited list or not emulated (%s)\n",
+               decode_opcode_name(opc), pc, text);
     dr_exit_process(V3COMPAT_REFUSED);
 }
 
@@ -559,9 +567,13 @@ static void cpuid_call(void) {
     if (leaf == 1) {
         c |= (1u << 12) | (1u << 22);   /* FMA, MOVBE */
     } else if (leaf == 7) {
-        /* Kept: FSGSBASE, SMEP, ERMS, INVPCID. Set: BMI1, AVX2, BMI2. */
-        b = sub != 0 ? 0 : (b & ((1u << 0) | (1u << 7) | (1u << 9) | (1u << 10))) | (1u << 3) | (1u << 5) | (1u << 8);
+        /* Kept: SMEP, ERMS, INVPCID. Set: BMI1, AVX2, BMI2. FSGSBASE is hidden: DR keeps its own TLS
+         * in a segment and does not mangle rdgsbase or wrgsbase, and they are off the list. */
+        b = sub != 0 ? 0 : (b & ((1u << 7) | (1u << 9) | (1u << 10))) | (1u << 3) | (1u << 5) | (1u << 8);
         a = c = d = 0;
+    } else if (leaf == 0xd && sub == 1) {
+        a &= 1u;                        /* XSAVEOPT kept; XSAVEC, XGETBV1, XSAVES hidden: Ivy Bridge lacks them, and glibc's resolver would pick them */
+        c = d = 0;
     } else if (leaf == 0x80000001) {
         c = (c & 1u) | (1u << 5);       /* LAHF kept; LZCNT set */
     }
@@ -588,16 +600,6 @@ static bool vec_shape_ok(instr_t *in) {
 }
 
 /* EVEX has no DR flag in this version: it is opcode 0x62 after any legacy padding. */
-bool instr_is_evex_encoded(void *dc, instr_t *in) {
-    if (!instr_raw_bits_valid(in)) return false;
-    const byte *p = instr_get_raw_bits(in);
-    for (uint i = 0; i < instr_length(dc, in); i++, p++) {
-        if (*p == 0x2e || *p == 0x36 || *p == 0x3e || *p == 0x26 || *p == 0x64 || *p == 0x65 || *p == 0x67) continue;
-        return *p == 0x62;
-    }
-    return false;
-}
-
 /*
  * AVX1 has the same operation under another opcode for these, faults and all, so the application
  * instruction stays and only its opcode changes. DR's vmovntdqa and the store forms of the masked
@@ -635,6 +637,15 @@ static bool substitute(instr_t *in) {
     return true;
 }
 
+void expand_refuse(void *dc, instrlist_t *bb, instr_t *in) {
+    instrlist_set_translation_target(bb, instr_get_app_pc(in));
+    dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(instr_get_app_pc(in)),
+                         OPND_CREATE_INT32(instr_get_opcode(in)));
+    instrlist_set_translation_target(bb, NULL);
+    instrlist_remove(bb, in);
+    instr_destroy(dc, in);
+}
+
 void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
     int opc = instr_get_opcode(in);
     if (!lacked && opc != OP_cpuid) return;
@@ -645,7 +656,9 @@ void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
     if (opc == OP_cpuid) {
         dr_insert_clean_call_ex(dc, bb, in, (void *)cpuid_call,
                                 DR_CLEANCALL_READS_APP_CONTEXT | DR_CLEANCALL_WRITES_APP_CONTEXT, 0);
-    } else if (instr_is_evex_encoded(dc, in) || !all_mem_supported(in)) {
+    } else if (instr_is_evex_encoded(dc, in) || !all_mem_supported(in) ||
+               /* XOP bextr shares the opcode, and its control is an immediate the helper does not take. */
+               (opc == OP_bextr && opnd_is_immed(instr_get_src(in, 1)))) {
         dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(e.pc),
                              OPND_CREATE_INT32(opc));
     } else if ((f = FIND(bmi_forms, opc)) != NULL) {

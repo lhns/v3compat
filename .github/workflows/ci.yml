@@ -38,13 +38,21 @@ jobs:
         run: cmake --build build -j
       - name: Test
         run: ctest --test-dir build --output-on-failure
-      - name: duckdb, native against the client
+      - name: Real programs hit no form off the list; duckdb, native against the client
         run: |
           img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
           docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+          sudo apt-get install -y zstd
+          sh test/apps/audit.sh build/inst/bin/v3compat-run ./duckdb
           sh test/apps/duckdb.sh "" ./duckdb | tee native.txt
           sh test/apps/duckdb.sh "build/inst/bin/v3compat-run --" ./duckdb | tee client.txt
           diff <(sed 's/ wall.*//' native.txt) <(sed 's/ wall.*//' client.txt)
+      - name: The probe's results on this CPU, the list's AVX2 evidence (test/allow/regen.sh)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allow-probe
+          path: build/test/allow_probe.tsv
       - name: Tarball
         run: |
           cmake --build build --target package-tarball

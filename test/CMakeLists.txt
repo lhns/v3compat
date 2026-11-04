@@ -16,6 +16,7 @@ add_executable(flagrepro flagrepro.c)
 add_executable(fault_state fault_state.c)
 add_executable(flags_kept flags_kept.c)
 add_executable(misc_forms misc_forms.c)
+add_executable(refuse_forms refuse_forms.c)
 add_library(lzlib SHARED lzlib.c)
 target_compile_options(lzlib PRIVATE -mlzcnt)
 add_executable(lzcnt_dyn lzcnt.c)
@@ -49,6 +50,28 @@ add_test(NAME client-stats COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/stats.sh" ${R
 set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynamorio
   exec-child-has-dynamorio native-bypass flags-preserved client-stats fault-state flags-kept misc-forms
   lzcnt-dlopen lzcnt-static-exec PROPERTIES TIMEOUT 120)
+
+# ADR 0008: off the audited list exits 86, on it runs, whatever this CPU would do with it.
+foreach(f xop-bextr-imm vmpsadbw-ymm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
+          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb)
+  v3test(refused-${f} exit 86 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
+  set_tests_properties(refused-${f} PROPERTIES TIMEOUT 120)
+endforeach()
+foreach(f pause rep-ret-next endbr64 prefetchw popcnt crc32 aesenc vcvtph2ps rdrand not-executed)
+  v3test(listed-${f} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
+  set_tests_properties(listed-${f} PROPERTIES TIMEOUT 120)
+endforeach()
+v3test(cpuid-hides-xsavec stdout-has xsave-extras=0 exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> cpuid-xsavec)
+v3test(cpuid-hides-fsgsbase stdout-has fsgsbase=0 exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> cpuid-fsgsbase)
+
+# The list: evidence and generated files agree, DR decodes every row to its key, and this CPU matches the
+# Ivy Bridge results on every tested row. allow_probe.tsv is CI's artifact, the AVX2 evidence (regen.sh).
+set(_A "${CMAKE_CURRENT_SOURCE_DIR}/allow")
+add_executable(allow_probe "${_A}/probe.c" "${_A}/probe_stub.S")
+target_compile_options(allow_probe PRIVATE -fno-stack-protector -O1 -U_FORTIFY_SOURCE)
+target_link_options(allow_probe PRIVATE -static)
+add_test(NAME allowlist-check COMMAND sh -c "gzip -dc '${_A}/evidence/rows.tsv.gz' > rows.tsv && $<TARGET_FILE:allow_dkey> < rows.tsv > keys.tsv && $<TARGET_FILE:allow_probe> < rows.tsv > allow_probe.tsv && python3 '${_A}/gen.py' check allow_probe.tsv keys.tsv")
+set_tests_properties(allowlist-check PROPERTIES TIMEOUT 300)
 
 # The client's archive must stay plain AVX1 with no libc: the CI CPU would run anything.
 add_test(NAME helpers-guard COMMAND sh "${AVXEMU_SRC}/test/check-helpers-lib.sh" $<TARGET_FILE:avxemu_helpers>)
