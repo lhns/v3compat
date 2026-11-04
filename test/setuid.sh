@@ -57,7 +57,7 @@ refused "script whose interpreter is setuid" "$RUN" "$t/script2"
 
 # File capabilities: refused for a user they would change, fine for root.
 mk cap_file 755 root:root
-python3 - "$t/cap_file" <<'PY' && capok=1 || capok=0
+$S python3 - "$t/cap_file" <<'PY' && capok=1 || capok=0
 import os, struct, sys
 # VFS_CAP_REVISION_2, permitted CAP_NET_BIND_SERVICE
 os.setxattr(sys.argv[1], 'security.capability', struct.pack('<IIIII', 0x02000000, 1 << 10, 0, 0, 0))

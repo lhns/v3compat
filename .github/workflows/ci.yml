@@ -39,7 +39,8 @@ jobs:
       - name: Test
         env:
           V3COMPAT_CI: "1"
-        run: ctest --test-dir build --output-on-failure
+        # setuid's checks run as uid 65534, which must reach the build tree.
+        run: chmod o+x "$HOME" && ctest --test-dir build --output-on-failure
       - name: Real programs hit no form off the list; duckdb, native against the client
         run: |
           img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'

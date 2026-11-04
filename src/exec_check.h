@@ -39,7 +39,7 @@ enum {
     V3C_SYS_getegid = 108, V3C_SYS_fstatfs = 138, V3C_SYS_prctl = 157, V3C_SYS_fgetxattr = 193,
     V3C_SYS_gettid = 186, V3C_SYS_execve = 59, V3C_SYS_exit_group = 231, V3C_SYS_openat = 257,
     V3C_SYS_newfstatat = 262, V3C_SYS_faccessat = 269, V3C_SYS_execveat = 322, V3C_SYS_statx = 332,
-    V3C_SYS_openat2 = 437, V3C_SYS_faccessat2 = 439
+    V3C_SYS_clone3 = 435, V3C_SYS_openat2 = 437, V3C_SYS_faccessat2 = 439
 };
 enum {
     V3C_AT_FDCWD = -100, V3C_AT_SYMLINK_NOFOLLOW = 0x100, V3C_AT_EACCESS = 0x200, V3C_AT_EMPTY_PATH = 0x1000,
