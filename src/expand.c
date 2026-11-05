@@ -71,7 +71,7 @@ static void pick_scratch(emit_t *e, instr_t *in) {
 static bool mem_supported(opnd_t m) {
     if (opnd_get_segment(m) == DR_SEG_FS && opnd_is_base_disp(m) &&
         ((opnd_get_base(m) != DR_REG_NULL && !reg_is_64bit(opnd_get_base(m))) ||
-         (opnd_get_index(m) != DR_REG_NULL && !reg_is_64bit(opnd_get_index(m)))))
+         (opnd_get_index(m) != DR_REG_NULL && reg_is_gpr(opnd_get_index(m)) && !reg_is_64bit(opnd_get_index(m)))))
         return false;   /* 0x67 with fs: not worth the wrap */
     return opnd_get_segment(m) != DR_SEG_GS && !opnd_is_far_rel_addr(m) && !opnd_is_far_abs_addr(m);
 }
