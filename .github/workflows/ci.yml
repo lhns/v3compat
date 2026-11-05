@@ -41,7 +41,10 @@ jobs:
           V3COMPAT_CI: "1"
         # setuid's checks run as uid 65534, which must reach the build tree.
         run: chmod o+x "$HOME" && ctest --test-dir build --output-on-failure
-      - name: BMI ops, ns per op - native, inline in the client, clean call (V3COMPAT_HELPERS_ONLY=1)
+      - name: Runner CPU
+        run: |
+          { echo '```'; grep -m1 'model name' /proc/cpuinfo; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: BMI and vector ops, ns per op - native, inline in the client, clean call (V3COMPAT_HELPERS_ONLY=1)
         run: |
           for i in 1 2 3; do
             for mode in native inline helpers; do
