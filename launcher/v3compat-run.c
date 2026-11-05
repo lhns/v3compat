@@ -181,7 +181,7 @@ __attribute__((used)) void run(long *sp) {
         const char *user = envget(envp, "V3COMPAT_DR_OPTS="), *s;
         char *p = opts;
         if (user && slen(user) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", ""); /* before it is copied */
-        p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset ");
+        p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset -no_ignore_syscalls ");
         if (user && *user) { p = scpy(p, user); *p++ = ' '; }
         p = scpy(p, "-client_lib \""); p = scpy(p, client); p = scpy(p, ";0;");
         s = envget(envp, "V3COMPAT_STATS=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-stats ");

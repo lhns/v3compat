@@ -175,9 +175,11 @@ upstream with no client 50 of 482, 28 silent; native 0 of 60.
 The fixed fault: the x64 trace compare's tag spill was taken as redundant, so a relocated thread got an application code
 address in `rax`.
 
-Cost of reset off: a program that keeps generating and unmapping code grows about 19 KB per region (13 regions per second:
-305 MB in 20 minutes; native stays at 1.2 MB) and aborts with "Out of memory. Program aborted.", status 255, at a real limit;
-`-vm_size` does not limit it. Long-lived servers that do not generate code are unaffected.
+Reset off and code generation, [ADR 0011](adr/0011-no-ignored-syscalls.md): a program that generates and unmaps code while
+another thread waits in a system call grew 18.4 KB per region on `-ignore_syscalls`, the default, and 0.0 on
+`-no_ignore_syscalls`, over 3,000 regions **[measured]**. Cost: `getppid` 485-491 ns against 488-494, duckdb's query 39.8-40.1 s
+against 39.8-40.3 s, three runs each. Stress on this config (with the fork's vfork fix): duckdb 0 of 240; signal stress 1 of 390
+and DynamoRIO-alone stress 1 of 306, both crashes with no wrong output, see the SIGSEGV under "Open items".
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 

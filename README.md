@@ -21,7 +21,7 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
   0 of 296 in the register and flags stress (`test/regstress.c`). The docs give no bound for the last two; by the
   rule of three they are about 0.8% and 1.0%. Zero failures do not prove a rate of zero. It is unclear from the docs whether
   the 296 run was under the client or DynamoRIO alone.
-- Programs that keep generating and unmapping code (JIT) grow memory without bound and abort with status 255 at a memory limit.
+- Every system call leaves the code cache (`-no_ignore_syscalls`, [ADR 0011](docs/adr/0011-no-ignored-syscalls.md)), so code a JIT unmaps is freed while other threads wait.
 - A `vfork` child killed by a signal before it execs hangs its parent. A fix is in progress and is not in this tree.
 - Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet. JVM workloads (13x to 84x) are out of scope.
 
