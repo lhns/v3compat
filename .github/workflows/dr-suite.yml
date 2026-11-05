@@ -14,7 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         sha: [39074ef92f0864e328ac74d0f00b9022f8ef4f8f, f6e248798251a736e0ebf7c66c88ad9947c21cd2]
-        build: [debug, release]
+        build: [release]
+        rep: [a, b]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,22 +45,16 @@ jobs:
         run: |
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           t="${{ matrix.sha }}-${{ matrix.build }}"
-          extract() { sed -n 's/^[0-9]*://p' Testing/Temporary/LastTestsFailed.log 2>/dev/null | sort > "$1"; }
-          ctest -j"$(nproc)" --timeout 300 --output-on-failure || true
-          extract "$out/$t-first.txt"
-          cp Testing/Temporary/LastTest.log "$out/$t-LastTest.log" || true
-          ctest -j"$(nproc)" --timeout 300 --output-on-failure --rerun-failed || true
-          extract "$out/$t-rerun.txt"
-          cp Testing/Temporary/LastTest.log "$out/$t-LastTest-rerun.log" || true
-          {
-            echo "## $t"
-            echo "### First pass failures ($(wc -l < "$out/$t-first.txt"))"
-            echo '```'; cat "$out/$t-first.txt"; echo '```'
-            echo "### Rerun failures ($(wc -l < "$out/$t-rerun.txt"))"
-            echo '```'; cat "$out/$t-rerun.txt"; echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          grep -m1 'model name' /proc/cpuinfo | tee "$out/$t-cpu.txt"
+          n=0; f=0
+          run() { for i in $(seq 40); do n=$((n+1)); ctest -R 'client\.attach_test$' --timeout 120 >/dev/null 2>&1 || { f=$((f+1)); cat suite/tests/client.attach_test*.out suite/tests/*attach_test*.err >> "$out/$t-fail.txt" 2>/dev/null; sed -n '/attach_test/,$p' Testing/Temporary/LastTest.log | tail -25 >> "$out/$t-fail.txt"; }; done; echo "$1: $f failed of $n" | tee -a "$out/$t-counts.txt"; n=0; f=0; }
+          run idle
+          for i in $(seq "$(nproc)"); do (yes >/dev/null) & done
+          run loaded
+          pkill yes || true
+          cat "$out/$t-counts.txt" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: results-${{ matrix.sha }}-${{ matrix.build }}
+          name: results-${{ matrix.sha }}-${{ matrix.build }}-${{ matrix.rep }}
           path: ${{ runner.temp }}/out
