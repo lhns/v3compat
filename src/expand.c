@@ -268,7 +268,7 @@ static void expand_oneop(emit_t *e, instr_t *in) {
         }
     } else {
         if (ab) put(e, INSTR_CREATE_vextractf128(e->dc, reg(t0x), reg(sv), OPND_CREATE_INT8(1)));
-        else put(e, INSTR_CREATE_vpsrldq(e->dc, reg(t0x), reg(sx), OPND_CREATE_INT8(w->hi_shift)));
+        else op_128(e, OP_vpsrldq, t0x, reg(sx), OPND_CREATE_INT8(w->hi_shift));   /* DR lists the immediate first */
         op_1(e, opc, t0x, reg(t0x));
         op_1(e, opc, t1x, reg(sx));
     }
