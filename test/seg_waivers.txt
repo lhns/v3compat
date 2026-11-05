@@ -15,4 +15,3 @@ vphaddw refused whatever the operand: not on the audited list (ADR 0008), exit 8
 vphsubd refused whatever the operand: not on the audited list (ADR 0008), exit 86
 vphsubsw refused whatever the operand: not on the audited list (ADR 0008), exit 86
 vphsubw refused whatever the operand: not on the audited list (ADR 0008), exit 86
-vmpsadbw refused whatever the operand: not on the audited list (ADR 0008), exit 86

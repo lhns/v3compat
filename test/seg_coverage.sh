@@ -6,7 +6,7 @@ here=$(dirname "$0")
 bad=0
 for m in $(grep -E '_MEM' "$here/allow/emulated-iforms.txt" | grep -v '^#' | cut -d_ -f1 | sort -u | tr 'A-Z' 'a-z'); do
   op=$(echo "$m" | sed -n -E 's/^vf([a-z]+)(132|213|231)(ps|pd)$/FMA3 \1/p; s/^vf([a-z]+)(132|213|231)(ss|sd)$/FMAS \1/p')
-  if grep -Eq "F\(X, [A-Z0-9]+, $m(_[a-z0-9]+)?\)" "$here/seg_operand.c" ||
+  if grep -Eq "F\(X, [A-Z0-9_]+, $m(_[a-z0-9]+)?\)" "$here/seg_operand.c" ||
      { [ -n "$op" ] && grep -q "${op% *}(F, X, ${op#* })" "$here/seg_operand.c"; } ||
      grep -q "^$m " "$here/seg_waivers.txt"; then :
   else echo "no fs/gs row or waiver for $m"; bad=1; fi
