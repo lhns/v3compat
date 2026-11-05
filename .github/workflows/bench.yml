@@ -31,11 +31,15 @@ jobs:
           h() { "$@" 2>/dev/null | sha256sum | cut -c1-12; }
           echo "native hashes: $(h ./duckdb -csv -noheader -c 'select 42') $(h ./duckdb -csv -noheader -c "$C") $(h ./duckdb -csv -noheader -f $SQL)"
           T native-select 3 ./duckdb -c "select 42"
-          run() { l=$1; v=$2; o=$3; export V3COMPAT_DR_OPTS="$o"
+          run() { l=$1; v=$2; o=$3; vr=$4; export V3COMPAT_DR_OPTS="$o"
             T "$l select" 5 $v ./duckdb -c "select 42"
             T "$l compute" 3 $v ./duckdb -c "$C"
-            T "$l varied" 2 $v ./duckdb -f $SQL
-            echo "$l hashes: $(h $v ./duckdb -csv -noheader -c 'select 42') $(h $v ./duckdb -csv -noheader -c "$C") $(h $v ./duckdb -csv -noheader -f $SQL)"; }
-          run base /tmp/i-base/bin/v3compat-run ""
-          run memo /tmp/i-new/bin/v3compat-run ""
-          for t in 500 5000; do run "memo-hot$t" /tmp/i-new/bin/v3compat-run "-hot_threshold $t"; done
+            [ -n "$vr" ] && T "$l varied" 2 $v ./duckdb -f $SQL
+            echo "$l hashes: $(h $v ./duckdb -csv -noheader -c 'select 42') $(h $v ./duckdb -csv -noheader -c "$C")"; }
+          B=/tmp/i-base/bin/v3compat-run
+          run base $B "" 1
+          V3C_XOPTS=-noallow run noallow $B "" ""
+          run notraces $B "-disable_traces" ""
+          for t in 500 2000 10000; do run "trace_threshold$t" $B "-trace_threshold $t" 1; done
+          run bogus $B "-hot_threshold 5000" ""
+          run memo /tmp/i-new/bin/v3compat-run "" ""
