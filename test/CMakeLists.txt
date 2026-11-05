@@ -191,6 +191,13 @@ target_compile_options(regstress PRIVATE -O1 -w -ftls-model=local-exec)
 target_link_options(regstress PRIVATE -static -pthread)
 v3test(regstress stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 sig jit)
 v3test(regstress-control exit 77 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 badsig)
+# Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
+add_executable(jitgrowth jitgrowth.c)
+target_link_options(jitgrowth PRIVATE -pthread)
+v3test(jitgrowth stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:jitgrowth> 1000)
+v3test(jitgrowth-control exit 1 -- env V3COMPAT_DR_OPTS=-ignore_syscalls ${RUN} -- $<TARGET_FILE:jitgrowth> 1000)
+v3test(jitgrowth-native stdout-has PASS exit 0 -- $<TARGET_FILE:jitgrowth> 1000)
+set_tests_properties(jitgrowth jitgrowth-control PROPERTIES TIMEOUT 300)
 
 # What the app sees of its own executable (the client rewrites the calls that name it).
 foreach(k dyn static spie nopie)
