@@ -321,6 +321,45 @@ Still differs from native **[measured]**:
 Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
 to a directory fd is not rewritten **[source]**.
 
+### The cache reset
+
+**Mitigation, [ADR 0010](adr/0010-no-cache-reset.md).** All **[measured]** on GitHub AVX2 runners, AMD and Intel; "bad" is a
+wrong output, a crash, an error exit or a timeout, of `test/apps/duckdb-varied.sql` unless noted.
+
+Before: main was bad about 1 run in 10 under the client (11 of 106), some with exit status 0 and one wrong number. Stock
+upstream with no client did the same (50 of 482; 28 silent), native never (0 of 60).
+
+| On the fork with the register fix | Bad |
+|---|---|
+| Client, as shipped (reset off) | 0 of 230: at most 1.3% (95%) |
+| DynamoRIO alone, default reset | 0 of 643 |
+| DynamoRIO alone, resets forced | 0 of 521; regexp query with the threshold at 1, 0 of 642 |
+| Client, resets forced, regexp query | 21 of 21; helpers only, 20 of 20; no expansions, 0 of 70 |
+| `test/regstress.c`, DynamoRIO alone, resets forced, code churn | 8 of 551 (2 lost flags, the rest crashes and hangs) |
+| The same, default reset | 21 of 22 hang |
+| The same, reset off, with code churn, signals or both | 0 of 296 |
+| The same, client, reset off, about 2 kHz of signals per thread on 8 threads, inline expansions on | 0 of 377 |
+
+**The fault that was fixed.** The x64 trace compare spills `xax`, loads the speculative tag into it and stores it to a second
+slot, which the translator took as a redundant spill: a relocated thread got the tag, an application code address, in `rax`.
+
+**Still open, unreachable only while nothing relocates a thread:** flags in the same window (upstream i#400), which the
+stress loses under forced resets; the crashes under the client with forced resets, for which a clean call's saved state
+(upstream i#4219) is the likely cause, not tested; hangs under reset with code churn. One SIGSEGV in 495 runs with reset
+off, on the earlier pin, is unexplained. Async signals are delivered at fragment boundaries, so the signal rows do not
+interrupt an expansion; a fault inside one is the semantic suite's to test.
+
+**Cost of reset off.** The varied query 100 times in one process: peak 626 MB, against 643 MB with reset on, from 580 MB
+at the start of each. With 13 regions of code generated and unmapped per second, memory grows about 14 KB per region (305 MB
+in 20 minutes; native stays at 1.2 MB), also with an idle thread; with reset on that workload hangs, so it has no
+comparison. `-vm_size` does not limit it, as DynamoRIO falls back to the OS. At a real limit (`ulimit -v`) it aborts with
+"Out of memory. Program aborted.", status 255. So long-lived servers that do not generate code are unaffected, and those
+that keep generating and unmapping code grow until that abort.
+
+**CI.** The query runs 30 times under the client. Against a bad rate of 10% that catches it with 96%; against 2%, 45%. It
+cannot see a rate like the unexplained crash's. The reset step, forced on DynamoRIO alone, was bad 15 of 15 on the old pin
+under the client, and is the sharper check.
+
 ### The hang
 
 Settled in [lhns/dynamorio](https://github.com/lhns/dynamorio), branch `fix-pending-signal-self-link`. **[measured]**, on
@@ -359,6 +398,8 @@ only if the numbers justify it.
 
 - **The speed target is an estimate.** Dense AVX2 cost is unproven by anything measured so far.
 - **Dependency on DynamoRIO.** Large and mature, with its own bugs in every executed instruction path.
+- **Thread relocation.** Reset is off because relocating a thread is not faithful: see "The cache reset". Anything new that
+  relocates one needs `test/regstress.c`.
 - **The fork.** Its signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a
   syscall in a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment.
   The lock change affects every thread running during exit and is the one most worth a review.
