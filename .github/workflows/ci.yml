@@ -41,6 +41,19 @@ jobs:
           V3COMPAT_CI: "1"
         # setuid's checks run as uid 65534, which must reach the build tree.
         run: chmod o+x "$HOME" && ctest --test-dir build --output-on-failure
+      - name: BMI ops, ns per op - native, inline in the client, clean call (V3COMPAT_HELPERS_ONLY=1)
+        run: |
+          for i in 1 2 3; do
+            for mode in native inline helpers; do
+              case $mode in
+                native) cmd="build/test/bench_bmi" ;;
+                inline) cmd="build/inst/bin/v3compat-run -- build/test/bench_bmi" ;;
+                helpers) cmd="env V3COMPAT_HELPERS_ONLY=1 build/inst/bin/v3compat-run -- build/test/bench_bmi" ;;
+              esac
+              $cmd | sed "s/^/run$i $mode /"
+            done
+          done | tee bench.txt
+          { echo '```'; cat bench.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - name: Real programs hit no form off the list; duckdb, native against the client
         run: |
           img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
