@@ -693,7 +693,7 @@ static void expand_mulx(emit_t *e, instr_t *in) {
     load_g(e, DR_REG_RDX, 1);
     reg_id_t lop = reg_to_pointer_sized(lo), hip = reg_to_pointer_sized(hi);
     if (lop == hip) {
-        put(e, INSTR_CREATE_mov_ld(e->dc, reg(hi), reg(gsz(t, bytes))));   /* MUTATION commit */
+        put(e, INSTR_CREATE_mov_ld(e->dc, reg(hi), reg(gsz(t2, bytes))));   /* commit */
     } else {
         /* A write that clobbers an input goes last, so the first leaves the instruction re-executable. */
         bool lo_in = lop == DR_REG_RDX || opnd_uses_reg(src, lop);
