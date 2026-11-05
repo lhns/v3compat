@@ -5,9 +5,9 @@ Accepted, 2026-11-05. Removes the unbounded-growth consequence of [0010](0010-no
 
 ## Context
 Fragments retired by a flush are freed once every thread has passed a synch point. A thread blocked in a system call
-counts as passed, but only if the call went through `do_syscall`. DynamoRIO runs "ignorable" calls (`futex`, `pause`,
-`nanosleep`, `read`) inside a fragment, where it cannot be acted for, so one blocked thread keeps everything retired
-since it blocked. With reset off nothing else frees them, and a program that keeps generating and unmapping code grows
+counts as passed, but only if the call went through `do_syscall`. DynamoRIO runs "ignorable" calls (`futex` and `pause`
+among them) inside a fragment, where it cannot be acted for, so one blocked thread keeps everything retired since it
+blocked. With reset off nothing else frees them, and a program that keeps generating and unmapping code grows
 until the out-of-memory abort.
 
 ## Decision
