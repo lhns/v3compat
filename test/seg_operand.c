@@ -117,22 +117,23 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     F(X, BIN, vpermd) F(X, MASKLD, vpmaskmovd) F(X, MASKSTD, vpmaskmovd_st) F(X, UN, vpbroadcastb) \
     F(X, UN, vpbroadcastd) F(X, UN, vpmovzxbw) F(X, BIN, vfmadd231ps) F(X, BINX, vfmadd231sd) \
     F(X, EXT, vextracti128) F(X, INS, vinserti128) F(X, CVTST, vcvtps2ph) F(X, UN, vmovntdqa) \
-    F(X, BLENDV, vpblendvb)
+    F(X, BLENDV, vpblendvb) F(X, GX, bzhi) F(X, GX, shlx) F(X, G2, tzcnt) F(X, BIN, vpand) \
+    F(X, BIN, vpcmpeqd) F(X, UN, vpabsd) F(X, UN, vpmovzxbq) F(X, BIN, vpslld)
 // The rest of the memory forms in test/allow/emulated-iforms.txt (seg_coverage.sh checks the list), in two shapes.
 #define L_WIDE(F, X) \
-    F(X, GX, bextr) F(X, GX, bzhi) F(X, GX, sarx) F(X, GX, shlx) F(X, GX, shrx) F(X, G2, blsi) \
-    F(X, G2, blsmsk) F(X, G2, blsr) F(X, G2, tzcnt) F(X, G3, pdep) F(X, G3, pext) F(X, MULX32, mulx_32) \
+    F(X, GX, bextr) F(X, GX, sarx) F(X, GX, shrx) F(X, G2, blsi) \
+    F(X, G2, blsmsk) F(X, G2, blsr) F(X, G3, pdep) F(X, G3, pext) F(X, MULX32, mulx_32) \
     F(X, RORX_32, rorx_32) F(X, LZ32, lzcnt_32) F(X, LZ16, lzcnt_16) F(X, TZ32, tzcnt_32) \
     F(X, BZHI32, bzhi_32) F(X, MASKLD, vpmaskmovq) F(X, MASKSTQ, vpmaskmovq_st) \
     F(X, UN, vbroadcasti128) F(X, UN, vcvtph2ps) \
     F(X, IMM3, vmpsadbw) F(X, IMM3, vpalignr) F(X, IMM3, vpblendd) F(X, IMM3, vpblendw) F(X, IMM3, vperm2i128) \
-    F(X, UN, vpabsb) F(X, UN, vpabsd) F(X, UN, vpabsw) \
+    F(X, UN, vpabsb) F(X, UN, vpabsw) \
     F(X, BIN, vpackssdw) F(X, BIN, vpacksswb) F(X, BIN, vpackusdw) F(X, BIN, vpackuswb) \
     F(X, BIN, vphaddsw) F(X, BIN, vphaddw) F(X, BIN, vphsubd) F(X, BIN, vphsubsw) F(X, BIN, vphsubw) \
     FMA3(F, X, maddsub) FMA3(F, X, msubadd) F(X, BIN, vpaddb) F(X, BIN, vpaddd) F(X, BIN, vpaddsb) F(X, BIN, vpaddsw) F(X, BIN, vpaddusb) \
-    F(X, BIN, vpaddusw) F(X, BIN, vpaddw) F(X, BIN, vpand) F(X, BIN, vpandn) F(X, BIN, vpavgb) F(X, BIN, vpavgw) \
+    F(X, BIN, vpaddusw) F(X, BIN, vpaddw) F(X, BIN, vpandn) F(X, BIN, vpavgb) F(X, BIN, vpavgw) \
     F(X, UN, vpbroadcastq) F(X, UN, vpbroadcastw) \
-    F(X, BIN, vpcmpeqb) F(X, BIN, vpcmpeqd) F(X, BIN, vpcmpeqq) F(X, BIN, vpcmpeqw) \
+    F(X, BIN, vpcmpeqb) F(X, BIN, vpcmpeqq) F(X, BIN, vpcmpeqw) \
     F(X, BIN, vpcmpgtb) F(X, BIN, vpcmpgtd) F(X, BIN, vpcmpgtq) F(X, BIN, vpcmpgtw) \
     F(X, UNI, vpermpd) F(X, BIN, vpermps) F(X, UNI, vpermq) \
     F(X, BIN, vphaddd) \
@@ -140,11 +141,11 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     F(X, BIN, vpmaxsb) F(X, BIN, vpmaxsw) F(X, BIN, vpmaxub) F(X, BIN, vpmaxud) F(X, BIN, vpmaxuw) \
     F(X, BIN, vpminsb) F(X, BIN, vpminsd) F(X, BIN, vpminsw) F(X, BIN, vpminub) F(X, BIN, vpminud) F(X, BIN, vpminuw) \
     F(X, UN, vpmovsxbd) F(X, UN, vpmovsxbq) F(X, UN, vpmovsxbw) F(X, UN, vpmovsxdq) F(X, UN, vpmovsxwd) F(X, UN, vpmovsxwq) \
-    F(X, UN, vpmovzxbd) F(X, UN, vpmovzxbq) F(X, UN, vpmovzxdq) F(X, UN, vpmovzxwd) F(X, UN, vpmovzxwq) \
+    F(X, UN, vpmovzxbd) F(X, UN, vpmovzxdq) F(X, UN, vpmovzxwd) F(X, UN, vpmovzxwq) \
     F(X, BIN, vpmuldq) F(X, BIN, vpmulhrsw) F(X, BIN, vpmulhuw) F(X, BIN, vpmulhw) F(X, BIN, vpmulld) \
     F(X, BIN, vpmullw) F(X, BIN, vpmuludq) F(X, BIN, vpor) F(X, BIN, vpsadbw) F(X, BIN, vpshufb) \
     F(X, UNI, vpshufd) F(X, UNI, vpshufhw) F(X, UNI, vpshuflw) F(X, BIN, vpsignb) F(X, BIN, vpsignd) F(X, BIN, vpsignw) \
-    F(X, BIN, vpslld) F(X, BIN, vpsllq) F(X, BIN, vpsllw) F(X, BIN, vpsllvd) F(X, BIN, vpsllvq) \
+    F(X, BIN, vpsllq) F(X, BIN, vpsllw) F(X, BIN, vpsllvd) F(X, BIN, vpsllvq) \
     F(X, BIN, vpsrad) F(X, BIN, vpsraw) F(X, BIN, vpsravd) F(X, BIN, vpsrld) \
     F(X, BIN, vpsrlw) F(X, BIN, vpsrlvd) F(X, BIN, vpsrlvq) \
     F(X, BIN, vpsubb) F(X, BIN, vpsubd) F(X, BIN, vpsubq) F(X, BIN, vpsubsb) F(X, BIN, vpsubsw) \
@@ -234,7 +235,8 @@ static int failures, cross;
 // Accesses of 8 bytes or more through the base register, whose start can lie before the guard page.
 static int crossable(const tcase *c) {
     static const char *const ok[] = {"/andn", "/movbe_ld64", "/movbe_st64", "/vpaddq", "/vpmaxsd", "/vpermd",
-                                     "/vfmadd231ps", "/vextracti128", "/vpmaskmovd"};
+                                     "/vfmadd231ps", "/vextracti128", "/vpmaskmovd", "/shlx", "/bzhi", "/tzcnt",
+                                     "/vpand", "/vpcmpeqd", "/vpabsd"};
     if (!strstr(c->name, "/b_rax/")) return 0;
     for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++) {
         const char *p = strstr(c->name, ok[i]);

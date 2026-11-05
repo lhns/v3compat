@@ -70,6 +70,24 @@ STUB(c_movbe_ld32, "movbe (%r15), %r12d");
 STUB(c_movbe_ld_dst, "movbe (%r15), %r15");
 STUB(c_movbe_ld_rip, "movbe bad_page(%rip), %rbx");
 STUB(c_movbe_ld_split, "movbe (%r14), %rbx");
+// Inline scalar and vector forms added with the speed work.
+STUB(c_shlx, "shlx %rcx, (%r15), %rbx");
+STUB(c_sarx_cnt_rax, "sarx %rax, (%r15), %rcx");
+STUB(c_bzhi, "bzhi %rcx, (%r15), %rbx");
+STUB(c_bzhi_dst, "bzhi %rcx, (%r15), %r15");
+STUB(c_tzcnt, "tzcnt (%r15), %rbx");
+STUB(c_lzcnt, "lzcnt (%r15), %rbx");
+STUB(c_lzcnt32_rip, "lzcnt bad_page(%rip), %ebx");
+STUB(c_tzcnt_dst, "tzcnt (%r15), %r15");
+STUB(c_v_cmp, "vpcmpeqd (%r15), %ymm1, %ymm2");
+STUB(c_v_shift_d, "vpslld (%r15), %ymm3, %ymm4");
+STUB(c_v_logic, "vpand (%r15), %ymm1, %ymm2");
+STUB(c_v_abs, "vpabsd (%r15), %ymm3");
+STUB(c_v_widen, "vpmovzxbq (%r15), %ymm4");
+STUB(c_v_widen_sx, "vpmovsxdq (%r15), %ymm5");
+STUB(c_v_bcast_b, "vpbroadcastb (%r15), %ymm6");
+STUB(c_v_bcast_w, "vpbroadcastw (%r15), %ymm7");
+STUB(c_v_bcast_d, "vpbroadcastd (%r15), %ymm8");
 // Unmasked FP exceptions: ymm1 and ymm2 are set up per case.
 STUB(c_fma_ps, "vfmadd231ps %ymm1, %ymm2, %ymm3");
 STUB(c_fma_ss, "vfmadd231ss %xmm1, %xmm2, %xmm3");
@@ -105,6 +123,8 @@ extern void c_inline(void), c_inline_shift(void), c_frame(void), c_frame_rip(voi
     c_andn(void), c_andn_dst(void), c_mulx(void), c_mulx_lo(void), c_mulx32_rip(void), c_movbe_ld(void),
     c_movbe_ld16(void), c_movbe_ld32(void), c_movbe_ld_dst(void), c_movbe_ld_rip(void),
     c_movbe_ld_split(void);
+extern char ins_c_shlx[], after_c_shlx[], ins_c_sarx_cnt_rax[], after_c_sarx_cnt_rax[], ins_c_bzhi[], after_c_bzhi[], ins_c_bzhi_dst[], after_c_bzhi_dst[], ins_c_tzcnt[], after_c_tzcnt[], ins_c_lzcnt[], after_c_lzcnt[], ins_c_lzcnt32_rip[], after_c_lzcnt32_rip[], ins_c_tzcnt_dst[], after_c_tzcnt_dst[], ins_c_v_cmp[], after_c_v_cmp[], ins_c_v_shift_d[], after_c_v_shift_d[], ins_c_v_logic[], after_c_v_logic[], ins_c_v_abs[], after_c_v_abs[], ins_c_v_widen[], after_c_v_widen[], ins_c_v_widen_sx[], after_c_v_widen_sx[], ins_c_v_bcast_b[], after_c_v_bcast_b[], ins_c_v_bcast_w[], after_c_v_bcast_w[], ins_c_v_bcast_d[], after_c_v_bcast_d[];
+extern void c_shlx(void), c_sarx_cnt_rax(void), c_bzhi(void), c_bzhi_dst(void), c_tzcnt(void), c_lzcnt(void), c_lzcnt32_rip(void), c_tzcnt_dst(void), c_v_cmp(void), c_v_shift_d(void), c_v_logic(void), c_v_abs(void), c_v_widen(void), c_v_widen_sx(void), c_v_bcast_b(void), c_v_bcast_w(void), c_v_bcast_d(void);
 
 static void put_f32(int reg, float v) {
     for (int i = 0; i < 8; i++) memcpy(&ymm_init[reg][4 * i], &v, 4);
@@ -157,6 +177,23 @@ static const tcase cases[] = {
     {"movbe-ld-dst", c_movbe_ld_dst, ins_c_movbe_ld_dst, after_c_movbe_ld_dst, SIGSEGV, 0, 0, 0},
     {"movbe-ld-rip", c_movbe_ld_rip, ins_c_movbe_ld_rip, after_c_movbe_ld_rip, SIGSEGV, 0, 0, 0},
     {"movbe-ld-split", c_movbe_ld_split, ins_c_movbe_ld_split, after_c_movbe_ld_split, SIGSEGV, 0, 1, 0},
+    {"shlx", c_shlx, ins_c_shlx, after_c_shlx, SIGSEGV, 0, 0, 0},
+    {"sarx-cnt-rax", c_sarx_cnt_rax, ins_c_sarx_cnt_rax, after_c_sarx_cnt_rax, SIGSEGV, 0, 0, 0},
+    {"bzhi", c_bzhi, ins_c_bzhi, after_c_bzhi, SIGSEGV, 0, 0, 0},
+    {"bzhi-dst", c_bzhi_dst, ins_c_bzhi_dst, after_c_bzhi_dst, SIGSEGV, 0, 0, 0},
+    {"tzcnt", c_tzcnt, ins_c_tzcnt, after_c_tzcnt, SIGSEGV, 0, 0, 0},
+    {"lzcnt", c_lzcnt, ins_c_lzcnt, after_c_lzcnt, SIGSEGV, 0, 0, 0},
+    {"lzcnt32-rip", c_lzcnt32_rip, ins_c_lzcnt32_rip, after_c_lzcnt32_rip, SIGSEGV, 0, 0, 0},
+    {"tzcnt-dst", c_tzcnt_dst, ins_c_tzcnt_dst, after_c_tzcnt_dst, SIGSEGV, 0, 0, 0},
+    {"v-cmp", c_v_cmp, ins_c_v_cmp, after_c_v_cmp, SIGSEGV, 0, 0, 0},
+    {"v-shift-d", c_v_shift_d, ins_c_v_shift_d, after_c_v_shift_d, SIGSEGV, 0, 0, 0},
+    {"v-logic", c_v_logic, ins_c_v_logic, after_c_v_logic, SIGSEGV, 0, 0, 0},
+    {"v-abs", c_v_abs, ins_c_v_abs, after_c_v_abs, SIGSEGV, 0, 0, 0},
+    {"v-widen", c_v_widen, ins_c_v_widen, after_c_v_widen, SIGSEGV, 0, 0, 0},
+    {"v-widen-sx", c_v_widen_sx, ins_c_v_widen_sx, after_c_v_widen_sx, SIGSEGV, 0, 0, 0},
+    {"v-bcast-b", c_v_bcast_b, ins_c_v_bcast_b, after_c_v_bcast_b, SIGSEGV, 0, 0, 0},
+    {"v-bcast-w", c_v_bcast_w, ins_c_v_bcast_w, after_c_v_bcast_w, SIGSEGV, 0, 0, 0},
+    {"v-bcast-d", c_v_bcast_d, ins_c_v_bcast_d, after_c_v_bcast_d, SIGSEGV, 0, 0, 0},
     {"fp-invalid", c_fma_ps, ins_c_fma_ps, after_c_fma_ps, SIGFPE, FPE_FLTINV, 2, inf_times_zero},
     {"fp-invalid-scalar", c_fma_ss, ins_c_fma_ss, after_c_fma_ss, SIGFPE, FPE_FLTINV, 2, inf_times_zero},
     {"fp-overflow", c_fma_ps, ins_c_fma_ps, after_c_fma_ps, SIGFPE, FPE_FLTOVF, 2, overflow},
