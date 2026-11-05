@@ -80,13 +80,7 @@ static pid_t clone3_die(int how) {
     ca.exit_signal = SIGCHLD;
     ca.stack = (uint64_t)stack;
     ca.stack_size = sizeof stack;
-    __asm__ volatile("syscall
- test %%rax,%%rax
- jnz 1f
- mov %%r9d,%%edi
- call *%%r8
- 1:
-"
+    __asm__ volatile("syscall\n test %%rax,%%rax\n jnz 1f\n mov %%r9d,%%edi\n call *%%r8\n 1:\n"
                      : "=a"(r) : "0"(SYS_clone3), "D"(&ca), "S"(sizeof ca), "r"(r8), "r"(r9)
                      : "rcx", "r11", "rdx", "memory");
     return r < 0 ? (errno = (int)-r, -1) : (pid_t)r;
