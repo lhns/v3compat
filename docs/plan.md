@@ -3,30 +3,26 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** Phase 1. DynamoRIO is decided, built only from our fork. Emulation, the launcher and exec follow run; see "Phase 1 results".
+**Status:** Phase 1. Emulation, the launcher and exec follow run on DynamoRIO built from our fork. Phase 1's whole-process
+time and the thread-creation stress test are unmet; see "Open items". Decisions are in the [ADRs](adr/README.md);
+this file holds the current state and the numbers behind it.
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
 
 ## Goal and requirements
 
-In order of priority:
+In order of priority: correct (a silently wrong result is the worst outcome; a clean refusal beats a guess), complete
+(main executable, libraries, `dlopen`, static and musl, Go, JIT, children across `exec`), fast (startup and
+near-native speed for code that rarely needs emulation), contained (opt-in per container, native passthrough on capable
+hosts, a failure affects one container).
 
-1. **Correct.** A silently wrong result is the worst outcome. A clean refusal beats a guess.
-2. **Complete.** The main executable, shared libraries, `dlopen`, static and musl binaries, Go, JIT code and
-   child processes across `exec`.
-3. **Fast.** Fast startup, and near-native speed for code that rarely needs emulation.
-4. **Contained.** Opt-in per container. A failure affects one container, never the node. Native passthrough
-   on capable hosts.
+Non-goals: CPUs without AVX, AVX-512, other architectures. If you can, move the workload to an AVX2 host or rebuild it
+for x86-64-v2: both are simpler and faster than anything here.
 
-Non-goals: CPUs without AVX (they have no `ymm` registers), AVX-512, other architectures.
+## Why this design
 
-**When not to use this.** Move the workload to an AVX2 host or rebuild it for x86-64-v2 if you can. Both are
-simpler and faster than anything here. This is for workloads that must run on the old host.
-
-## Why existing tools are not enough
-
-duckdb 2.0.0 (77 MB, dense v3 build), on Ivy Bridge, against native on an AVX2 host **[measured]**:
+duckdb 2.0.0 on Ivy Bridge, against native on an AVX2 host **[measured]**:
 
 | | `select 42` | Compute query | Peak memory | Follows `exec` |
 |---|---|---|---|---|
@@ -34,62 +30,17 @@ duckdb 2.0.0 (77 MB, dense v3 build), on Ivy Bridge, against native on an AVX2 h
 | QEMU user 10.0 | 4.7 s | 9.7 s | 180 MB | No, children die with SIGILL |
 | Intel SDE 10.13 | 47 s | 60 s | 650 MB | Yes |
 
-SDE's startup is load-time CPU work tied to the binary: hello world takes 1.2 s and `-version` takes 45 s.
-Stripping symbols, disabling the chip check and disabling child following did not help. It is closed source
-and offers no persistent cache **[measured, help output]**.
-
-[AVXEmu](https://github.com/lhns/avxemu) patches sites in memory and runs everything else natively. Its
-authors report about 1.2x on a binary with sparse AVX2 **[their numbers]**. On real Ivy Bridge hardware, its
-own test suite passes, and AVX2/FMA/BMI in the main executable gives correct results, including in containers
-with the default seccomp profile **[measured]**. Its limits are structural:
-
-- `lzcnt` and `tzcnt` do not fault here. They silently run as `bsr` and `bsf`. AVXEmu patches them in the main
-  executable only, so in a shared library they return wrong answers **[measured]**.
-- Patching needs instruction boundaries. Its Linux port proves coverage from function and unwind metadata,
-  and refuses what it cannot prove. Libraries and JIT code have no such proof.
-- Interposition does not reach static binaries **[measured]**.
-- A review found fixable bugs in the mechanism: signals during emulation, `fork` during relocation, a thread
-  with SIGILL blocked being killed.
-
-## Options considered
-
-| Option | Coverage | Speed | Risk to node | Static and JIT |
-|---|---|---|---|---|
-| Kernel module | Traps only; `lzcnt` needs an in-kernel scanner | About 1000x native per trap **[estimate]** | Panic takes the node down | Static yes, JIT `lzcnt` no |
-| eBPF | No #UD hook, FPU or register-rewrite path **[memory]** | n/a | Low | No |
-| Seccomp plus patching | Provable code only | Thunks or better | None | Partial |
-| Ahead-of-time rewrite | Known files only | Best | None | No JIT |
-| Hypervisor #UD | Traps only | VM exit per trap | Whole host | No `lzcnt` |
-| **Dynamic binary translator** | **All executed code** | About 2x target **[estimate]** | None | Yes, to be proven |
-| AVX2 host | All | Native | None | Yes |
-
-**Why not a kernel module**, in spite of its appeal for static binaries:
-
-- `lzcnt`/`tzcnt` never trap, so a trap design cannot see the one case of silent corruption already confirmed.
-- In a KVM guest, #UD is in the base exception bitmap, so every fault starts with a VM exit into `handle_ud`
-  **[source]**. A module saves only the signal leg.
-- `register_die_notifier` and `kernel_fpu_begin_mask` are available to GPL modules, but `exc_invalid_op` is
-  `noinstr`, `security_add_hooks` is `__init`, and `_install_special_mapping` is not visibly exported **[source]**.
-- A bug panics the node, and the module must track kernel updates.
+The AVXEmu preload patches sites in memory. `lzcnt` and `tzcnt` do not fault here, they silently run as `bsr` and `bsf`,
+and it patches them in the main executable only, so in a shared library they return wrong answers. It cannot prove
+coverage for libraries or JIT code, and does not reach static binaries **[measured]**. Kernel module, eBPF, seccomp
+patching, ahead-of-time rewriting and hypervisor traps were rejected: [ADR 0002](adr/0002-same-isa-binary-translator.md).
 
 ## Design
 
-A **same-ISA dynamic binary translator**: a client on [DynamoRIO](https://github.com/DynamoRIO/dynamorio).
-Code is decoded as it is first executed, so no metadata is needed. Most instructions are copied unchanged, and
-those the CPU lacks are expanded or sent to a helper.
-
-One mechanism replaces `lzcnt` patching, short-site trampolines, branch-target rules, live patching, the
-SIGILL fallback, signal interposition and CPUID faulting, since `cpuid` is translated like anything else.
-
-```text
-OCI wrapper (v3compat-runtime)
-  host has AVX2?  -> run natively
-  otherwise       -> launcher -> program under the translator
-                                   |-- common instructions: unchanged
-                                   |-- hot lane-wise AVX2: inline expansion
-                                   |-- the rest: native AVX1 equivalents, helpers (from AVXEmu)
-                                   `-- anything unknown: refuse
-```
+A client on [DynamoRIO](https://github.com/DynamoRIO/dynamorio) decodes code as it first executes, so no metadata is
+needed. Instructions the CPU has are copied; the others are expanded or sent to a helper
+([ADR 0003](adr/0003-dynamorio-as-the-base.md), [0005](adr/0005-avxemu-core-as-helpers.md),
+[0007](adr/0007-hot-ops-inline-in-phase-1.md)).
 
 ### Translation rules
 
@@ -103,108 +54,44 @@ OCI wrapper (v3compat-runtime)
 | `cpuid` | Translated to report the emulated CPU | Rare |
 | `xgetbv` | Native: AVX2 adds no XCR0 bits | Native |
 
-Rules:
-
-- **Unknown instructions are refused.** Every translated form is looked up by DR opcode, encoding bits and operand
-  classes ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)). Native keys run as they are, emulated keys go through
-  the expansions, and anything else exits with status 86 if executed. Evidence and exclusions:
-  [allowlist.md](allowlist.md). Regenerate with `test/allow/regen.sh`. The lookup is at translation only: about 0.25 s
-  of duckdb's 5.7 s startup, 480,000 translated instructions at about 1,400 cycles each **[measured]**. hello, zstd and
-  duckdb's three queries translate no form off the list **[measured]**.
-  Results hold in every row order: reversed, shuffled and one process per row give identical results on Ivy Bridge and
-  on each sampled runner CPU **[measured]**; `allowlist-check` reruns all five orders. The earlier `repne cmpsq` mismatch
-  was the sweep's own leak: on CPUs with `movdir64b`, that row left a pointer in the code page, which `repne cmpsq`
-  found **[measured]**, so the form is listed now.
-- **Signals** map the code-cache PC back to the application instruction. An expansion must be rewindable or
-  commit its result last, and a signal-injection test must prove it.
-- **JIT and self-modifying code**: translated pages are write-protected, and a write invalidates them.
-- **Helpers** are rebuilt with VEX encoding, since SSE/AVX transitions are expensive on this CPU **[memory]**.
-- **Migration:** masking CPUID does not disable the silicon, so `lzcnt` can change meaning when a VM moves
-  between hosts **[memory]**. Passthrough must key on a pinned node label rather than CPUID. Always-expanded
-  AVX1 code stays correct either way.
-
-### Reused from AVXEmu
-
-Kept: the emulation core (`exec.c`, `exec_bmi.c`, `softfma.c`) as helpers taking operands directly, the core semantic
-fixes, and the test suite. Dropped: patching, trampolines, the SIGILL handler, live relocation, the ELF metadata
-parser and probably the decoder, as DynamoRIO decodes.
-
-The preload is a poor fallback: it refuses duckdb and even Debian's `zstd`, as it cannot prove where `lzcnt` and `tzcnt`
-are **[measured]**.
-
-### Where the work lives
+- **Unknown instructions are refused.** Every translated form is looked up by DR opcode, encoding bits and operand classes
+  ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)); anything off the list exits with status 86 if executed. Evidence and
+  exclusions: [allowlist.md](allowlist.md); regenerate with `test/allow/regen.sh`. The lookup costs about 0.25 s of duckdb's
+  5.7 s startup **[measured]**. hello, zstd and duckdb's three queries translate no form off the list **[measured]**.
+- **Signals** map the code-cache PC back to the application instruction; an expansion must be rewindable or commit last.
+- **JIT and self-modifying code**: DynamoRIO write-protects translated pages.
+- **Passthrough** on capable hosts keys on a pinned node label, not CPUID: masking CPUID does not disable the silicon, so
+  `lzcnt` can change meaning when a VM migrates ([ADR 0004](adr/0004-opt-in-per-container.md)).
 
 | Work | Repo |
 |---|---|
-| DynamoRIO client, launcher, inline expansions, `lzcnt`/`tzcnt`, `cpuid`, translation cache | `v3compat` |
-| Emulation helpers and their fixes; the test suite | [lhns/avxemu](https://github.com/lhns/avxemu) |
+| DynamoRIO client, launcher, expansions, `cpuid`, tests | `v3compat` |
+| Emulation helpers and their fixes; the semantic suite | [lhns/avxemu](https://github.com/lhns/avxemu) |
+| DynamoRIO fork | [lhns/dynamorio](https://github.com/lhns/dynamorio) |
 | OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
-### What other translators teach
-
-| Project | Take | Avoid |
-|---|---|---|
-| Intel SDE and Pin | In-process injection, translating from the first instruction | Eager load work: 42 s and 600 MB on one binary |
-| FEX-Emu | 256-bit split into two 128-bit ops; disk cache keyed by build ID, with a size cap | |
-| Rosetta 2 | Ahead-of-time lookup plus JIT; separate writer; write then rename; read-only cache | Writable caches: cache poisoning |
-| QEMU TCG | Self-loading of ELF images | Helper-call vector lowering |
-| Microsoft Prism | Evidence that AVX2/BMI/FMA emulation is shippable | |
-
-### Translation cache
-
-Keyed by file hash, stored as a read-only mount for containers, written by a separate process, with write then
-rename, a size cap, and stale or corrupt entries rejected. Never shared writable between containers.
+The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-cache.md), proposed).
 
 ## Testing
 
-The tests matter more than the design: with a translator, every executed instruction passes through it, which
-is a larger correctness surface than patching a few sites.
+With a translator every executed instruction passes through it, so tests matter more than the design.
 
-Status: stages 1, 2, 3 and 6 are built. Of 578 forms from XED, 84 are refused. The rest match the recorded references on
-the helper-fixes branch, apart from `mem_read` zero-fill, left for the translator. References come from AMD EPYC, so Intel NaN
-priority is unverified until a recording on Intel AVX2 hardware. In `v3compat`, the suite runs through the client on Ivy Bridge, with inline expansions on and off (stage 4, required for every inline form). Stage 5 is partly built: faults and flags. Signal injection is not.
+1. **Spec.** Every form generated from XED's tables; CI fails if a form has no status. Of 578 forms, 84 are refused.
+2. **Decoder.** Differential against a real disassembler.
+3. **Semantics.** Differential against real AVX2 silicon, references recorded on AVX2 and replayed on AVX-only CPUs. The
+   forms match the references apart from `mem_read` zero-fill. References come from AMD EPYC, so Intel NaN priority is
+   unverified until a recording on Intel AVX2 hardware. `test/sem/known-dr.txt` lists forms where plain DynamoRIO differs
+   from native (OF around `movbe` and `vbroadcasti128` loads).
+4. **Paths.** In `v3compat` the suite runs through the client on Ivy Bridge with inline expansions on and off.
+5. **Process.** Partly built: faults and flags, `test/regstress.c`, exec identity, setuid races. Signal injection into an
+   expansion is not.
+6. **Applications.** duckdb output hashes match native on Ivy Bridge; CI also runs zstd.
 
-Developed in the AVXEmu fork, independent of the mechanism:
+Strong evidence, not proof. Keep storage and database primaries off it.
 
-1. **Spec.** Every instruction form generated from XED's tables. CI fails if a form has no status.
-2. **Decoder.** Differential against a real disassembler, including legacy encodings that must not be touched.
-3. **Semantics.** Differential against real AVX2 silicon: all registers, flags and memory; edge values; every
-   imm8; page boundaries; all rounding modes, FTZ, DAZ, NaN classes and sticky flags. References are recorded on
-   AVX2 hardware and replayed on AVX-only CPUs.
-4. **Paths.** Inline and helper forms of each instruction give identical results.
-5. **Process.** `fork`, threads, signals at every point, `sigaltstack`, unwinding, JIT, poisoned cache.
-6. **Applications.** duckdb, zstd, OpenSSL, sqlite and others: output hashes identical to native.
+## Measurements
 
-This gives strong evidence, not proof. Keep storage and database primaries off it.
-
-## Order of work
-
-1. Settle the hang, then decide on DynamoRIO. Done.
-2. Merge the test suite. Done.
-3. Scaffold `v3compat`: a DynamoRIO client, pinned, with no emulation; the launcher; CI; the semantic suite running through
-   the client. Done when a test runs through it and fails only because emulation is missing.
-4. Expose the helper interface in the fork: the emulation core as a library, with no decoder or preload parts.
-5. Fix the helpers against their tests: FMA, half-written stores, `vcvtph2ps`.
-6. Phase 1 below, on the fork. Hot lane-wise forms are inlined within it, ahead of the launcher work, since measurement showed helpers alone cannot reach its target ([ADR 0007](adr/0007-hot-ops-inline-in-phase-1.md)).
-
-The scaffold comes first because it decides how helpers are called. The preload's decoder bugs are not fixed unless the
-preload stays.
-
-## Phases
-
-Every phase has a go/no-go. A failure stops the plan.
-
-| Phase | Work | Go/no-go |
-|---|---|---|
-| **0. Is DynamoRIO good enough?** | Unmodified DynamoRIO with a null client on an AVX2 host: duckdb, Go, static musl and glibc, JVM, Node, exec chains, default seccomp. Instruction density of duckdb, static and dynamic | Revised after results, see below: cold startup under 5 s on Ivy Bridge. No crashes. **Static targets and Go work** under default seccomp without ptrace |
-| **1. Correct, not yet fast** | Launcher, exec follow, `/proc/self/exe`; helpers, with the hot forms inline; translated CPUID and `lzcnt`; test suite hook | `lzcnt` in a dlopen'd library correct; static children correct; duckdb correct; compute, excluding startup, under 3 s (revised after results, see below) |
-| **2. Fast** | Inline expansion, flag liveness, register allocation in hot traces | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean |
-| **3. Startup** | Translation cache | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected |
-| **4. Production** | Wrapper integration, passthrough, canary | Two weeks with no divergence from native |
-
-### Phase 0 results
-
-DynamoRIO 11.3.0, no emulation yet, on AVX2 runners unless noted **[measured]**.
+### DynamoRIO 11.3.0 alone, AVX2 runners **[measured]**
 
 | Workload | Native | DynamoRIO | Factor |
 |---|---|---|---|
@@ -216,34 +103,27 @@ DynamoRIO 11.3.0, no emulation yet, on AVX2 runners unless noted **[measured]**.
 | Java CPU benchmark | 0.73 s | 9.51 s | 13x |
 | `java -version` | 0.024 s | 2.0 s | 84x |
 
-- **Works**, also with ptrace denied by seccomp and under Docker's default profile: static glibc, static musl,
-  static-PIE, exec chains in every direction, `dlopen`, signals, C++ exceptions, `pthread_cancel`, `rseq`, self-modifying code.
-- **A hang, found with Go.** See below. Open.
-- **setuid** children silently lose their privileges, so they must be detected and refused.
-- **`-persist`** wrote nothing without a client and made later runs slower: 4.5 s against 0.7 s. Its docs say a
-  client's blocks are not persisted by default. So phase 3 means our own cache, or accepting the startup.
-- **Density** in duckdb, by instructions executed in a query: AVX2-only mnemonics 0.016%, BMI2 about 0.03%,
-  `vp*` at most 8.5% (the tool does not separate XMM from YMM; XMM runs natively).
-- **SIGILL round trip** in a VM on Ivy Bridge: 12.3 us, 86 us under DynamoRIO, against 4.2 us on bare Haswell in AVXEmu's docs.
+JVM workloads are out of scope for now. Default Go builds (`GOAMD64=v1`) need no AVX2 and run natively. `-persist` does not
+persist a client's blocks and made runs slower (4.5 s against 0.7 s). Density in duckdb: AVX2-only mnemonics 0.016% of
+executed instructions, BMI2 about 0.03%. SIGILL round trip in a VM on Ivy Bridge: 12.3 us, 86 us under DynamoRIO.
 
 ### Phase 1 results
 
-duckdb's compute query (`select sum(range*range) from range(30000000)`) on an AVX2 AMD runner, executed instructions under
-the client **[measured]**: 1.67G in all, 135.5M AVX2, of which `vpaddq` 60.1M, `vpmuludq` 45.0M, `vpsrlq` 15.1M and `vpsllq` 15.0M
-are 99.8%. BMI 0.63M, `lzcnt` 46k, `tzcnt` 11k, FMA none. Helpers alone would take about 11 s of CPU at the frame's 80 ns.
+duckdb's compute query (`select sum(range*range) from range(30000000)`), AMD runner: 1.67G instructions, 135.5M AVX2, of
+which `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq` are 99.8%. BMI 0.63M, `lzcnt` 46k, `tzcnt` 11k, FMA none.
 
-Per operation on Ivy Bridge, against about 0.5 ns for an empty loop iteration **[measured]**:
+Per operation on Ivy Bridge (an empty loop iteration is about 0.5 ns):
 
 | Path | ns per op |
 |---|---|
-| Inline `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq`, register sources | 2.9-3.2 |
+| Inline, register sources | 2.9-3.2 |
 | Inline `vpaddq` from memory | 4.9 |
 | Inline with the TLS block not 32-byte aligned | 10 |
 | Frame helper | 78-94 |
 | Mcontext helper (`tzcnt`) | 316-402 |
-| Clean call reading and writing the mcontext, `vec_exec` | 466-525 |
+| Clean call reading and writing the mcontext | 466-525 |
 
-duckdb 2.0.0 whole-process wall time, cold **[measured]**. Output hashes are the same in all three columns:
+duckdb 2.0.0 whole-process wall time, cold; output hashes equal in all columns:
 
 | Query | Native, AMD AVX2 | Client, AMD AVX2 | Client, Ivy Bridge |
 |---|---|---|---|
@@ -252,168 +132,102 @@ duckdb 2.0.0 whole-process wall time, cold **[measured]**. Output hashes are the
 | Compute query, `threads=1` | | | 6.5 s |
 | `varied.sql` (mixed SQL) | 4.56 s | 49 s | 165 s |
 
-**Against the go/no-go.** `lzcnt` in a `dlopen`ed library, static children and duckdb's output are correct. Compute under 3 s is
-not met as a whole-process time (5.9-7.4 s on Ivy Bridge): startup alone is about 5 s, and the query adds about 1.1 s to it.
-Startup is DynamoRIO translation, which Phase 3's cache addresses. The mixed workload, at about 11x on the AMD host against
-1.67x with no client, needs more forms inline.
+Startup is about 5 s of the Ivy Bridge time; the compute query adds about 1.1 s.
 
-**Criterion revised after seeing results.** Phase 1's compute target now measures compute excluding startup: about 1.1 s
-against 3 s, which passes. Startup is measured separately and gated by Phase 3's warm-start target (`select 42` under
-0.5 s), not by Phase 1. The whole-process 5.9-7.4 s above would have failed the original wording. This is a judgement made
-after the fact, user-approved, and recorded as such, like the Phase 0 revision. **Still unmet in Phase 1:** the whole-process
-time, until Phase 3; the mixed workload's 11x; the thread-creation stress test, not settled.
+### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
-### Launcher, exec follow, `/proc/self/exe`
+Statuses: 86 refused instruction, 87 the launcher refused the program, 125 launcher failure, 126 and 127 as in a shell;
+app statuses and signals pass through. An exec refused under the client fails with an errno and a message on stderr.
 
-[ADR 0009](adr/0009-static-launcher-no-drrun.md). The launcher is a static, freestanding binary that execs `libdynamorio.so` with
-its options in the environment, with no drrun, config file, shell or libc in the image. Statuses: 86 refused instruction, 87 the
-launcher itself refused the program (it has no caller to return an error to), 125 launcher failure, 126 and 127 as in a shell; app
-statuses and signals pass through. An exec refused under the client fails with an errno and a message on stderr, and the caller goes on.
+Measured on Ivy Bridge under Docker's default seccomp, no ptrace, each child running `lzcnt` and checking DynamoRIO is mapped:
 
-All below on Ivy Bridge with no AVX2, under Docker's default seccomp and no ptrace, each child running `lzcnt` and checking DynamoRIO
-is mapped **[measured]**; a subset also in a scratch image with `--read-only`, uid 65534 and the install mounted read-only.
-
-| What | DynamoRIO alone | Now |
-|---|---|---|
-| `execve`, threads, `vfork`, `posix_spawn`, shebang, empty or NULL env, closed fds 0-2; glibc, static, static-PIE, musl in the directions tested | Follows | Same |
-| `execveat`, `fexecve`, also on a memfd or a close-on-exec fd | Child runs untranslated, silently | Follows |
-| `execve` with NULL argv | Child untranslated, or DynamoRIO crashes on a script | Follows |
-| Executable but unreadable file | Child untranslated, silently [source] | Refused, `EPERM` |
-| setuid, setgid, file capabilities, where the kernel would change privileges | Runs with the wrong rights | Refused, `EPERM`, also from a thread or `vfork` child |
-| 32-bit child | `execve` fails `ENOENT` [source] | Refused, `ENOEXEC` |
-| `readlink` of `/proc/self/exe`, `/proc/<pid>/exe`, `/proc/<tid>/exe`; argv0; `AT_EXECFN`, `AT_PHDR`, `AT_PHNUM`, `AT_SECURE` | Right | Same |
-| `readlink` of `/proc/thread-self/exe`; `open`, `stat`, `statx` of any of them | The loader | The app, also if a memfd |
-| `readlink`, `readlinkat` of any of them into a buffer shorter than the path | -1 | The kernel's answer, by rewriting to the client's descriptor: truncates, `EINVAL` on size 0 |
-
-glibc's `posix_spawn` passes `CLONE_CLEAR_SIGHAND` to `clone3`, which would reset DynamoRIO's own handlers in the child, so a fault it
-expects to catch kills it: the safe read past a static binary's TLS while the child starts, and the dead child's thread record then hangs
-the parent at exit. The fork takes the flag off the real syscall and applies it to the app's handler table (`test/clone3.c`). A vfork
-child that dies of a signal before it execs still hangs the parent, with `vfork` as with `clone3`: DynamoRIO's process exit waits for the
-parent, which the kernel holds until the child is gone **[measured]**.
-
-Refusal follows the kernel's rule, not the mode bits: root running a setuid-root file, no_new_privs and nosuid mounts run, as they
-change nothing natively.
-
-A check and the exec cannot be separated by a swap: each exec opens the file once, checks that descriptor (`fstat`, `fgetxattr`, the header)
-and has DynamoRIO load from it through `/proc/self/fd`. The kernel's `execve` under DynamoRIO is of `libdynamorio.so`, so an `execveat` of
-the descriptor would not be what runs the app; the fork's `dr_syscall_set_exec_file` is. A file that cannot be judged fails the exec
-instead of being handed to the kernel, which would run it itself. `test/setuid.sh` races this, `test/exec_identity.sh` compares what a
-program sees of its exec with a native run. What remains, none of which gives rights since the kernel never execs the file **[source]**:
-
-- A process caught by a swap or a loss of read permission after the check can die at startup, before any app code, with status 255: DynamoRIO's
-  rseq scan reopens the executable by name, and the loader reopens the descriptor through `/proc`, which checks permissions again **[measured]**.
-- A write to the same file, as nothing denies writes to it the way a real exec does: `ETXTBSY` is not returned, to the exec or a writer.
-- `chmod` or `chown` after the check, indistinguishable from one just after a native exec.
-- A script: its interpreter opens it by name, natively too, which is why the kernel ignores setuid on one. The ELF interpreter (`PT_INTERP`)
-  is opened by name as well.
-- A `fork` in another thread between the pin and the exec, or a `vfork` with `CLONE_FILES`, keeps a read-only copy of the descriptor.
-- The exec needs a free descriptor (`EMFILE` otherwise), and what only `binfmt_misc` could run fails with `ENOEXEC`.
-
-Still differs from native **[measured]**:
-
-- `/proc/self/maps` lists DynamoRIO and the client too, and for a PIE the first named mapping is the client. Not filtered: a program
-  choosing addresses from it must see what is occupied.
-- `/proc/self/auxv` has the loader's values (`getauxval` is right). `/proc/<pid>/exe` read from another process shows the loader;
-  fixing that needs `CAP_SYS_RESOURCE`.
-- `DYNAMORIO_EXE_PATH`, `_EXE_FD`, `_RUNUNDER` and `_OPTIONS` are in the app's environment. The client's descriptor for the executable is in
-  `/proc/self/fd`.
-
-Not measured: `execve` with argv[0] of `/proc/self/exe` gets the app's path instead **[source]**, and `/proc/self/exe` reached relative
-to a directory fd is not rewritten **[source]**.
+- Followed: `execve`, `execveat`, `fexecve` (also memfd), threads, `vfork`, `posix_spawn`, shebang, empty or NULL env,
+  closed fds 0-2, NULL argv; glibc, static, static-PIE and musl in the directions tested.
+- Refused: setuid, setgid and file capabilities where the kernel would change privileges (`EPERM`, also from a thread or
+  `vfork` child), an executable but unreadable file (`EPERM`), a 32-bit child (`ENOEXEC`). Root running a setuid-root file,
+  no_new_privs and nosuid mounts run, as they change nothing natively.
+- Rewritten to the app: `readlink`, `open`, `stat`, `statx` of `/proc/self/exe` and its variants, short buffers included.
+- Each exec opens the file once, checks that descriptor and has DynamoRIO load from it, so a swap cannot separate check and
+  exec (`test/setuid.sh`, `test/exec_identity.sh`). Remaining holes give no rights, **[source]**: a process caught by a swap
+  can die at startup with status 255; writes to the file are not denied (no `ETXTBSY`); an interpreter is opened by name;
+  the exec needs a free descriptor; what only `binfmt_misc` could run fails with `ENOEXEC`.
+- Differs from native: `/proc/self/maps` also lists DynamoRIO and the client; `/proc/self/auxv` has the loader's values;
+  `DYNAMORIO_*` variables are in the app's environment. Not measured: `execve` with argv[0] of `/proc/self/exe`, and
+  `/proc/self/exe` relative to a directory fd **[source]**.
 
 ### The cache reset
 
-**Mitigation, [ADR 0010](adr/0010-no-cache-reset.md).** All **[measured]** on GitHub AVX2 runners, AMD and Intel; "bad" is a
-wrong output, a crash, an error exit or a timeout, of `test/apps/duckdb-varied.sql` unless noted.
-
-Before: main was bad about 1 run in 10 under the client (11 of 106), at least once a wrong number with exit status 0. Stock
-upstream with no client did the same (50 of 482; 28 silent), native never (0 of 60).
+[ADR 0010](adr/0010-no-cache-reset.md). On GitHub AVX2 runners, AMD and Intel, not Ivy Bridge. "Bad" is a wrong output, a crash, an error exit or a timeout of
+`test/apps/duckdb-varied.sql` unless noted. Before the fix main was bad 11 of 106 (once a wrong number with exit 0); stock
+upstream with no client 50 of 482, 28 silent; native 0 of 60.
 
 | On the fork with the register fix | Bad |
 |---|---|
 | Client, as shipped (reset off) | 0 of 230: at most 1.3% (95%) |
 | DynamoRIO alone, default reset | 0 of 643 |
-| DynamoRIO alone, resets forced | 0 of 521; regexp query with the threshold at 1, 0 of 642 |
-| Client, resets forced, regexp query | 21 of 21; helpers only, 20 of 20; no expansions, 0 of 70 |
-| `test/regstress.c`, DynamoRIO alone, resets forced, code churn | 11 of 551 (2 lost flags, the rest crashes and hangs) |
+| DynamoRIO alone, resets forced | 0 of 521 |
+| Client, resets forced, regexp query | 21 of 21; helpers only 20 of 20; no expansions 0 of 70 |
+| `test/regstress.c`, DynamoRIO alone, resets forced, code churn | 11 of 551 |
 | The same, default reset | 21 of 22 hang |
 | The same, reset off, with code churn, signals or both | 0 of 296 |
-| The same, client, reset off, about 1 kHz of signals per thread on 8 threads, inline expansions on | 0 of 377 |
+| The same, client, reset off, about 1 kHz of signals per thread on 8 threads | 0 of 377 |
 
-**The fault that was fixed.** The x64 trace compare spills `xax`, loads the speculative tag into it and stores it to a second
-slot, which the translator took as a redundant spill: a relocated thread got the tag, an application code address, in `rax`.
+The fixed fault: the x64 trace compare's tag spill was taken as redundant, so a relocated thread got an application code
+address in `rax`.
 
-**Still open, unreachable only while nothing relocates a thread:** flags in the same window (upstream i#400), which the
-stress loses under forced resets; the crashes under the client with forced resets, for which a clean call's saved state
-(upstream i#4219) is the likely cause, not tested; hangs under reset with code churn. A rare SIGSEGV with reset off and no client is unexplained:
-1 of 495 on the earlier pin, 1 of 1,896 on this one, no wrong output in either (at most 0.3%, 95%). Async signals are delivered at fragment boundaries, so the signal rows do not
-interrupt an expansion; a fault inside one is the semantic suite's to test.
+Cost of reset off: a program that keeps generating and unmapping code grows about 19 KB per region (13 regions per second:
+305 MB in 20 minutes; native stays at 1.2 MB) and aborts with "Out of memory. Program aborted.", status 255, at a real limit;
+`-vm_size` does not limit it. Long-lived servers that do not generate code are unaffected.
 
-**Cost of reset off.** The varied query 100 times in one process: peak 626 MB, against 643 MB with reset on, from 580 MB
-at the start of each; reset off hit the 40-minute limit at about 83 repeats, on a different runner, so its speed has no
-comparison. With 13 regions of code generated and unmapped per second, memory grows about 19 KB per region (305 MB
-in 20 minutes; native stays at 1.2 MB), also with an idle thread; with reset on that workload hangs, so it has no
-comparison. `-vm_size` does not limit it, as DynamoRIO falls back to the OS. At a real limit (`ulimit -v`) it aborts with
-"Out of memory. Program aborted.", status 255. So long-lived servers that do not generate code are unaffected, and those
-that keep generating and unmapping code grow until that abort.
+CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
-**CI.** The query runs 30 times under the client. Against a bad rate of 10% that catches it with 96%; against 2%, 45%. It
-cannot see a rate like the unexplained crash's. The reset step, forced on DynamoRIO alone, is the sharper check: 120 of 120
-bad on the old pin, 0 of 15 on this one.
+### The hang (fork branch `fix-pending-signal-self-link`)
 
-### The hang
-
-Settled in [lhns/dynamorio](https://github.com/lhns/dynamorio), branch `fix-pending-signal-self-link`. **[measured]**, on
-GitHub runners, not Ivy Bridge.
-
-Not specific to Go: a C reproducer hangs too. When two threads get a signal in one shared fragment, the first unlinks it
-and the second sees it already unlinked and records nothing. The first then relinks it, and the second loops forever
-with its signal pending. Fixing that exposed two more stock bugs: a shared lock leaked once exit begins, and a thread
-cloned during exit that deadlocks with the exit synch.
+Two threads signalled in one shared fragment looped forever. Not specific to Go. GitHub runners, **[measured]**:
 
 | Test | Stock | Fork | Native |
 |---|---|---|---|
 | Go tight loop + GC | 356/1000 | 0/1000 | 0/1000 |
-| Same, `GOAMD64=v3` | not run | 0/1000 | 0/1000 |
 | Go thread churn, no preemption | 3/1000 | 0/1000 | not run |
 | C reproducer, 8 threads | 30/30 | 0/200 | 0/30 |
 
-DynamoRIO's 33 signal and thread tests pass, with no measurable cost. **Not settled:** a stress test creating threads
-without limit near exit died after 50 minutes on stock and fork, but passed natively; the cause is unknown and the test
-is to return with a thread cap. `-thread_private` is not a fallback: it hung too, costing about 25% more time and 50%
-more memory on 100 threads of duckdb.
+`-thread_private` is not a fallback: it hung too.
 
-**Criterion revised after seeing results.** The original go/no-go was startup under 1 s and under 2x native. Startup
-was 18-84x, so it failed. The 2x limit cannot hold for a program that natively starts in 0.04 s, as translation is
-the work being measured, so absolute time replaces it. This is a judgement made after the fact and is recorded as
-such. duckdb's startup on Ivy Bridge cannot be measured until emulation exists: native is about 4x slower there,
-which suggests about 3 s **[estimate]**.
+## Phases
 
-**Scope.** JVM workloads are out of scope for now, at 13x and 84x: move those pods or rebuild them. Default Go builds
-(`GOAMD64=v1`) need no AVX2 and run natively.
+A failure at a go/no-go stops the plan. Phase 0 (is DynamoRIO good enough) is done; its startup criterion was revised after
+seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute target to exclude startup (about 1.1 s against
+3 s). Both were judged after the fact and approved by the user.
 
-**If Phase 0 fails:** use the AVXEmu preload for provable images only, refuse the rest, or write our own translator
-only if the numbers justify it.
+| Phase | Go/no-go | State |
+|---|---|---|
+| **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met, except the thread-creation stress test |
+| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | Not started |
+| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
+| **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
-## Risks and open questions
+## Open items
 
-- **The speed target is an estimate.** Dense AVX2 cost is unproven by anything measured so far.
-- **Dependency on DynamoRIO.** Large and mature, with its own bugs in every executed instruction path.
-- **Thread relocation.** Reset is off because relocating a thread is not faithful: see "The cache reset". Anything new that
-  relocates one needs `test/regstress.c`.
-- **The fork.** Its signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a
-  syscall in a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment.
-  The lock change affects every thread running during exit and is the one most worth a review.
-- **JIT-heavy programs** may regress past AVXEmu's 1.2x. Measured: Node 2.4x, Java 13x.
-- **FMA** under correct rounding stays slow. FMA-heavy programs may not reach the targets.
+- **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
+  AMD (1.67x with no client) and needs more forms inline.
+- **Thread-creation stress test.** A test creating threads without limit near exit died after 50 minutes on stock and fork,
+  passed natively; cause unknown. To return with a thread cap.
+- **vfork child killed by a signal before exec** hangs the parent, as with `clone3`: DynamoRIO's exit waits for the parent,
+  which the kernel holds until the child is gone **[measured]**. glibc's `posix_spawn` case is fixed in the fork
+  (`test/clone3.c`).
+- **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
+  (likely upstream i#4219, not tested), hangs under reset with code churn. A rare SIGSEGV with reset off and no client is
+  unexplained: 1 of 495 on the earlier pin, 1 of 1,896 on this one, no wrong output (at most 0.3%, 95%). Anything new that
+  relocates a thread needs `test/regstress.c`.
+- **Signal injection** into an expansion is untested; asynchronous signals arrive at fragment boundaries.
+- **Intel NaN priority** is unverified until a recording on Intel AVX2 hardware.
+- **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
+  a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
+  affects every thread running during exit and is the one most worth review.
+- **JIT-heavy programs** may regress past AVXEmu's 1.2x: Node 2.4x, Java 13x. **FMA** under correct rounding stays slow.
 
 ## License
 
-Apache-2.0, chosen for its patent grant. Compatible with its inputs:
-
-- DynamoRIO core and `drmgr`, `drreg`, `drx`: BSD **[source]**.
-- DynamoRIO's `drutil`, `drwrap`, `drsyscall`: LGPL 2.1 **[source]**. They ship as separate shared libraries, never
-  statically linked.
-- AVXEmu: CC0 **[source]**.
-
-Binaries must carry DynamoRIO's notices.
+Apache-2.0, chosen for its patent grant. DynamoRIO core, `drmgr`, `drreg`, `drx` are BSD; `drutil`, `drwrap`, `drsyscall`
+are LGPL 2.1 and ship as separate shared libraries, never statically linked; AVXEmu is CC0 **[source]**. Binaries must carry
+DynamoRIO's notices.
