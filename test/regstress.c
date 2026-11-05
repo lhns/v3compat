@@ -1,6 +1,6 @@
-/* regstress THREADS SECONDS [jit] [sig] [idle]: threads run hot shared code with every register at a known value and
+/* regstress THREADS SECONDS [jit] [sig] [idle] [badsig]: threads run hot shared code with every register at a known value and
  * check them all constantly, while other threads make DR flush, deliver signals or sit blocked. A wrong register
- * prints which and exits 77. */
+ * prints which and exits 77; badsig makes the handler flip a flag, which must be caught. */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <signal.h>
@@ -13,7 +13,6 @@
 
 __thread uint64_t exp_[16] __attribute__((aligned(32)));
 __thread uint64_t yexp[4 * 14] __attribute__((aligned(32)));
-__thread uint64_t ones[4] __attribute__((aligned(32)));
 __thread uint64_t got[16];
 __thread uint64_t ygot[4 * 14] __attribute__((aligned(32)));
 __thread uint64_t failk, iters, svrax, gotf, expf;
@@ -133,7 +132,6 @@ static void *worker(void *arg) {
         rexp[4 * 4 + l] = (uint64_t)(uint32_t)(a + c) | ((uint64_t)(uint32_t)(b + d) << 32);
     }
     isworker = 1;
-    memset(ones, 0xff, sizeof ones);
     run_blocks();
     __atomic_add_fetch(&total, iters, __ATOMIC_RELAXED);
     return NULL;
