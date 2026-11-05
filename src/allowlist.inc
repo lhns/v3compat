@@ -9896,6 +9896,7 @@ static const uint64 allow_emulated[] = {
     0x1b30b91b83adbe83ULL, /* vpcmpgtq vex w l d:y s:y,m33 */
     0x1b66283917d78528ULL, /* pdep vex w d:g64 s:m6,g64 */
     0x1bb49700972241ebULL, /* vfnmsub213pd vex w d:x s:x,x,x */
+    0x1c331ad883cd0749ULL, /* vmpsadbw vex l d:y s:y,y,i */
     0x1ce3b524b3a6dd96ULL, /* vpunpckhdq vex l d:y s:y,m33 */
     0x1d473991182de1a9ULL, /* vpaddsb vex w l d:y s:y,m33 */
     0x1d5f64d986a34846ULL, /* vpsubusw vex w l d:y s:y,m33 */
@@ -9975,6 +9976,7 @@ static const uint64 allow_emulated[] = {
     0x3556a2eb069988deULL, /* shrx vex d:g32 s:g32,g32 */
     0x35f2579b4b9954d2ULL, /* vpbroadcastw vex l d:y s:x */
     0x3605303f3927d01cULL, /* vfmaddsub231ps vex d:x s:x,x,x */
+    0x362e3f49da765263ULL, /* vmpsadbw vex l d:y s:y,m33,i */
     0x36597c05dd86b748ULL, /* vfmadd213ss vex d:x s:x,m4,x */
     0x366dd69d4afb3d27ULL, /* vpsllvq vex w l d:y s:y,m33 */
     0x367bcbc4d0aa313cULL, /* vfmsub213ss vex l d:x s:x,x,x */
@@ -10274,6 +10276,7 @@ static const uint64 allow_emulated[] = {
     0x90d9e6ebf8362420ULL, /* vfnmadd213ps vex d:x s:x,x,x */
     0x90e1aee269ae029eULL, /* vpminuw vex l d:y s:y,m33 */
     0x90e7596429e954b4ULL, /* vpabsd vex w l d:y s:y */
+    0x90f21a8b4a235d74ULL, /* vmpsadbw vex w l d:y s:y,y,i */
     0x9117dea31511d254ULL, /* vextracti128 vex l d:x s:y,i */
     0x915348afb5067d0bULL, /* vfmsubadd213ps vex d:x s:x,m8,x */
     0x917ebcfc5267afacULL, /* vpmaskmovq vex w l d:m33 s:y,y */
@@ -10392,6 +10395,7 @@ static const uint64 allow_emulated[] = {
     0xb6058bda947d0e10ULL, /* vfmsub231sd vex w d:x s:x,x,x */
     0xb643aa202548123aULL, /* vpsrlvd vex d:x s:x,x */
     0xb654ed02a2140794ULL, /* vpsllw vex l d:y s:i,y */
+    0xb72339edd16115eeULL, /* vmpsadbw vex w l d:y s:y,m33,i */
     0xb723a7b15cfc64a0ULL, /* vpmaxsb vex w l d:y s:y,m33 */
     0xb75c2a5fa6e04d2aULL, /* vpsllq vex l d:y s:y,y */
     0xb8ac751ab8923cd9ULL, /* blsi vex d:g32 s:g32 */

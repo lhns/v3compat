@@ -16,6 +16,9 @@ add_executable(flagrepro flagrepro.c)
 add_executable(fault_state fault_state.c)
 add_executable(flags_kept flags_kept.c)
 add_executable(bmi_inline bmi_inline.c)
+add_executable(gather gather.c)
+target_compile_options(gather PRIVATE -O1 -w)
+target_link_options(gather PRIVATE -static)
 add_executable(fs_operand fs_operand.c)
 target_link_options(fs_operand PRIVATE -static)
 add_executable(seg_threads seg_threads.c)
@@ -240,6 +243,11 @@ v3test(bmi-inline stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:bmi_inline>)
 v3test(bmi-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:bmi_inline>)
 v3test(bmi-native stdout-has PASS exit 0 -- $<TARGET_FILE:bmi_inline>)
 set_tests_properties(bmi-inline bmi-helpers bmi-native PROPERTIES TIMEOUT 120)
+# The AVX2 gathers against a C model: faults mid-gather and restart, masked-off elements, every width, base register,
+# 0x67 and fs. Native needs AVX2 and checks the model.
+v3test(gather stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:gather>)
+v3test(gather-native stdout-has PASS exit 0 -- $<TARGET_FILE:gather>)
+set_tests_properties(gather gather-native PROPERTIES TIMEOUT 600)
 # Thread-local (%fs:) memory operands of expanded forms, against a C model; native checks the model.
 v3test(fs-operand stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:fs_operand>)
 v3test(fs-operand-native stdout-has PASS exit 0 -- $<TARGET_FILE:fs_operand>)
@@ -260,7 +268,7 @@ set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynam
   lzcnt-dlopen lzcnt-static-exec PROPERTIES TIMEOUT 120)
 
 # ADR 0008: off the audited list exits 86, on it runs, whatever this CPU would do with it.
-foreach(f xop-bextr-imm vmpsadbw-ymm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
+foreach(f xop-bextr-imm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
           sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb
           andn-fs-addr32 andn-gs-addr32 andn-fs-rip andn-gs-rip)
   v3test(refused-${f} exit 86 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})

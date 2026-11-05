@@ -56,6 +56,14 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
 #define SM_i_rcx2(s) SEGM(s, "0x40(,%rcx,2)")               // index only
 #define SM_bi_r15_r14(s) SEGM(s, "8(%r15,%r14,1)")
 #define SM_absd(s) SM_absd_##s                              // no base, no index: the local-exec TLS form
+#define SM_vsy_base(s) SEGM(s, "0x10(%rax,%ymm3,4)")       // gathers: a vector index
+#define SM_vsx_base(s) SEGM(s, "0x10(%rax,%xmm3,4)")
+#define SM_vsy_nob(s) SM_vsy_nob_##s
+#define SM_vsx_nob(s) SM_vsx_nob_##s
+#define SM_vsy_nob_fs "%fs:tpage@tpoff+4096(,%ymm3,4)"
+#define SM_vsy_nob_gs "%gs:gpage+4096(,%ymm3,4)"
+#define SM_vsx_nob_fs "%fs:tpage@tpoff+4096(,%xmm3,4)"
+#define SM_vsx_nob_gs "%gs:gpage+4096(,%xmm3,4)"
 #define SM_absd_fs "%fs:tpage@tpoff+4096"
 #define SM_absd_gs "%gs:gpage+4096"
 
@@ -86,6 +94,12 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
 #define T_BLENDV(mn, M) "vpblendvb %ymm3, " M ", %ymm1, %ymm2"
 #define T_EXT(mn, M) "vextracti128 $1, %ymm1, " M
 #define T_CVTST(mn, M) "vcvtps2ph $0, %ymm1, " M
+#define T_GI_Y(mn, M) #mn " %ymm0, " M ", %ymm2"      // gathers: ymm0 is the mask, ymm3 the index
+#define T_GI_YX(mn, M) #mn " %xmm0, " M ", %xmm2"
+#define T_GI_X(mn, M) #mn " %ymm0, " M ", %ymm2"
+#define PM_GI_Y "(%r13,%ymm3,4)"
+#define PM_GI_YX "(%r13,%ymm3,4)"
+#define PM_GI_X "(%r13,%xmm3,4)"
 #define T_MASKLD(mn, M) #mn " " M ", %ymm0, %ymm2"    // ymm0 is all ones: lane 0 is active
 #define T_MASKSTD(mn, M) "vpmaskmovd %ymm1, %ymm0, " M
 #define T_MASKSTQ(mn, M) "vpmaskmovq %ymm1, %ymm0, " M
@@ -111,7 +125,7 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     F(X, RORX_32, rorx_32) F(X, LZ32, lzcnt_32) F(X, LZ16, lzcnt_16) F(X, TZ32, tzcnt_32) \
     F(X, BZHI32, bzhi_32) F(X, MASKLD, vpmaskmovq) F(X, MASKSTQ, vpmaskmovq_st) \
     F(X, UN, vbroadcasti128) F(X, UN, vcvtph2ps) \
-    F(X, IMM3, vpalignr) F(X, IMM3, vpblendd) F(X, IMM3, vpblendw) F(X, IMM3, vperm2i128) \
+    F(X, IMM3, vmpsadbw) F(X, IMM3, vpalignr) F(X, IMM3, vpblendd) F(X, IMM3, vpblendw) F(X, IMM3, vperm2i128) \
     F(X, UN, vpabsb) F(X, UN, vpabsd) F(X, UN, vpabsw) \
     F(X, BIN, vpackssdw) F(X, BIN, vpacksswb) F(X, BIN, vpackusdw) F(X, BIN, vpackuswb) \
     F(X, BIN, vpaddb) F(X, BIN, vpaddd) F(X, BIN, vpaddsb) F(X, BIN, vpaddsw) F(X, BIN, vpaddusb) \
@@ -142,12 +156,20 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     FMAS(F, X, msub) FMAS(F, X, nmadd) FMAS(F, X, nmsub) \
 
 #define L_ALL(F, X) L_REP(F, X) L_WIDE(F, X)
+// Gathers: a fault on element 0 leaves the state untouched; the restart completes all elements.
+#define L_GATHER_Y(F, X) F(X, GI_Y, vgatherdps) F(X, GI_Y, vpgatherdd) F(X, GI_Y, vgatherqpd) F(X, GI_Y, vpgatherqq)     F(X, GI_YX, vgatherqps) F(X, GI_YX, vpgatherqd)
+#define L_GATHER_X(F, X) F(X, GI_X, vgatherdpd) F(X, GI_X, vpgatherdq)
+#define L_GATHERS(F, X) L_GATHER_Y(F, X) L_GATHER_X(F, X)
 
 #define SHAPES_FULL(X, seg, cat, mn) \
     X(seg, b_rax, cat, mn, "") X(seg, b_rsp, cat, mn, RSPLD) X(seg, b_dst, cat, mn, "") \
     X(seg, bi_rax_rcx4, cat, mn, "") X(seg, bi_rdx_rax8, cat, mn, "") X(seg, i_rcx2, cat, mn, "") \
     X(seg, bi_r15_r14, cat, mn, "") X(seg, absd, cat, mn, "")
 #define SHAPES_WIDE(X, seg, cat, mn) X(seg, bi_rdx_rax8, cat, mn, "") X(seg, absd, cat, mn, "")
+#define SHAPES_VSY(X, seg, cat, mn) X(seg, vsy_base, cat, mn, "") X(seg, vsy_nob, cat, mn, "")
+#define SHAPES_VSX(X, seg, cat, mn) X(seg, vsx_base, cat, mn, "") X(seg, vsx_nob, cat, mn, "")
+#define SEGS_VSY(X, cat, mn) SHAPES_VSY(X, fs, cat, mn) SHAPES_VSY(X, gs, cat, mn)
+#define SEGS_VSX(X, cat, mn) SHAPES_VSX(X, fs, cat, mn) SHAPES_VSX(X, gs, cat, mn)
 #define SEGS_FULL(X, cat, mn) SHAPES_FULL(X, fs, cat, mn) SHAPES_FULL(X, gs, cat, mn)
 #define SEGS_WIDE(X, cat, mn) SHAPES_WIDE(X, fs, cat, mn) SHAPES_WIDE(X, gs, cat, mn)
 
@@ -160,24 +182,36 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
 
 L_REP(SEGS_FULL, STUB_X)
 L_WIDE(SEGS_WIDE, STUB_X)
+L_GATHER_Y(SEGS_VSY, STUB_X)
+L_GATHER_X(SEGS_VSX, STUB_X)
+#define PLAIN_G(X, cat, mn) STUB(p_##mn, "", T_##cat(mn, PM_##cat))
 L_ALL(PLAIN_F, 0)
+L_GATHERS(PLAIN_G, 0)
 L_REP(SEGS_FULL, DECL_X)
 L_WIDE(SEGS_WIDE, DECL_X)
+L_GATHER_Y(SEGS_VSY, DECL_X)
+L_GATHER_X(SEGS_VSX, DECL_X)
 L_ALL(DECL_P, 0)
+L_GATHERS(DECL_P, 0)
 
 enum { SEG_fs, SEG_gs };
 typedef struct { int base, idx, scale, disp, rsp; } shape_t;
-enum { SHN_b_rax, SHN_b_rsp, SHN_b_dst, SHN_bi_rax_rcx4, SHN_bi_rdx_rax8, SHN_i_rcx2, SHN_bi_r15_r14, SHN_absd };
+enum { SHN_b_rax, SHN_b_rsp, SHN_b_dst, SHN_bi_rax_rcx4, SHN_bi_rdx_rax8, SHN_i_rcx2, SHN_bi_r15_r14, SHN_absd,
+       SHN_vsy_base, SHN_vsy_nob, SHN_vsx_base, SHN_vsx_nob };
 static const shape_t shapes[] = {   // register numbers in hardware order
     [SHN_b_rax] = {0, -1, 0, 0, 0},         [SHN_b_rsp] = {4, -1, 0, 0, 1},
     [SHN_b_dst] = {3, -1, 0, 0, 0},         [SHN_bi_rax_rcx4] = {0, 1, 4, 0x10, 0},
     [SHN_bi_rdx_rax8] = {2, 0, 8, -0x20, 0}, [SHN_i_rcx2] = {-1, 1, 2, 0x40, 0},
     [SHN_bi_r15_r14] = {15, 14, 1, 8, 0},   [SHN_absd] = {-1, -1, 0, 0, 0},
+    [SHN_vsy_base] = {0, -1, 0, 0x10, 0}, [SHN_vsx_base] = {0, -1, 0, 0x10, 0},
+    [SHN_vsy_nob] = {-1, -1, 0, 0, 0}, [SHN_vsx_nob] = {-1, -1, 0, 0, 0},
 };
 typedef struct { const char *name; void (*run)(void), (*plain)(void); const char *ins; int seg, shape; } tcase;
 static const tcase cases[] = {
     L_REP(SEGS_FULL, TAB_X)
     L_WIDE(SEGS_WIDE, TAB_X)
+    L_GATHER_Y(SEGS_VSY, TAB_X)
+    L_GATHER_X(SEGS_VSX, TAB_X)
 };
 
 static struct { int count, sig; void *addr; greg_t g[NGREG]; uint8_t fp[832]; int fp_ok; } snap;
@@ -237,7 +271,8 @@ int main(int argc, char **argv) {   // an argument selects the cases whose name 
         int64_t o = (int64_t)(uintptr_t)g - (c->seg == SEG_fs ? (int64_t)fsb : 0) - sh->disp;
         for (int i = 0; i < 16; i++)
             for (int j = 0; j < 32; j++) ymm_init[i][j] = (uint8_t)(i * 37 + j * 11 + 1);
-        memset(ymm_init[0], 0xff, 32);   // the mask of the masked forms
+        memset(ymm_init[0], 0xff, 32);   // the mask of the masked forms and gathers
+        for (int j = 0; j < 4; j++) { uint64_t v = (uint64_t)j; memcpy(ymm_init[3] + 8 * j, &v, 8); }   // the gathers' index
         for (int k = 0; k < 16; k++) gpr_init[k] = 0x0101010101010101ull * (uint64_t)(k + 1) ^ 0x1122334455667788ull;
         gpr_init[13] = (uint64_t)refpage;
         if (sh->idx >= 0 && sh->base >= 0) { gpr_init[sh->idx] = 3; gpr_init[sh->base] = (uint64_t)(o - 3 * sh->scale); }
