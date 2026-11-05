@@ -1,10 +1,10 @@
 #!/bin/sh
-# duckdb-reset.sh RUN DUCKDB RUNS: the query that retires shared trace heads, with the threshold that turns retired
-# heads into pending deletions lowered so a proactive reset would fire. Output must match native and exit 0 every time.
+# duckdb-reset.sh RUN DUCKDB RUNS: the query that retires shared trace heads, with DynamoRIO's cache reset turned back on
+# and made to fire often, so threads are relocated out of hot traces. Output must match native and exit 0 every time.
 RUN=$1; D=$2; RUNS=$3; here=$(dirname "$0"); dir=$(mktemp -d)
 sed -n '1p;7p;8p' "$here/duckdb-varied.sql" > "$dir/q.sql"
 "$D" -csv -noheader -f "$dir/q.sql" > "$dir/native" 2>&1 || exit 2
-V3COMPAT_DR_OPTS="-lazy_deletion_max_pending 1"; export V3COMPAT_DR_OPTS
+V3COMPAT_DR_OPTS="-enable_reset -lazy_deletion_max_pending 1 -reset_every_nth_pending 1"; export V3COMPAT_DR_OPTS
 bad=0; i=0
 while [ "$i" -lt "$RUNS" ]; do i=$((i+1))
     timeout 300 $RUN "$D" -csv -noheader -f "$dir/q.sql" > "$dir/out" 2>&1; rc=$?
