@@ -606,11 +606,13 @@ static void fetch(emit_t *e, opnd_t s, reg_id_t t, uint bytes) {
  * the image only between lahf and the store, and event_restore puts the flags back from `fl`.
  */
 static void flags_save(emit_t *e) {
+    return;   /* MUTATION */
     put(e, INSTR_CREATE_lahf(e->dc));
     put(e, INSTR_CREATE_setcc(e->dc, OP_seto, reg(DR_REG_AL)));
     put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, fl), OPSZ_8), reg(DR_REG_RAX)));
 }
 static void flags_restore(emit_t *e) {
+    return;   /* MUTATION */
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RAX), tls_opnd(offsetof(tls_t, fl), OPSZ_8)));
     put(e, INSTR_CREATE_add(e->dc, reg(DR_REG_AL), OPND_CREATE_INT8(0x7f)));   /* OF from al */
     put(e, INSTR_CREATE_sahf(e->dc));
@@ -693,7 +695,7 @@ static void expand_mulx(emit_t *e, instr_t *in) {
     load_g(e, DR_REG_RDX, 1);
     reg_id_t lop = reg_to_pointer_sized(lo), hip = reg_to_pointer_sized(hi);
     if (lop == hip) {
-        put(e, INSTR_CREATE_mov_ld(e->dc, reg(hi), reg(gsz(t2, bytes))));   /* commit */
+        put(e, INSTR_CREATE_mov_ld(e->dc, reg(hi), reg(gsz(t, bytes))));   /* MUTATION commit */
     } else {
         /* A write that clobbers an input goes last, so the first leaves the instruction re-executable. */
         bool lo_in = lop == DR_REG_RDX || opnd_uses_reg(src, lop);
