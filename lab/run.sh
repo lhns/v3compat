@@ -1,5 +1,6 @@
 #!/bin/bash
 . lab/loop.sh
+grep -m1 "model name" /proc/cpuinfo
 RUN="build/inst/bin/v3compat-run --"
 RS=build/test/regstress
 mkdir -p lab-out/core; sudo sysctl -q kernel.core_pattern="$PWD/lab-out/core/core.%p"; ulimit -c unlimited
