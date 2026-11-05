@@ -174,7 +174,6 @@ static void oneop(const char *name, fn t_r, fn t_m, int kind, int e, int d, int 
         uint8_t *src = edge + 4096 - bytes;
         memcpy(src, b, bytes);
         out_t o2;
-        cur = "page end";
         t_m(in, src, &o2);   // reads (%rsi) = src
         if (memcmp(o2.y[0], want, 32)) bad(name, "mem at page end", o2.y[0], want);
     }
