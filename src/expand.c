@@ -873,7 +873,7 @@ static void expand_gather(emit_t *e, instr_t *in) {
                                 opnd_create_base_disp(base == DR_REG_NULL ? DR_REG_NULL : tb, ta,
                                                       opnd_get_scale(mem), opnd_get_disp(mem), OPSZ_lea)));
         if (a32) put(e, INSTR_CREATE_mov_ld(e->dc, reg(gsz(ta, 4)), reg(gsz(ta, 4))));
-        if (uses_seg(mem)) {   // DR mangles the application's fs, so a meta fs: would be DR's
+        if (uses_seg(mem)) {   // a meta fs:/gs: would be DR's
             dr_insert_get_seg_base(e->dc, e->bb, e->where, opnd_get_segment(mem), td);
             put(e, INSTR_CREATE_add(e->dc, reg(ta), reg(td)));
         }

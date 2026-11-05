@@ -9,7 +9,7 @@ static float b[8] __attribute__((aligned(32))) = {0.5f, 2.f, -1.f, 8.f, 3.5f, -4
 static float c[8] __attribute__((aligned(32))) = {10.f, 20.f, 30.f, 40.f, 50.f, 60.f, 70.f, 80.f};
 static int bad;
 
-#define CASE(mn, R, N, B)                                                                              \
+#define CASE(mn, R, N)                                                                              \
     do {                                                                                              \
         uint8_t r1[32], r2[32];                                                                       \
         __asm__ volatile("vmovdqu (%2), %%" R "1\n vmovdqu (%3), %%" R "2\n vmovdqu (%4), %%" R "3\n" \
@@ -18,7 +18,7 @@ static int bad;
                          : : "r"(r1), "r"(r2), "r"(a), "r"(b), "r"(c) : "memory", "xmm1", "xmm2", "xmm3", "xmm4"); \
         if (memcmp(r1, r2, N)) { printf("FAIL %s %s: register and memory sources differ\n", #mn, R); bad = 1; } \
     } while (0)
-#define BOTH(mn) CASE(mn, "ymm", 32, 0); CASE(mn, "xmm", 16, 0)
+#define BOTH(mn) CASE(mn, "ymm", 32); CASE(mn, "xmm", 16)
 
 int main(void) {
     BOTH(vphaddw); BOTH(vphaddsw); BOTH(vphsubd); BOTH(vphsubsw); BOTH(vphsubw);

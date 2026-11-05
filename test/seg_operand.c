@@ -158,7 +158,7 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
 
 #define L_ALL(F, X) L_REP(F, X) L_WIDE(F, X)
 // Gathers: a fault on element 0 leaves the state untouched; the restart completes all elements.
-#define L_GATHER_Y(F, X) F(X, GI_Y, vgatherdps) F(X, GI_Y, vpgatherdd) F(X, GI_Y, vgatherqpd) F(X, GI_Y, vpgatherqq)     F(X, GI_YX, vgatherqps) F(X, GI_YX, vpgatherqd)
+#define L_GATHER_Y(F, X) F(X, GI_Y, vgatherdps) F(X, GI_Y, vpgatherdd) F(X, GI_Y, vgatherqpd) F(X, GI_Y, vpgatherqq) F(X, GI_YX, vgatherqps) F(X, GI_YX, vpgatherqd)
 #define L_GATHER_X(F, X) F(X, GI_X, vgatherdpd) F(X, GI_X, vpgatherdq)
 #define L_GATHERS(F, X) L_GATHER_Y(F, X) L_GATHER_X(F, X)
 
