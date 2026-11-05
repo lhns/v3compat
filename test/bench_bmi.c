@@ -20,12 +20,12 @@
                          : "rax", "rcx", "rdx", "rsi", "r8", "r9", "r10", "r11", "cc", "memory"); \
     }
 
-LOOP(b_mov, "mov %rcx, %r8\n")
-LOOP(b_rorx, "rorx $13, %rcx, %r8\n")
-LOOP(b_andn, "andn %rcx, %rdx, %r8\n")
-LOOP(b_mulx, "mulx %rcx, %r8, %r9\n")
-LOOP(b_movbe_ld, "movbe (%rdi), %r8\n")
-LOOP(b_movbe_st, "movbe %rcx, (%rdi)\n")
+LOOP(b_mov, "mov %%rcx, %%r8\n")
+LOOP(b_rorx, "rorx $13, %%rcx, %%r8\n")
+LOOP(b_andn, "andn %%rcx, %%rdx, %%r8\n")
+LOOP(b_mulx, "mulx %%rcx, %%r8, %%r9\n")
+LOOP(b_movbe_ld, "movbe (%%rdi), %%r8\n")
+LOOP(b_movbe_st, "movbe %%rcx, (%%rdi)\n")
 
 static double now(void) {
     struct timespec t;

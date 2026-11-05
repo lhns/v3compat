@@ -678,7 +678,8 @@ static void expand_mulx(emit_t *e, instr_t *in) {
     fetch(e, src, t, bytes);
     flags_save(e);
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(gsz(DR_REG_RAX, bytes)), reg(gsz(DR_REG_RDX, bytes))));
-    put(e, INSTR_CREATE_mul(e->dc, reg(t)));
+    /* DR's mul macros take no 64-bit form: rdx:rax = rax * t. */
+    put(e, instr_create_2dst_2src(e->dc, OP_mul, reg(DR_REG_RDX), reg(DR_REG_RAX), reg(t), reg(DR_REG_RAX)));
     if (bytes == 8) {
         put(e, INSTR_CREATE_mov_ld(e->dc, reg(t), reg(DR_REG_RAX)));
         put(e, INSTR_CREATE_mov_ld(e->dc, reg(t2), reg(DR_REG_RDX)));
