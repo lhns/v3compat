@@ -30,6 +30,19 @@ static void *run(void *arg) {
         __asm__ volatile("movbe %0, %%fs:tw@tpoff+16" : : "r"(a) : "memory");
         __asm__ volatile("movbe %0, %%fs:(%1)" : : "r"(a), "r"(otw) : "memory");
         if (tw[2] != __builtin_bswap64(a) || tw[0] != __builtin_bswap64(a)) bad[id]++;
+        // A positive absolute displacement: the thread control block, as the stack protector reads it.
+        uint64_t can, t2[4] __attribute__((aligned(32)));
+        __asm__("mov %%fs:0x28, %0" : "=r"(can));
+        __asm__("andn %%fs:0x28, %1, %0" : "=r"(r) : "r"(a));
+        if (r != (~a & can)) bad[id]++;
+        __asm__("movbe %%fs:0x28, %0" : "=r"(r));
+        if (r != __builtin_bswap64(can)) bad[id]++;
+        __asm__ volatile("vmovdqu (%0), %%ymm1\n vpaddq %%fs:0x28, %%ymm1, %%ymm2\n vmovdqu %%ymm2, (%1)" : : "r"(in), "r"(t2) : "xmm1", "xmm2", "memory");
+        for (int k = 0; k < 4; k++) {
+            uint64_t w;
+            __builtin_memcpy(&w, (char *)fsb + 0x28 + 8 * k, 8);
+            if (t2[k] != in[k] + w) bad[id]++;
+        }
         __asm__ volatile("vmovdqu (%0), %%ymm1\n vpaddq %%fs:tv@tpoff, %%ymm1, %%ymm2\n vmovdqu %%ymm2, (%1)" : : "r"(in), "r"(out) : "xmm1", "xmm2", "memory");
         for (int k = 0; k < 4; k++) if (out[k] != in[k] + tv[k]) bad[id]++;
         __asm__ volatile("vmovdqu (%0), %%ymm1\n vpmulld %%fs:(%2), %%ymm1, %%ymm2\n vmovdqu %%ymm2, (%1)" : : "r"(in), "r"(out), "r"(otv) : "xmm1", "xmm2", "memory");

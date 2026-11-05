@@ -128,7 +128,8 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     F(X, IMM3, vmpsadbw) F(X, IMM3, vpalignr) F(X, IMM3, vpblendd) F(X, IMM3, vpblendw) F(X, IMM3, vperm2i128) \
     F(X, UN, vpabsb) F(X, UN, vpabsd) F(X, UN, vpabsw) \
     F(X, BIN, vpackssdw) F(X, BIN, vpacksswb) F(X, BIN, vpackusdw) F(X, BIN, vpackuswb) \
-    F(X, BIN, vpaddb) F(X, BIN, vpaddd) F(X, BIN, vpaddsb) F(X, BIN, vpaddsw) F(X, BIN, vpaddusb) \
+    F(X, BIN, vphaddsw) F(X, BIN, vphaddw) F(X, BIN, vphsubd) F(X, BIN, vphsubsw) F(X, BIN, vphsubw) \
+    FMA3(F, X, maddsub) FMA3(F, X, msubadd) F(X, BIN, vpaddb) F(X, BIN, vpaddd) F(X, BIN, vpaddsb) F(X, BIN, vpaddsw) F(X, BIN, vpaddusb) \
     F(X, BIN, vpaddusw) F(X, BIN, vpaddw) F(X, BIN, vpand) F(X, BIN, vpandn) F(X, BIN, vpavgb) F(X, BIN, vpavgw) \
     F(X, UN, vpbroadcastq) F(X, UN, vpbroadcastw) \
     F(X, BIN, vpcmpeqb) F(X, BIN, vpcmpeqd) F(X, BIN, vpcmpeqq) F(X, BIN, vpcmpeqw) \
@@ -229,9 +230,20 @@ static void handler(int sig, siginfo_t *si, void *vc) {
 
 static const int greg_of[16] = {REG_RAX, REG_RCX, REG_RDX, REG_RBX, REG_RSP, REG_RBP, REG_RSI, REG_RDI,
                                 REG_R8, REG_R9, REG_R10, REG_R11, REG_R12, REG_R13, REG_R14, REG_R15};
-static int failures;
+static int failures, cross;
+// Accesses of 8 bytes or more through the base register, whose start can lie before the guard page.
+static int crossable(const tcase *c) {
+    static const char *const ok[] = {"/andn", "/movbe_ld64", "/movbe_st64", "/vpaddq", "/vpmaxsd", "/vpermd",
+                                     "/vfmadd231ps", "/vextracti128", "/vpmaskmovd"};
+    if (!strstr(c->name, "/b_rax/")) return 0;
+    for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++) {
+        const char *p = strstr(c->name, ok[i]);
+        if (p && p[strlen(ok[i])] == 0) return 1;
+    }
+    return 0;
+}
 static void fail(const tcase *c, const char *what) {
-    if (failures++ < 40) printf("FAIL %s: %s\n", c->name, what);
+    if (failures++ < 40) printf("FAIL %s%s: %s\n", c->name, cross ? " (crossing)" : "", what);
 }
 
 static void check(const tcase *c, uint8_t *g, const shape_t *sh) {
@@ -262,19 +274,21 @@ int main(int argc, char **argv) {   // an argument selects the cases whose name 
     __asm__("mov %%fs:0, %0" : "=r"(fsb));
     if (fsb % 64) { puts("FAIL setup: fs base not 64-aligned"); return 2; }
     int ran = 0;
-    for (size_t n = 0; n < sizeof cases / sizeof cases[0]; n++) {
-        const tcase *c = &cases[n];
+    for (size_t n2 = 0; n2 < 2 * (sizeof cases / sizeof cases[0]); n2++) {
+        const tcase *c = &cases[n2 / 2];
+        cross = n2 % 2;   // second pass: the access starts 4 bytes before the guard page and crosses into it
+        if (cross && !crossable(c)) continue;
         if (argc > 1 && !strstr(c->name, argv[1])) continue;
         ran++;
         const shape_t *sh = &shapes[c->shape];
         uint8_t *g = c->seg == SEG_fs ? tpage + PAGE : gpage + PAGE;
-        int64_t o = (int64_t)(uintptr_t)g - (c->seg == SEG_fs ? (int64_t)fsb : 0) - sh->disp;
+        int64_t o = (int64_t)(uintptr_t)g - (c->seg == SEG_fs ? (int64_t)fsb : 0) - sh->disp - (cross ? 4 : 0);
         for (int i = 0; i < 16; i++)
             for (int j = 0; j < 32; j++) ymm_init[i][j] = (uint8_t)(i * 37 + j * 11 + 1);
         memset(ymm_init[0], 0xff, 32);   // the mask of the masked forms and gathers
         for (int j = 0; j < 4; j++) { uint64_t v = (uint64_t)j; memcpy(ymm_init[3] + 8 * j, &v, 8); }   // the gathers' index
         for (int k = 0; k < 16; k++) gpr_init[k] = 0x0101010101010101ull * (uint64_t)(k + 1) ^ 0x1122334455667788ull;
-        gpr_init[13] = (uint64_t)refpage;
+        gpr_init[13] = (uint64_t)(refpage + PAGE - (cross ? 4 : 0));
         if (sh->idx >= 0 && sh->base >= 0) { gpr_init[sh->idx] = 3; gpr_init[sh->base] = (uint64_t)(o - 3 * sh->scale); }
         else if (sh->base >= 0) gpr_init[sh->base] = (uint64_t)o;
         else if (sh->idx >= 0) {
@@ -283,7 +297,7 @@ int main(int argc, char **argv) {   // an argument selects the cases whose name 
         }
         guard = g;
         mprotect(g, PAGE, PROT_READ | PROT_WRITE);
-        for (int i = 0; i < 128; i++) g[i] = refpage[i] = (uint8_t)(i * 29 + 7);
+        for (int i = -16; i < 128; i++) g[i] = refpage[PAGE + i] = (uint8_t)(i * 29 + 7);
         mprotect(g, PAGE, PROT_NONE);
         c->plain();
         uint8_t d0[sizeof d_out];
@@ -292,7 +306,7 @@ int main(int argc, char **argv) {   // an argument selects the cases whose name 
         c->run();
         // The program carried on past the instruction: this line is the check.
         check(c, g, sh);
-        if (memcmp(g, refpage, 128)) fail(c, "memory differs from the plain operand's");
+        if (memcmp(g - 16, refpage + PAGE - 16, 144)) fail(c, "memory differs from the plain operand's");
         uint8_t d1[sizeof d_out];
         memcpy(d1, &d_out, sizeof d1);
         memset(d0 + 32, 0, 8);   // rsp: the stub's own
