@@ -12,10 +12,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: d1, dr: 477068baed9c7649dc20f50fe25da4efc51756b0, arg: "1500 sig jit"}
-          - {name: d2, dr: 477068baed9c7649dc20f50fe25da4efc51756b0, arg: "1500 sig jit"}
-          - {name: d3, dr: 477068baed9c7649dc20f50fe25da4efc51756b0, arg: "1500 sig jit"}
-          - {name: d4, dr: 477068baed9c7649dc20f50fe25da4efc51756b0, arg: "1500 sig jit"}
+          - {name: d1, dr: 43611dbf04165613736842fda2e430ab55d6ac83, arg: "1500 sig jit"}
+          - {name: d2, dr: 43611dbf04165613736842fda2e430ab55d6ac83, arg: "1500 sig jit"}
+          - {name: d3, dr: 43611dbf04165613736842fda2e430ab55d6ac83, arg: "1500 sig jit"}
+          - {name: d4, dr: 43611dbf04165613736842fda2e430ab55d6ac83, arg: "1500 sig jit"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
