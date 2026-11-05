@@ -38,8 +38,11 @@ jobs:
             echo "$l hashes: $(h $v ./duckdb -csv -noheader -c 'select 42') $(h $v ./duckdb -csv -noheader -c "$C")"; }
           B=/tmp/i-base/bin/v3compat-run
           run base $B "" 1
-          V3C_XOPTS=-noallow run noallow $B "" ""
-          run notraces $B "-disable_traces" ""
-          for t in 500 2000 10000; do run "trace_threshold$t" $B "-trace_threshold $t" 1; done
-          run bogus $B "-hot_threshold 5000" ""
-          run memo /tmp/i-new/bin/v3compat-run "" ""
+          run notraces $B "-disable_traces" 1
+          for t in 10 25 100; do run "trace_threshold$t" $B "-trace_threshold $t" 1; done
+          echo "== persist"; strings -a $DR/lib64/release/libdynamorio.so | grep -E '^-?(persist|coarse_units|coarse_enable|use_persisted|persist_)' | sort -u | head -40
+          strings -a $DR/lib64/release/libdynamorio.so | grep -iE 'persist.*(client|not supported|requires)|client.*persist' | head
+          for o in "-coarse_units -persist" "-coarse_units -persist -persist_per_user" "-coarse_units -persist -no_persist_check_options"; do
+            rm -rf /tmp/pc; mkdir /tmp/pc; export V3COMPAT_DR_OPTS="$o -persist_dir /tmp/pc"
+            echo "[$o]"; $B ./duckdb -c "select 42" 2>&1 | tail -3; T cold 1 $B ./duckdb -c "select 42"; T warm 2 $B ./duckdb -c "select 42"; find /tmp/pc -type f | head -3; du -sk /tmp/pc
+          done
