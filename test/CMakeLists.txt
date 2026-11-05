@@ -184,6 +184,14 @@ foreach(sig term=15 kill=9 segv=11 abrt=6)
   v3test(signal-exec-${sn} signal ${sv} -- ${RUN} -- $<TARGET_FILE:execer_static> plain $<TARGET_FILE:exitcode> ${sn})
 endforeach()
 
+# Every register, vector and flag checked constantly under signals and code churn; the handler checks what it is shown.
+# The control shows the checks can fail: a handler that flips a flag is caught.
+add_executable(regstress regstress.c)
+target_compile_options(regstress PRIVATE -O1 -w -ftls-model=local-exec)
+target_link_options(regstress PRIVATE -static -pthread)
+v3test(regstress stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 sig jit)
+v3test(regstress-control exit 77 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 badsig)
+
 # What the app sees of its own executable (the client rewrites the calls that name it).
 foreach(k dyn static spie nopie)
   v3test(selfprobe-${k} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:selfprobe_${k}> $<TARGET_FILE:selfprobe_${k}>)

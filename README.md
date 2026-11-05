@@ -23,6 +23,12 @@ build/inst/bin/v3compat-run [--] prog args...
 - `V3COMPAT_DR_OPTS="..."` adds DynamoRIO options; defaults live in `launcher/v3compat-run.c`.
 - `V3COMPAT_STATS=1` prints, at exit to stderr, how many distinct instructions of each class (AVX2, FMA, BMI,
   LZCNT, TZCNT, MOVBE) were translated. It counts translations, not executions.
+- Startup is DynamoRIO translating the program's static init (duckdb `select 42`: about 20 times native). Measured on
+  CI runners: `V3COMPAT_DR_OPTS=-disable_traces` cuts it by about 27% (compute query 18%) but costs about 3% wall and
+  6% CPU on a long mixed workload, so it is not the default; use it for short-lived programs. `-trace_threshold` does
+  not help (10 to 100 the same, higher is slower). The allowlist check is about 5% of startup and memoising it gained
+  nothing. `-persist` does not work with the client: the client's `libdrmgr.so` fails to load
+  (`undefined symbol __memcpy_chk`), and a persisted cache would need a client that registers persistence callbacks.
 - The exit status and signals are the program's own. A program that would change privileges when exec'd (setuid, setgid, file capabilities) is refused: its `execve` fails with `EPERM` and a message on stderr, or the launcher exits 87 if it was the program named on the command line (see the plan).
 
 ### Semantic suite (opt-in)
