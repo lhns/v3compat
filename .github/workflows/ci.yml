@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Require AVX2 (CPUID)
         run: |
           cat > cpuid.c <<'C'
@@ -72,6 +74,21 @@ jobs:
           # Repeated: thread-interleaving faults are intermittent (docs/adr/0010).
           sh test/apps/duckdb.sh "build/inst/bin/v3compat-run --" ./duckdb 30 | tee client.txt
           diff <(sed 's/ wall.*//' native.txt | sort) <(sed 's/ wall.*//' client.txt | sort -u)
+      - name: duckdb wall time, the merge base's client against this one, alternating on this runner
+        if: github.event_name == 'pull_request'
+        run: |
+          base=$(git merge-base HEAD origin/main)
+          git worktree add ../base "$base"
+          cmake -S ../base -B ../base-build -DV3COMPAT_SEMANTIC=OFF >/dev/null
+          cmake --build ../base-build -j >/dev/null
+          { echo '```'; echo "base $base"; grep -m1 'model name' /proc/cpuinfo
+            for i in 1 2 3 4 5 6; do
+              for who in base this; do
+                if [ $who = base ]; then run=../base-build/inst/bin/v3compat-run; else run=build/inst/bin/v3compat-run; fi
+                sh test/apps/duckdb.sh "$run --" ./duckdb 1 | sed -e "s/^/run$i $who /" -e 's/hash=[0-9a-f]* //'
+              done
+            done
+            echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Executed v3 forms per program (client -stats), for choosing what to inline
         run: |
           { echo '```'; sh test/apps/opcounts.sh build/inst/bin/v3compat-run ./duckdb; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
