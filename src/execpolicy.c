@@ -5,6 +5,7 @@
 #include "drmgr.h"
 #include "exec_check.h"
 #include "execpolicy.h"
+#include "str.h"
 
 enum { PATHBUF = 4096 };
 
@@ -29,10 +30,6 @@ static size_t slen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }
 static bool eq(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
     return *a == *b;
-}
-static bool starts(const char *s, const char *p) {
-    while (*p) if (*s++ != *p++) return false;
-    return true;
 }
 static char *put_int(char *p, long v) {
     char t[24];
