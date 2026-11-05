@@ -69,6 +69,9 @@ jobs:
           # Repeated: thread-interleaving faults are intermittent (docs/adr/0010).
           sh test/apps/duckdb.sh "build/inst/bin/v3compat-run --" ./duckdb 30 | tee client.txt
           diff <(sed 's/ wall.*//' native.txt | sort) <(sed 's/ wall.*//' client.txt | sort -u)
+      - name: Executed v3 forms per program (client -stats), for choosing what to inline
+        run: |
+          { echo '```'; sh test/apps/opcounts.sh build/inst/bin/v3compat-run ./duckdb; echo '```'; } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The probe's results on this CPU, the list's AVX2 evidence (test/allow/regen.sh)
         if: always()
         uses: actions/upload-artifact@v4
