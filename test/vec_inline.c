@@ -17,7 +17,7 @@
             "vmovdqu (%rdi), %ymm1\nvmovdqu (%rsi), %ymm2\nvmovdqu 32(%rdi), %ymm13\n"                    \
             "vmovdqu 64(%rdi), %ymm14\nvmovdqu 96(%rdi), %ymm15\n" body                                   \
             "vmovdqu %ymm0, (%rdx)\nvmovdqu %ymm13, 32(%rdx)\nvmovdqu %ymm14, 64(%rdx)\n"                 \
-            "vmovdqu %ymm15, 96(%rdx)\nvmovdqu %ymm1, 128(%rdx)\nvmovdqu %ymm2, 160(%rdx)\nret\n")
+            "vmovdqu %ymm15, 96(%rdx)\nvmovdqu %ymm1, 128(%rdx)\nvmovdqu %ymm2, 160(%rdx)\nret\n");
 
 // Lane-wise, two sources: the ymm form and its xmm-halves reference.
 #define HALVES(mn, a, b)                                                                                  \
