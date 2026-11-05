@@ -9,7 +9,7 @@ keys go through the expansions, and anything else exits with status 86 if execut
 - AVX2 evidence: `AuthenticAMD family=25 model=17`
 - Each machine's results held with the rows in sequence, reversed, shuffled twice and each in its own process.
 - Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9795 native keys, 832 emulated keys.
+- Listed: 9795 native keys, 836 emulated keys.
 
 ## Rows by outcome
 
@@ -17,7 +17,7 @@ keys go through the expansions, and anything else exits with status 86 if execut
 |---|---|
 | differs-on-avx2 | 289 |
 | dr-invalid | 1017 |
-| emulated | 1216 |
+| emulated | 1244 |
 | excluded:far-control-flow | 168 |
 | excluded:kernel-entry | 240 |
 | excluded:nondeterministic | 218 |
@@ -31,7 +31,7 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | native-faults | 72 |
 | native-tested | 43673 |
 | native-untested | 152 |
-| not-on-ivy-bridge | 1247 |
+| not-on-ivy-bridge | 1219 |
 
 ## Iforms never reached by the sweep, by ISA set: all refused
 

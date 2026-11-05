@@ -1,5 +1,5 @@
 /*
- * Every expansion is rewindable and commits last: until one final write, the only application
+ * Every expansion is rewindable and commits last (a gather commits per element, see below): until one final write, the only application
  * state it touches is scratch saved in raw TLS, which event_restore puts back. A memory operand
  * is read by one real load with translation P, so a fault is the real fault at P. Inline code
  * leaves flags alone, except where the instruction writes them (andn) or the sequence clobbers
@@ -18,7 +18,7 @@ typedef struct {
     ymm256 save[3];
     ymm256 a, b, c, out;
     uint64 pending;   /* unmasked FP flags a call left; outside both ranges event_restore reads */
-    uint64 gsave[4];
+    uint64 gsave[5];
     uint64 fl;        /* the application's flags as lahf and seto leave ax, while a sequence has clobbered them */
     uint64 self;
 } tls_t;
@@ -67,21 +67,25 @@ static void pick_scratch(emit_t *e, instr_t *in) {
         if (!instr_uses_reg(in, y) && !instr_uses_reg(in, xmm_of(y))) e->scratch[n++] = y;
 }
 
-/* DR keeps its own TLS in gs, so a meta instruction cannot reach the application's. */
+/* A meta instruction's fs: and gs: reach DR's segments, not the application's, so those operands are
+ * rewritten by unseg. Refused: a 32-bit address (0x67, whose wrap the rewrite would not reproduce) and
+ * rip-relative with a segment (the address is out of disp32 range once the base is added). */
+static bool uses_seg(opnd_t m) { return opnd_get_segment(m) == DR_SEG_FS || opnd_get_segment(m) == DR_SEG_GS; }
 static bool mem_supported(opnd_t m) {
-    if (opnd_get_segment(m) == DR_SEG_FS && opnd_is_base_disp(m) &&
+    if (opnd_is_far_rel_addr(m)) return false;
+    if (uses_seg(m) && opnd_is_base_disp(m) &&
         ((opnd_get_base(m) != DR_REG_NULL && !reg_is_64bit(opnd_get_base(m))) ||
-         (opnd_get_index(m) != DR_REG_NULL && !reg_is_64bit(opnd_get_index(m)))))
-        return false;   /* 0x67 with fs: not worth the wrap */
-    return opnd_get_segment(m) != DR_SEG_GS && !opnd_is_far_rel_addr(m) && !opnd_is_far_abs_addr(m);
+         (opnd_get_index(m) != DR_REG_NULL && reg_is_gpr(opnd_get_index(m)) && !reg_is_64bit(opnd_get_index(m)))))
+        return false;
+    return true;
 }
-static bool needs_abs(opnd_t m) { return opnd_is_rel_addr(m) || opnd_is_abs_addr(m); }
-static bool uses_fs(opnd_t m) { return opnd_get_segment(m) == DR_SEG_FS; }
+static bool needs_abs(opnd_t m) { return (opnd_is_rel_addr(m) || opnd_is_abs_addr(m)) && !uses_seg(m); }
 
-/* DR keeps the application's fs apart from the hardware one, so a meta instruction with an fs: override
- * reaches DR's. Returns m without it, with the base in `r` (which the caller has saved): fs base + base. */
+/* Returns m without the override, the segment base plus base in `r` (which the caller has saved). */
 static opnd_t unseg(emit_t *e, opnd_t m, reg_id_t r) {
-    dr_insert_get_seg_base(e->dc, e->bb, e->where, DR_SEG_FS, r);
+    dr_insert_get_seg_base(e->dc, e->bb, e->where, opnd_get_segment(m), r);
+    if (opnd_is_far_abs_addr(m))   /* no base or index: disp32, sign-extended */
+        return opnd_create_base_disp(r, DR_REG_NULL, 0, (int)(ptr_int_t)opnd_get_addr(m), opnd_get_size(m));
     reg_id_t b = opnd_get_base(m);
     if (b != DR_REG_NULL) put(e, INSTR_CREATE_lea(e->dc, reg(r), opnd_create_base_disp(b, r, 1, 0, OPSZ_lea)));
     return opnd_create_base_disp(r, opnd_get_index(m), opnd_get_scale(m), opnd_get_disp(m), opnd_get_size(m));
@@ -91,14 +95,14 @@ static opnd_t unseg(emit_t *e, opnd_t m, reg_id_t r) {
 static void load_mem(emit_t *e, opnd_t m, reg_id_t t) {
     uint size = opnd_size_in_bytes(opnd_get_size(m));
     /* The application's address may be out of rip reach from the code cache. */
-    bool abs = needs_abs(m), fs = uses_fs(m);
+    bool abs = needs_abs(m), seg = uses_seg(m);
     reg_id_t sr = DR_REG_RAX;
-    while (fs && opnd_uses_reg(m, sr)) sr++;   /* rax, rcx, rdx: an operand names two registers at most */
-    if (abs || fs) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(sr)));
+    while (seg && opnd_uses_reg(m, sr)) sr++;   /* rax, rcx, rdx: an operand names two registers at most */
+    if (abs || seg) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(sr)));
     if (abs) {
         instrlist_insert_mov_immed_ptrsz(e->dc, (ptr_int_t)opnd_get_addr(m), reg(sr), e->bb, e->where, NULL, NULL);
         m = opnd_create_base_disp(sr, DR_REG_NULL, 0, 0, opnd_get_size(m));
-    } else if (fs) {
+    } else if (seg) {
         m = unseg(e, m, sr);
     }
     reg_id_t x = xmm_of(t);
@@ -112,7 +116,7 @@ static void load_mem(emit_t *e, opnd_t m, reg_id_t t) {
     default: i = INSTR_CREATE_vpinsrb(e->dc, reg(x), reg(x), m, OPND_CREATE_INT8(0)); break;
     }
     put(e, i);
-    if (abs || fs) put(e, INSTR_CREATE_mov_ld(e->dc, reg(sr), SAVE_G(0)));
+    if (abs || seg) put(e, INSTR_CREATE_mov_ld(e->dc, reg(sr), SAVE_G(0)));
 }
 
 static void save_y(emit_t *e, int i) { put(e, INSTR_CREATE_vmovdqu(e->dc, SAVE_Y(i), reg(e->scratch[i]))); }
@@ -211,6 +215,7 @@ enum {
 typedef struct { int opc; vex_op op; uint8_t kind, type; } form_t;
 
 #define F3(n, op) {OP_##n, op, K_3, 0}
+#define FMA2(n, op) {OP_##n##ps, op, K_FMA, FT_PS}, {OP_##n##pd, op, K_FMA, FT_PD}
 #define FMA4(n, op) {OP_##n##ps, op, K_FMA, FT_PS}, {OP_##n##pd, op, K_FMA, FT_PD}, \
                     {OP_##n##ss, op, K_FMA, FT_SS}, {OP_##n##sd, op, K_FMA, FT_SD}
 /* The ymm and AVX2-only forms; vec_exec's operand convention is in vexops.h. */
@@ -230,7 +235,8 @@ static const form_t vec_forms[] = {
     F3(vpmulhrsw, VPMULHRSW), F3(vpmuldq, VPMULDQ), F3(vpmuludq, VPMULUDQ),
     F3(vpmaddwd, VPMADDWD), F3(vpmaddubsw, VPMADDUBSW),
     F3(vpavgb, VPAVGB), F3(vpavgw, VPAVGW), F3(vpsadbw, VPSADBW),
-    F3(vpsignb, VPSIGNB), F3(vpsignw, VPSIGNW), F3(vpsignd, VPSIGND), F3(vphaddd, VPHADDD),
+    F3(vpsignb, VPSIGNB), F3(vpsignw, VPSIGNW), F3(vpsignd, VPSIGND), F3(vphaddw, VPHADDW), F3(vphaddd, VPHADDD), F3(vphaddsw, VPHADDSW),
+    F3(vphsubw, VPHSUBW), F3(vphsubd, VPHSUBD), F3(vphsubsw, VPHSUBSW), F3(vmpsadbw, VMPSADBW),
     F3(vpshufb, VPSHUFB), F3(vpalignr, VPALIGNR), F3(vpblendw, VPBLENDW),
     F3(vpacksswb, VPACKSSWB), F3(vpackssdw, VPACKSSDW), F3(vpackuswb, VPACKUSWB), F3(vpackusdw, VPACKUSDW),
     F3(vpunpcklbw, VPUNPCKLBW), F3(vpunpckhbw, VPUNPCKHBW), F3(vpunpcklwd, VPUNPCKLWD),
@@ -260,6 +266,8 @@ static const form_t vec_forms[] = {
     FMA4(vfmsub132, VFMSUB132), FMA4(vfmsub213, VFMSUB213), FMA4(vfmsub231, VFMSUB231),
     FMA4(vfnmadd132, VFNMADD132), FMA4(vfnmadd213, VFNMADD213), FMA4(vfnmadd231, VFNMADD231),
     FMA4(vfnmsub132, VFNMSUB132), FMA4(vfnmsub213, VFNMSUB213), FMA4(vfnmsub231, VFNMSUB231),
+    FMA2(vfmaddsub132, VFMADDSUB132), FMA2(vfmaddsub213, VFMADDSUB213), FMA2(vfmaddsub231, VFMADDSUB231),
+    FMA2(vfmsubadd132, VFMSUBADD132), FMA2(vfmsubadd213, VFMSUBADD213), FMA2(vfmsubadd231, VFMSUBADD231),
 };
 
 /* Scalars, through the mcontext: they are rare, and flags and registers commit atomically. */
@@ -510,12 +518,12 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
         if (g == DR_REG_NULL) g = c;
         else if (addr == DR_REG_NULL) addr = c;
     }
-    bool fs = uses_fs(m);
-    if (abs || fs) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(addr)));
+    bool seg = uses_seg(m);
+    if (abs || seg) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(addr)));
     if (abs) {
         instrlist_insert_mov_immed_ptrsz(e->dc, (ptr_int_t)opnd_get_addr(m), reg(addr), e->bb, e->where, NULL, NULL);
         m = opnd_create_base_disp(addr, DR_REG_NULL, 0, 0, opnd_get_size(m));
-    } else if (fs) {
+    } else if (seg) {
         m = unseg(e, m, addr);
     }
     put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(g)));
@@ -530,7 +538,7 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
     put(e, INSTR_CREATE_mov_st(e->dc, m, reg(reg_resize_to_opsz(g, opnd_get_size(m)))));
     instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(g), SAVE_G(0)));
-    if (abs || fs) put(e, INSTR_CREATE_mov_ld(e->dc, reg(addr), SAVE_G(1)));
+    if (abs || seg) put(e, INSTR_CREATE_mov_ld(e->dc, reg(addr), SAVE_G(1)));
 }
 
 static void expand_bmi(emit_t *e, instr_t *in, const form_t *f) {
@@ -609,7 +617,7 @@ static void load_gpr(emit_t *e, opnd_t m, reg_id_t t, uint bytes) {
     if (needs_abs(m)) {   /* the application's address may be out of rip reach from the code cache */
         instrlist_insert_mov_immed_ptrsz(e->dc, (ptr_int_t)opnd_get_addr(m), reg(t), e->bb, e->where, NULL, NULL);
         m = opnd_create_base_disp(t, DR_REG_NULL, 0, 0, opnd_get_size(m));
-    } else if (uses_fs(m)) {
+    } else if (uses_seg(m)) {
         m = unseg(e, m, t);
     }
     if (bytes == 2) put(e, INSTR_CREATE_movzx(e->dc, reg(gsz(t, 4)), m));
@@ -784,6 +792,111 @@ static void expand_bmi_inline(emit_t *e, instr_t *in) {
     }
 }
 
+/*
+ * AVX2 gathers: avxemu's archive never touches memory, so these are expanded here. Unrolled, one block per
+ * element, so the translation scan in event_restore stays a straight read. The operands are copied to the
+ * frame (a = index, b = mask, c = destination). Each active element: one real load (the only instruction
+ * that may fault), then the element is stored to c, its mask element zeroed in b, and c and b are written back
+ * to the registers. A fault at element k has therefore left k elements done and visible, and the gather
+ * restarts from the registers as a signal handler's return leaves them. A masked-off element is not read, but its mask element is cleared.
+ * Completion zeroes what the form leaves unused, as VEX does. Flags are saved and restored around the
+ * tests (never elided), the scratch GPRs are saved in gsave. The same register twice among dst, index and
+ * mask is #UD, as on hardware.
+ */
+static bool gather_shape(int opc, uint *esz, uint *isz) {
+    switch (opc) {
+    case OP_vpgatherdd: case OP_vgatherdps: *esz = 4; *isz = 4; return true;
+    case OP_vpgatherdq: case OP_vgatherdpd: *esz = 8; *isz = 4; return true;
+    case OP_vpgatherqd: case OP_vgatherqps: *esz = 4; *isz = 8; return true;
+    case OP_vpgatherqq: case OP_vgatherqpd: *esz = 8; *isz = 8; return true;
+    }
+    return false;
+}
+static bool vreg(reg_id_t r) { return reg_is_xmm(r) || reg_is_ymm(r); }
+static int vnum(reg_id_t r) { return reg_is_ymm(r) ? r - DR_REG_YMM0 : r - DR_REG_XMM0; }
+static uint vbytes(reg_id_t r) { return reg_is_ymm(r) ? 32 : 16; }
+
+/* A 0x67 prefix: the address wraps at 32 bits. DR's operand does not say so when there is no base. */
+static bool gather_addr32(instr_t *in) {
+    const byte *p = instr_get_raw_bits(in);
+    for (int i = 0; i < 4 && p[i] != 0xc4 && p[i] != 0xc5; i++)
+        if (p[i] == 0x67) return true;
+    return false;
+}
+
+static bool gather_ok(instr_t *in) {
+    uint es, is;
+    if (!gather_shape(instr_get_opcode(in), &es, &is) || instr_num_dsts(in) != 2 || instr_num_srcs(in) != 2 ||
+        !instr_raw_bits_valid(in))
+        return false;
+    opnd_t d = instr_get_dst(in, 0), m = instr_get_dst(in, 1), mem = instr_get_src(in, 0), ms = instr_get_src(in, 1);
+    return opnd_is_reg(d) && opnd_is_reg(m) && opnd_is_reg(ms) && opnd_get_reg(m) == opnd_get_reg(ms) &&
+           vreg(opnd_get_reg(d)) && vreg(opnd_get_reg(m)) && opnd_is_vsib(mem) && vreg(opnd_get_index(mem)) &&
+           (opnd_get_base(mem) == DR_REG_NULL || reg_is_gpr(opnd_get_base(mem)));
+}
+
+static void expand_gather(emit_t *e, instr_t *in) {
+    uint es, is;
+    gather_shape(instr_get_opcode(in), &es, &is);
+    reg_id_t dr = opnd_get_reg(instr_get_dst(in, 0)), mr = opnd_get_reg(instr_get_dst(in, 1));
+    opnd_t mem = instr_get_src(in, 0);
+    reg_id_t ir = opnd_get_index(mem), base = opnd_get_base(mem);
+    if (vnum(dr) == vnum(mr) || vnum(dr) == vnum(ir) || vnum(mr) == vnum(ir)) {
+        put(e, INSTR_CREATE_ud2a(e->dc));
+        return;
+    }
+    uint count = vbytes(dr) / es < vbytes(ir) / is ? vbytes(dr) / es : vbytes(ir) / is;
+    bool a32 = gather_addr32(in);
+    reg_id_t t[4];
+    int n = 0;
+    for (size_t i = 0; i < sizeof gp_cand / sizeof gp_cand[0] && n < 4; i++)
+        if (!reg_in_instr(in, gp_cand[i])) t[n++] = gp_cand[i];
+    reg_id_t tm = t[0], ta = t[1], td = t[2], tb = t[3];   /* mask, address, data, copy of the base */
+    save_g(e, 0, DR_REG_RAX);
+    for (int i = 0; i < 4; i++) save_g(e, i + 1, t[i]);
+    if (base != DR_REG_NULL) put(e, INSTR_CREATE_mov_ld(e->dc, reg(tb), reg(reg_to_pointer_sized(base))));
+    flags_save(e);
+    put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(a), reg(ymm_of(ir))));
+    put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(b), reg(ymm_of(mr))));
+    put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(c), reg(ymm_of(dr))));
+    opnd_size_t esz = es == 8 ? OPSZ_8 : OPSZ_4;
+    for (uint k = 0; k < count; k++) {
+        opnd_t mk = tls_opnd(offsetof(tls_t, b) + k * es, esz), el = tls_opnd(offsetof(tls_t, c) + k * es, esz);
+        opnd_t ix = tls_opnd(offsetof(tls_t, a) + k * is, is == 8 ? OPSZ_8 : OPSZ_4);
+        instr_t *skip = INSTR_CREATE_label(e->dc);
+        put(e, INSTR_CREATE_mov_ld(e->dc, reg(gsz(tm, es)), mk));
+        put(e, INSTR_CREATE_test(e->dc, reg(gsz(tm, es)), reg(gsz(tm, es))));
+        put(e, INSTR_CREATE_jcc(e->dc, OP_jns, opnd_create_instr(skip)));
+        if (is == 8) put(e, INSTR_CREATE_mov_ld(e->dc, reg(ta), ix));
+        else put(e, INSTR_CREATE_movsxd(e->dc, reg(ta), ix));
+        put(e, INSTR_CREATE_lea(e->dc, reg(ta),
+                                opnd_create_base_disp(base == DR_REG_NULL ? DR_REG_NULL : tb, ta,
+                                                      opnd_get_scale(mem), opnd_get_disp(mem), OPSZ_lea)));
+        if (a32) put(e, INSTR_CREATE_mov_ld(e->dc, reg(gsz(ta, 4)), reg(gsz(ta, 4))));
+        if (uses_seg(mem)) {   // a meta fs:/gs: would be DR's
+            dr_insert_get_seg_base(e->dc, e->bb, e->where, opnd_get_segment(mem), td);
+            put(e, INSTR_CREATE_add(e->dc, reg(ta), reg(td)));
+        }
+        opnd_t src = opnd_create_base_disp(ta, DR_REG_NULL, 0, 0, esz);
+        put(e, INSTR_CREATE_mov_ld(e->dc, reg(gsz(td, es)), src));   /* the only instruction that may fault */
+        put(e, INSTR_CREATE_mov_st(e->dc, el, reg(gsz(td, es))));
+        put(e, skip);   // a masked-off element is not read, but its mask element is cleared as well
+        put(e, INSTR_CREATE_mov_st(e->dc, mk, OPND_CREATE_INT32(0)));
+        put(e, INSTR_CREATE_vmovdqu(e->dc, reg(ymm_of(dr)), FRAME(c)));
+        put(e, INSTR_CREATE_vmovdqu(e->dc, reg(ymm_of(mr)), FRAME(b)));
+    }
+    for (uint off = count * es; off < 32; off += 8) {
+        put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, b) + off, OPSZ_8), OPND_CREATE_INT32(0)));
+        put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, c) + off, OPSZ_8), OPND_CREATE_INT32(0)));
+    }
+    flags_restore(e);
+    load_g(e, DR_REG_RAX, 0);
+    put(e, INSTR_CREATE_vmovdqu(e->dc, reg(ymm_of(dr)), FRAME(c)));   /* commit */
+    put(e, INSTR_CREATE_vmovdqu(e->dc, reg(ymm_of(mr)), FRAME(b)));
+    to_next_pc(e);
+    for (int i = 0; i < 4; i++) load_g(e, t[i], i + 1);
+}
+
 /* cpuid: report x86-64-v3, on top of what the target CPU has. Hosts' extras are hidden, so a
  * program takes the same paths here as there, and none reaches AVX-512 on a capable host. */
 static void cpuid_call(void) {
@@ -891,6 +1004,8 @@ void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
                (opc == OP_bextr && opnd_is_immed(instr_get_src(in, 1)))) {
         dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(e.pc),
                              OPND_CREATE_INT32(opc));
+    } else if (gather_ok(in)) {
+        expand_gather(&e, in);
     } else if ((f = FIND(bmi_forms, opc)) != NULL) {
         pick_scratch(&e, in);
         if (!helpers_only && bmi_inline_ok(in)) expand_bmi_inline(&e, in);
@@ -917,7 +1032,7 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
     if (pc == NULL || !info->raw_mcontext_valid) return true;
     byte *end = info->raw_mcontext->pc;
     reg_id_t y_live[3] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
-    reg_id_t g_live[4] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
+    reg_id_t g_live[5] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
     bool fl_live = false;
     instr_t in;
     instr_init(dc, &in);
@@ -946,7 +1061,7 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
         byte *dst = (byte *)&info->mcontext->simd[y_live[i] - DR_REG_YMM0];
         for (size_t k = 0; k < sizeof(ymm256); k++) dst[k] = t->save[i].b[k];
     }
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 5; i++)
         if (g_live[i] != DR_REG_NULL) reg_set_value(g_live[i], info->mcontext, t->gsave[i]);
     if (fl_live) {   /* ah holds SF ZF AF PF CF in their eflags positions; al bit 0 is OF */
         uint64 img = t->fl;

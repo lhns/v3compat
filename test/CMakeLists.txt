@@ -16,8 +16,18 @@ add_executable(flagrepro flagrepro.c)
 add_executable(fault_state fault_state.c)
 add_executable(flags_kept flags_kept.c)
 add_executable(bmi_inline bmi_inline.c)
+add_executable(gather gather.c)
+target_compile_options(gather PRIVATE -O1 -w)
+target_link_options(gather PRIVATE -static)
 add_executable(fs_operand fs_operand.c)
 target_link_options(fs_operand PRIVATE -static)
+add_executable(hadd_fma_forms hadd_fma_forms.c)
+add_executable(seg_threads seg_threads.c)
+target_link_libraries(seg_threads PRIVATE pthread)
+target_link_options(seg_threads PRIVATE -static)
+add_executable(seg_operand seg_operand.c)
+target_link_options(seg_operand PRIVATE -static -no-pie)
+target_compile_options(seg_operand PRIVATE -fno-pie -O0)
 add_executable(bench_bmi bench_bmi.c)
 add_executable(misc_forms misc_forms.c)
 add_executable(refuse_forms refuse_forms.c)
@@ -194,6 +204,13 @@ target_compile_options(regstress PRIVATE -O1 -w -ftls-model=local-exec)
 target_link_options(regstress PRIVATE -static -pthread)
 v3test(regstress stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 sig jit)
 v3test(regstress-control exit 77 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 badsig)
+# Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
+add_executable(jitgrowth jitgrowth.c)
+target_link_options(jitgrowth PRIVATE -pthread)
+v3test(jitgrowth stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:jitgrowth> 1000)
+v3test(jitgrowth-control exit 1 -- env V3COMPAT_DR_OPTS=-ignore_syscalls ${RUN} -- $<TARGET_FILE:jitgrowth> 1000)
+v3test(jitgrowth-native stdout-has PASS exit 0 -- $<TARGET_FILE:jitgrowth> 1000)
+set_tests_properties(jitgrowth jitgrowth-control PROPERTIES TIMEOUT 300)
 
 # What the app sees of its own executable (the client rewrites the calls that name it).
 foreach(k dyn static spie nopie)
@@ -243,9 +260,24 @@ v3test(bmi-inline stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:bmi_inline>)
 v3test(bmi-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:bmi_inline>)
 v3test(bmi-native stdout-has PASS exit 0 -- $<TARGET_FILE:bmi_inline>)
 set_tests_properties(bmi-inline bmi-helpers bmi-native PROPERTIES TIMEOUT 120)
+# The AVX2 gathers against a C model: faults mid-gather and restart, masked-off elements, every width, base register,
+# 0x67 and fs. Native needs AVX2 and checks the model.
+v3test(gather stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:gather>)
+v3test(gather-native stdout-has PASS exit 0 -- $<TARGET_FILE:gather>)
+set_tests_properties(gather gather-native PROPERTIES TIMEOUT 600)
 # Thread-local (%fs:) memory operands of expanded forms, against a C model; native checks the model.
 v3test(fs-operand stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:fs_operand>)
 v3test(fs-operand-native stdout-has PASS exit 0 -- $<TARGET_FILE:fs_operand>)
+# Every expanded memory form with fs: and gs: operands in each addressing shape: fault state, restart, result.
+v3test(seg-operand stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:seg_operand>)
+v3test(seg-operand-native stdout-has PASS exit 0 -- $<TARGET_FILE:seg_operand>)
+v3test(hadd-fma-forms stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:hadd_fma_forms>)
+v3test(hadd-fma-forms-native stdout-has PASS exit 0 -- $<TARGET_FILE:hadd_fma_forms>)
+add_test(NAME seg-coverage COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/seg_coverage.sh")
+# Threads with different fs bases, concurrently.
+v3test(seg-threads stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:seg_threads>)
+v3test(seg-threads-native stdout-has PASS exit 0 -- $<TARGET_FILE:seg_threads>)
+set_tests_properties(seg-operand seg-operand-native seg-threads seg-threads-native PROPERTIES TIMEOUT 300)
 # lzcnt in code the client sees late: a dlopen'd library, and a static program after exec.
 v3test(lzcnt-dlopen stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> dl $<TARGET_FILE:lzlib>)
 v3test(lzcnt-static-exec stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> exec $<TARGET_FILE:lzcnt_static>)
@@ -255,8 +287,9 @@ set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynam
   lzcnt-dlopen lzcnt-static-exec PROPERTIES TIMEOUT 120)
 
 # ADR 0008: off the audited list exits 86, on it runs, whatever this CPU would do with it.
-foreach(f xop-bextr-imm vmpsadbw-ymm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
-          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb)
+foreach(f xop-bextr-imm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
+          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb
+          andn-fs-addr32 andn-gs-addr32 andn-fs-rip andn-gs-rip)
   v3test(refused-${f} exit 86 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(refused-${f} PROPERTIES TIMEOUT 120)
 endforeach()

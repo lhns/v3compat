@@ -25,3 +25,12 @@ must stay 32-byte aligned for speed. Refused forms stop the program with exit st
 
 ## Amendment, 2026-11-05
 The scalar `rorx`, `andn`, `mulx` and `movbe` (load; the store already was) are inline too: a clean call costs far more than the operation, whatever the program's mix. Flags are not left to liveness: `rorx` and `mulx` clobber them, so each saves them with `lahf`/`seto` into raw TLS and restores them after, always; `andn` needs no save as `and` writes the flags it defines.
+
+## Amendment, 2026-11-05
+The AVX2 gathers are a fifth path, inline and unrolled per element, because avxemu's archive never touches memory. They are
+the exception to "commits last": each active element is loaded (the only faulting instruction), stored to the TLS frame,
+and dst and mask are rewritten from the frame, so a fault leaves the elements before it done and restartable, as on
+hardware. Flags and scratch GPRs are saved and restored like `rorx`. Unprocessed mask elements keep their value, as on AMD
+(avxemu's `docs/vendor-differences.md`).
+
+Segments: memory operands with `fs:` or `gs:` (absolute, base, index forms) are rewritten with the application's segment base from `dr_insert_get_seg_base`, as `fs:` already was; an `fs:`/`gs:` operand with a 32-bit address (0x67) or rip-relative is refused (exit 86). The application's gs base is 0: a program that sets it (`arch_prctl(ARCH_SET_GS)`) crashes under DynamoRIO itself.

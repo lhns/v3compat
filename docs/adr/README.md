@@ -14,4 +14,5 @@ depends on a measurement in the [plan](../plan.md) that is not in yet.
 | [0008](0008-audited-list-keyed-on-shape.md) | The audited list: keyed on shape, built from evidence | Accepted |
 | [0009](0009-static-launcher-no-drrun.md) | A static launcher that execs DynamoRIO directly; refuse what would run wrongly at exec | Accepted |
 | [0010](0010-no-cache-reset.md) | DynamoRIO's cache reset stays off; a mitigation, not a repair | Accepted |
+| [0011](0011-no-ignored-syscalls.md) | DynamoRIO handles every system call at a synch point | Accepted |
 | [0006](0006-read-only-translation-cache.md) | A read-only translation cache with a separate writer | Proposed |
