@@ -1,0 +1,41 @@
+name: bench
+on:
+  push:
+    branches: [startup-bench]
+jobs:
+  b:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev time
+      - name: build base and new
+        run: |
+          git worktree add ../base origin/main
+          for d in "$PWD:new" "$PWD/../base:base"; do s=${d%%:*}; n=${d##*:}
+            cmake -S $s -B /tmp/b-$n -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/tmp/i-$n >/dev/null && cmake --build /tmp/b-$n -j --target install >/dev/null; done
+      - name: measure
+        run: |
+          grep -m1 'model name' /proc/cpuinfo; nproc
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+          DR=$(ls -d ~/.cache/v3compat/dr-*[0-9a-f] | head -1)
+          strings -a $DR/lib64/release/libdynamorio.so | grep -iE '^-?(hot|trace)_?(threshold|thresh)|threshold' | head -20
+          SQL=$PWD/test/apps/duckdb-varied.sql; C="select sum(range*range) from range(30000000)"
+          T() { l=$1; n=$2; shift 2; for i in $(seq $n); do /usr/bin/time -f "$l wall %e user %U sys %S" -o /tmp/tt "$@" >/dev/null 2>/tmp/err; tail -1 /tmp/tt; done; }
+          h() { "$@" 2>/dev/null | sha256sum | cut -c1-12; }
+          echo "native hashes: $(h ./duckdb -csv -noheader -c 'select 42') $(h ./duckdb -csv -noheader -c "$C") $(h ./duckdb -csv -noheader -f $SQL)"
+          T native-select 3 ./duckdb -c "select 42"
+          run() { l=$1; v=$2; o=$3; export V3COMPAT_DR_OPTS="$o"
+            T "$l select" 5 $v ./duckdb -c "select 42"
+            T "$l compute" 3 $v ./duckdb -c "$C"
+            T "$l varied" 2 $v ./duckdb -f $SQL
+            echo "$l hashes: $(h $v ./duckdb -csv -noheader -c 'select 42') $(h $v ./duckdb -csv -noheader -c "$C") $(h $v ./duckdb -csv -noheader -f $SQL)"; }
+          run base /tmp/i-base/bin/v3compat-run ""
+          run memo /tmp/i-new/bin/v3compat-run ""
+          for t in 500 5000; do run "memo-hot$t" /tmp/i-new/bin/v3compat-run "-hot_threshold $t"; done
