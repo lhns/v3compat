@@ -56,6 +56,20 @@ STUB(c_scalar, "pdep (%r15), %rbx, %rsi");
 STUB(c_scalar_lz, "lzcnt (%r15), %rax");
 STUB(c_movbe_store, "movbe %rax, (%r15)");
 STUB(c_movbe_split, "movbe %rdx, (%r14)");
+// BMI forms with a memory source: the destination, flags and every register stay as they were.
+STUB(c_rorx, "rorx $5, (%r15), %rbx");
+STUB(c_rorx_rip, "rorx $5, bad_page(%rip), %rbx");
+STUB(c_andn, "andn (%r15), %rcx, %rbx");
+STUB(c_andn_dst, "andn (%r15), %rcx, %r15");
+STUB(c_mulx, "mulx (%r15), %rcx, %rbx");
+STUB(c_mulx_lo, "mulx (%r15), %r15, %rbx");
+STUB(c_mulx32_rip, "mulx bad_page(%rip), %ecx, %ebx");
+STUB(c_movbe_ld, "movbe (%r15), %rbx");
+STUB(c_movbe_ld16, "movbe (%r15), %bx");
+STUB(c_movbe_ld32, "movbe (%r15), %r12d");
+STUB(c_movbe_ld_dst, "movbe (%r15), %r15");
+STUB(c_movbe_ld_rip, "movbe bad_page(%rip), %rbx");
+STUB(c_movbe_ld_split, "movbe (%r14), %rbx");
 // Unmasked FP exceptions: ymm1 and ymm2 are set up per case.
 STUB(c_fma_ps, "vfmadd231ps %ymm1, %ymm2, %ymm3");
 STUB(c_fma_ss, "vfmadd231ss %xmm1, %xmm2, %xmm3");
@@ -78,11 +92,19 @@ extern char ins_c_inline[], after_c_inline[], ins_c_inline_shift[], after_c_inli
     ins_c_subst_ntld[], after_c_subst_ntld[], ins_c_scalar[], after_c_scalar[], ins_c_scalar_lz[],
     after_c_scalar_lz[], ins_c_movbe_store[], after_c_movbe_store[], ins_c_movbe_split[],
     after_c_movbe_split[], ins_c_fma_ps[], after_c_fma_ps[], ins_c_fma_ss[], after_c_fma_ss[],
-    ins_c_fma_sd_mem[], after_c_fma_sd_mem[];
+    ins_c_fma_sd_mem[], after_c_fma_sd_mem[], ins_c_rorx[], after_c_rorx[], ins_c_rorx_rip[],
+    after_c_rorx_rip[], ins_c_andn[], after_c_andn[], ins_c_andn_dst[], after_c_andn_dst[], ins_c_mulx[],
+    after_c_mulx[], ins_c_mulx_lo[], after_c_mulx_lo[], ins_c_mulx32_rip[], after_c_mulx32_rip[],
+    ins_c_movbe_ld[], after_c_movbe_ld[], ins_c_movbe_ld16[], after_c_movbe_ld16[], ins_c_movbe_ld32[],
+    after_c_movbe_ld32[], ins_c_movbe_ld_dst[], after_c_movbe_ld_dst[], ins_c_movbe_ld_rip[],
+    after_c_movbe_ld_rip[], ins_c_movbe_ld_split[], after_c_movbe_ld_split[];
 extern void c_inline(void), c_inline_shift(void), c_frame(void), c_frame_rip(void), c_frame_fma(void),
     c_frame_bcast(void), c_frame_cvt(void), c_subst_maskld(void), c_subst_maskst(void), c_subst_bc128(void),
     c_subst_bcd(void), c_subst_ntld(void), c_scalar(void), c_scalar_lz(void), c_movbe_store(void),
-    c_movbe_split(void), c_fma_ps(void), c_fma_ss(void), c_fma_sd_mem(void);
+    c_movbe_split(void), c_fma_ps(void), c_fma_ss(void), c_fma_sd_mem(void), c_rorx(void), c_rorx_rip(void),
+    c_andn(void), c_andn_dst(void), c_mulx(void), c_mulx_lo(void), c_mulx32_rip(void), c_movbe_ld(void),
+    c_movbe_ld16(void), c_movbe_ld32(void), c_movbe_ld_dst(void), c_movbe_ld_rip(void),
+    c_movbe_ld_split(void);
 
 static void put_f32(int reg, float v) {
     for (int i = 0; i < 8; i++) memcpy(&ymm_init[reg][4 * i], &v, 4);
@@ -122,6 +144,19 @@ static const tcase cases[] = {
     {"scalar-lzcnt", c_scalar_lz, ins_c_scalar_lz, after_c_scalar_lz, SIGSEGV, 0, 0, 0},
     {"movbe-store", c_movbe_store, ins_c_movbe_store, after_c_movbe_store, SIGSEGV, 0, 0, 0},
     {"movbe-split", c_movbe_split, ins_c_movbe_split, after_c_movbe_split, SIGSEGV, 1, 1, 0},
+    {"rorx", c_rorx, ins_c_rorx, after_c_rorx, SIGSEGV, 0, 0, 0},
+    {"rorx-rip", c_rorx_rip, ins_c_rorx_rip, after_c_rorx_rip, SIGSEGV, 0, 0, 0},
+    {"andn", c_andn, ins_c_andn, after_c_andn, SIGSEGV, 0, 0, 0},
+    {"andn-dst", c_andn_dst, ins_c_andn_dst, after_c_andn_dst, SIGSEGV, 0, 0, 0},
+    {"mulx", c_mulx, ins_c_mulx, after_c_mulx, SIGSEGV, 0, 0, 0},
+    {"mulx-lo", c_mulx_lo, ins_c_mulx_lo, after_c_mulx_lo, SIGSEGV, 0, 0, 0},
+    {"mulx32-rip", c_mulx32_rip, ins_c_mulx32_rip, after_c_mulx32_rip, SIGSEGV, 0, 0, 0},
+    {"movbe-ld", c_movbe_ld, ins_c_movbe_ld, after_c_movbe_ld, SIGSEGV, 0, 0, 0},
+    {"movbe-ld16", c_movbe_ld16, ins_c_movbe_ld16, after_c_movbe_ld16, SIGSEGV, 0, 0, 0},
+    {"movbe-ld32", c_movbe_ld32, ins_c_movbe_ld32, after_c_movbe_ld32, SIGSEGV, 0, 0, 0},
+    {"movbe-ld-dst", c_movbe_ld_dst, ins_c_movbe_ld_dst, after_c_movbe_ld_dst, SIGSEGV, 0, 0, 0},
+    {"movbe-ld-rip", c_movbe_ld_rip, ins_c_movbe_ld_rip, after_c_movbe_ld_rip, SIGSEGV, 0, 0, 0},
+    {"movbe-ld-split", c_movbe_ld_split, ins_c_movbe_ld_split, after_c_movbe_ld_split, SIGSEGV, 0, 1, 0},
     {"fp-invalid", c_fma_ps, ins_c_fma_ps, after_c_fma_ps, SIGFPE, FPE_FLTINV, 2, inf_times_zero},
     {"fp-invalid-scalar", c_fma_ss, ins_c_fma_ss, after_c_fma_ss, SIGFPE, FPE_FLTINV, 2, inf_times_zero},
     {"fp-overflow", c_fma_ps, ins_c_fma_ps, after_c_fma_ps, SIGFPE, FPE_FLTOVF, 2, overflow},

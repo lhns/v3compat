@@ -22,3 +22,6 @@ uses flag liveness: inline sequences leave flags alone, as DynamoRIO's flag tabl
 ## Consequences
 Two implementations of the hot forms, which the suite compares on every run. Scratch ymm registers are saved in TLS, which
 must stay 32-byte aligned for speed. Refused forms stop the program with exit status 86.
+
+## Amendment, 2026-11-05
+The scalar `rorx`, `andn`, `mulx` and `movbe` (load; the store already was) are inline too: a clean call costs far more than the operation, whatever the program's mix. Flags are not left to liveness: `rorx` and `mulx` clobber them, so each saves them with `lahf`/`seto` into raw TLS and restores them after, always; `andn` needs no save as `and` writes the flags it defines.
