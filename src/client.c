@@ -22,6 +22,21 @@ static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, 
 static uint64 op_counts[OP_LAST];
 static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELAXED); }
 
+/* Decisions by instruction bytes: DR decodes the same bytes to the same instruction (RIP-relative
+ * displacements and branch targets are operands "m" and "p" in the key, not values), so repeats in
+ * the many blocks of a startup skip classify and the key. Only passes are kept, so audit and
+ * refusal output are unchanged. A lock that is busy means no cache, never a wait. */
+enum { MEMO_BITS = 14, MEMO_MAX = 15 };
+typedef struct { byte bytes[MEMO_MAX]; byte meta; } memo_t;   /* meta: length | class << 4 */
+static memo_t memo[1 << MEMO_BITS];
+static void *memo_lock;
+
+static uint memo_slot(const byte *p, uint len) {
+    uint64 h = 0xcbf29ce484222325ULL;
+    for (uint i = 0; i < len; i++) h = (h ^ p[i]) * 0x100000001b3ULL;
+    return (uint)(h >> (64 - MEMO_BITS));
+}
+
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
                                      bool translating) {
     /* Runs when translating too: DR maps PCs through the list, so it must come out the same. */
@@ -30,11 +45,27 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
     instr_t *next;
     for (instr_t *in = instrlist_first_app(bb); in != NULL; in = next) {
         next = instr_get_next_app(in);
-        int c = classify(drcontext, in);
+        int c = C_N;
+        const byte *raw = NULL;
+        uint len = 0, slot = 0;
+        bool hit = false;
+        if (!audit_on && instr_raw_bits_valid(in) && instr_length(drcontext, in) <= MEMO_MAX) {
+            raw = instr_get_raw_bits(in);
+            len = instr_length(drcontext, in);
+            slot = memo_slot(raw, len);
+            if (dr_mutex_trylock(memo_lock)) {
+                const memo_t *m = &memo[slot];
+                hit = (m->meta & 15) == len && len != 0;
+                for (uint i = 0; hit && i < len; i++) hit = m->bytes[i] == raw[i];
+                c = m->meta >> 4;
+                dr_mutex_unlock(memo_lock);
+            }
+        }
+        if (!hit) c = classify(drcontext, in);
         /* cpuid is translated whatever its shape. Off the list means refused when executed, not now:
          * a form on a path never taken must not stop the program. */
         char text[ALLOW_TEXT_MAX];
-        if (instr_get_opcode(in) != OP_cpuid && !allow_listed(allow_key(drcontext, in, text), c != C_N)) {
+        if (!hit && instr_get_opcode(in) != OP_cpuid && !allow_listed(allow_key(drcontext, in, text), c != C_N)) {
             if (audit_on) {
                 dr_fprintf(STDERR, "v3compat: audit %s at %p\n", text, instr_get_app_pc(in));
                 if (c == C_N) continue;
@@ -42,6 +73,11 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
                 expand_refuse(drcontext, bb, in);
                 continue;
             }
+        } else if (!hit && raw != NULL && instr_get_opcode(in) != OP_cpuid && dr_mutex_trylock(memo_lock)) {
+            memo_t *m = &memo[slot];
+            for (uint i = 0; i < len; i++) m->bytes[i] = raw[i];
+            m->meta = (byte)(len | c << 4);
+            dr_mutex_unlock(memo_lock);
         }
         if (stats_on) {
             if (c != C_N) {
@@ -101,6 +137,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         if (starts(argv[i], "-audit")) audit_on = true;
     }
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
+    memo_lock = dr_mutex_create();
     drmgr_register_bb_app2app_event(event_app2app, NULL);
     drmgr_register_signal_event(event_signal);
     exec_policy_init();
