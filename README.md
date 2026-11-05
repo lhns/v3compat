@@ -2,9 +2,35 @@
 
 Run x86-64-v3 programs (AVX2, FMA, BMI, LZCNT) on x86-64 CPUs with AVX but without AVX2.
 
-**Status: scaffold. It emulates nothing yet.** A program that uses an instruction the CPU lacks still gets
-SIGILL under it. The plan is a same-ISA dynamic binary translator: code runs natively except for the
-instructions the CPU lacks. Whether it is fast enough is being measured.
+## State
+
+Emulation runs: a same-ISA binary translator on [DynamoRIO](https://github.com/DynamoRIO/dynamorio) (our fork)
+copies instructions the CPU has and expands or calls helpers for the rest. Details and numbers: the [plan](docs/plan.md).
+
+**Works** (measured, see the plan for conditions):
+- duckdb 2.0.0 gives the same output as native on Ivy Bridge, slowly: `select 42` 5.1-5.4 s, a compute query 5.9-7.4 s,
+  the mixed `varied.sql` 165 s.
+- `lzcnt` in a `dlopen`ed library, static, static-PIE and musl children, `exec` chains, threads and `posix_spawn`,
+  under Docker's default seccomp without ptrace.
+- Refusal instead of a wrong result: a form off the [audited list](docs/allowlist.md) exits with status 86;
+  setuid, setgid and file-capability programs are refused at exec.
+
+**Limits and known problems:**
+- The shipped config runs with DynamoRIO's cache reset off (`-no_enable_reset`, [ADR 0010](docs/adr/0010-no-cache-reset.md)).
+  Measured on AVX2 runners: 0 of 230 bad duckdb runs (at most 1.3% at 95%), 0 of 377 in the signal stress and
+  0 of 296 in the register and flags stress (`test/regstress.c`). The docs give no bound for the last two; by the
+  rule of three they are about 0.8% and 1.0%. Zero failures do not prove a rate of zero. It is unclear from the docs whether
+  the 296 run was under the client or DynamoRIO alone.
+- Programs that keep generating and unmapping code (JIT) grow memory without bound and abort with status 255 at a memory limit.
+- A `vfork` child killed by a signal before it execs hangs its parent. A fix is in progress and is not in this tree.
+- Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet. JVM workloads (13x to 84x) are out of scope.
+
+**Untested or unverified:**
+- Ivy Bridge since the last fix: the reset and stress results above come from AVX2 runners, not Ivy Bridge. The earlier
+  Ivy Bridge runs predate it.
+- Signals arriving inside an expansion; Intel NaN priority (references are from AMD); anything on a CPU other than Ivy Bridge
+  without AVX2.
+- The OCI wrapper in [v3compat-runtime](https://github.com/lhns/v3compat-runtime) still wraps Intel SDE, not `v3compat-run`; the integration is not done. No production use.
 
 ## Build and run
 
@@ -23,6 +49,12 @@ build/inst/bin/v3compat-run [--] prog args...
 - `V3COMPAT_DR_OPTS="..."` adds DynamoRIO options; defaults live in `launcher/v3compat-run.c`.
 - `V3COMPAT_STATS=1` prints, at exit to stderr, how many distinct instructions of each class (AVX2, FMA, BMI,
   LZCNT, TZCNT, MOVBE) were translated. It counts translations, not executions.
+- Startup is DynamoRIO translating the program's static init (duckdb `select 42`: about 20 times native). Measured on
+  CI runners: `V3COMPAT_DR_OPTS=-disable_traces` cuts it by about 27% (compute query 18%) but costs about 3% wall and
+  6% CPU on a long mixed workload, so it is not the default; use it for short-lived programs. `-trace_threshold` does
+  not help (10 to 100 the same, higher is slower). The allowlist check is about 5% of startup and memoising it gained
+  nothing. `-persist` does not work with the client: the client's `libdrmgr.so` fails to load
+  (`undefined symbol __memcpy_chk`), and a persisted cache would need a client that registers persistence callbacks.
 - The exit status and signals are the program's own. A program that would change privileges when exec'd (setuid, setgid, file capabilities) is refused: its `execve` fails with `EPERM` and a message on stderr, or the launcher exits 87 if it was the program named on the command line (see the plan).
 
 ### Semantic suite (opt-in)

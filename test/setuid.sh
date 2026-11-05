@@ -12,7 +12,7 @@ part_skip() { echo "SKIPPED check: $*"; [ "$V3COMPAT_CI" = 1 ] && bad=1; }
 fail() { echo "FAIL $*"; bad=1; }
 ok() { echo "ok $*"; }
 ids=$B/ids_static
-[ -x "$ids" ] || skip "ids_static not found"
+[ -x "$ids" ] || { echo "FAIL ids_static not found (a build output, not an environment limit)"; exit 1; }
 mk() { # mk NAME MODE OWNER:GROUP: a copy of ids
   cp "$ids" "$t/$1"; $S chown "$3" "$t/$1"; $S chmod "$2" "$t/$1"
 }

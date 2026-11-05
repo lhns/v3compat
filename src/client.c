@@ -4,17 +4,13 @@
 #include "allow.h"
 #include "expand.h"
 #include "execpolicy.h"
+#include "str.h"
 
 static const char *const cls_name[C_N] = {"avx2", "fma", "bmi", "lzcnt", "tzcnt", "movbe", "instrs"};
 static uint64 counts[C_N];
 
 enum { SIGILL_NUM = 4 }; /* no libc headers in the client */
 static bool stats_on, audit_on;
-/* DR exports no libc string functions to clients (calling one dies at first use). */
-static bool starts(const char *s, const char *p) {
-    while (*p) if (*s++ != *p++) return false;
-    return true;
-}
 
 /* Executed counts: a block's static class totals are added by a clean call at its entry. */
 static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, __ATOMIC_RELAXED); }
