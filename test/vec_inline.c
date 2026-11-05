@@ -7,7 +7,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 // run(a, m, out): ymm1 = a[0..32), ymm13..15 = a[32..128), ymm2 = a[128..160); BODY leaves its result in ymm0;
 // out = ymm0, ymm13..15, ymm1, ymm2 (32 bytes each). The instruction's memory operand is (%rsi), which the
@@ -76,6 +78,14 @@ static uint64_t rnd(void) {
 }
 
 static int failures;
+static const char *volatile cur;   // the case running, for a crash report
+static void on_segv(int sig) {
+    (void)sig;
+    write(2, "SEGV in ", 8);
+    write(2, cur, strlen(cur));
+    write(2, "\n", 1);
+    _exit(3);
+}
 typedef struct { uint8_t y[6][32]; } out_t;   // result, ymm13..15, ymm1, ymm2
 
 static void check_common(const char *name, const char *form, const uint8_t *in, const uint8_t *b, const out_t *o) {
@@ -100,6 +110,7 @@ static uint8_t *edge_buf(void) {
 }
 
 static void lanewise(const char *name, fn t_r, fn t_m, fn ref, int iter) {
+    cur = name;
     uint8_t in[160] __attribute__((aligned(32))), b[32] __attribute__((aligned(32)));
     out_t o, want;
     for (int i = 0; i < 128; i++) in[i] = (uint8_t)rnd();
@@ -140,6 +151,7 @@ static void model_abs(uint8_t *out, const uint8_t *b, int e) {
 
 // kind 0 widen, 1 broadcast, 2 abs. `bytes` is what a memory source may read.
 static void oneop(const char *name, fn t_r, fn t_m, int kind, int e, int d, int sign, int bytes, int iter) {
+    cur = name;
     uint8_t in[160] __attribute__((aligned(32))), b[32] __attribute__((aligned(32))), want[32];
     out_t o;
     for (int i = 0; i < 128; i++) in[i] = (uint8_t)rnd();
@@ -162,12 +174,14 @@ static void oneop(const char *name, fn t_r, fn t_m, int kind, int e, int d, int 
         uint8_t *src = edge + 4096 - bytes;
         memcpy(src, b, bytes);
         out_t o2;
+        cur = "page end";
         t_m(in, src, &o2);   // reads (%rsi) = src
         if (memcmp(o2.y[0], want, 32)) bad(name, "mem at page end", o2.y[0], want);
     }
 }
 
 int main(void) {
+    signal(SIGSEGV, on_segv);
     for (int iter = 0; iter < 60; iter++) {
 #define RUN_BIN(mn) lanewise(#mn, (fn)t_##mn##_r, (fn)t_##mn##_m, (fn)r_##mn, iter);
         BINS(RUN_BIN)
@@ -176,7 +190,7 @@ int main(void) {
         uint8_t in[160] __attribute__((aligned(32))), b[32] __attribute__((aligned(32)));                      \
         out_t o, want;                                                                                        \
         for (int i = 0; i < 128; i++) in[i] = (uint8_t)rnd();                                                  \
-        memset(b, 0, 32);                                                                                     \
+        memset(b, 0, 32); memset(in + 128, 0, 32);                                                                                   \
         ((fn)r_##mn##_i)(in, b, &want);                                                                       \
         ((fn)t_##mn##_i)(in, b, &o);                                                                          \
         if (memcmp(o.y[0], want.y[0], 32)) bad(#mn, "imm", o.y[0], want.y[0]);                                  \
