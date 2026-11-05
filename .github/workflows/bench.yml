@@ -36,13 +36,11 @@ jobs:
             T "$l compute" 3 $v ./duckdb -c "$C"
             [ -n "$vr" ] && T "$l varied" 2 $v ./duckdb -f $SQL
             echo "$l hashes: $(h $v ./duckdb -csv -noheader -c 'select 42') $(h $v ./duckdb -csv -noheader -c "$C")"; }
-          B=/tmp/i-base/bin/v3compat-run
-          run base $B "" 1
-          run notraces $B "-disable_traces" 1
-          for t in 10 25 100; do run "trace_threshold$t" $B "-trace_threshold $t" 1; done
-          echo "== persist"; strings -a $DR/lib64/release/libdynamorio.so | grep -E '^-?(persist|coarse_units|coarse_enable|use_persisted|persist_)' | sort -u | head -40
-          strings -a $DR/lib64/release/libdynamorio.so | grep -iE 'persist.*(client|not supported|requires)|client.*persist' | head
-          for o in "-coarse_units -persist" "-coarse_units -persist -persist_per_user" "-coarse_units -persist -no_persist_check_options"; do
-            rm -rf /tmp/pc; mkdir /tmp/pc; export V3COMPAT_DR_OPTS="$o -persist_dir /tmp/pc"
-            echo "[$o]"; $B ./duckdb -c "select 42" 2>&1 | tail -3; T cold 1 $B ./duckdb -c "select 42"; T warm 2 $B ./duckdb -c "select 42"; find /tmp/pc -type f | head -3; du -sk /tmp/pc
+          B=/tmp/i-base/bin/v3compat-run; set +e
+          echo "== persist"; strings -a $DR/lib64/release/libdynamorio.so | grep -iE 'persist.*(client|not supported|requires|disabled)|client.*persist|coarse.*client' | head -20
+          $B ./duckdb -c "select 42"; echo "plain rc=$?"
+          for o in "-coarse_units" "-coarse_units -persist" "-coarse_units -persist -no_persist_check_options -persist_trust_textrel" "-no_enable_traces -coarse_units -persist"; do
+            rm -rf /tmp/pc; mkdir /tmp/pc; export V3COMPAT_DR_OPTS="$o -persist_dir /tmp/pc -stderr_mask 15"
+            echo "[$o]"; $B ./duckdb -c "select 42" 2>&1 | tail -4 | cut -c1-200; echo "rc=$?"; T cold 1 $B ./duckdb -c "select 42"; T warm 2 $B ./duckdb -c "select 42"; find /tmp/pc -type f | head -3; du -sk /tmp/pc
           done
+          export V3COMPAT_DR_OPTS="-coarse_units -persist -persist_dir /tmp/pc -disable_traces"; ls $DR/lib64/release | head
