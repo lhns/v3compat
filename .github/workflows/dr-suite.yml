@@ -46,13 +46,15 @@ jobs:
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           t="${{ matrix.sha }}-${{ matrix.build }}"
           grep -m1 'model name' /proc/cpuinfo | tee "$out/$t-cpu.txt"
+          set +e
           n=0; f=0
-          run() { for i in $(seq 40); do n=$((n+1)); ctest -R 'client\.attach_test$' --timeout 120 >/dev/null 2>&1 || { f=$((f+1)); cat suite/tests/client.attach_test*.out suite/tests/*attach_test*.err >> "$out/$t-fail.txt" 2>/dev/null; sed -n '/attach_test/,$p' Testing/Temporary/LastTest.log | tail -25 >> "$out/$t-fail.txt"; }; done; echo "$1: $f failed of $n" | tee -a "$out/$t-counts.txt"; n=0; f=0; }
+          run() { for i in $(seq 40); do n=$((n+1)); ctest -R 'client\.attach_test$' --timeout 120 --output-on-failure > "$RUNNER_TEMP/o.txt" 2>&1; if [ $? -ne 0 ]; then f=$((f+1)); [ "$f" -le 3 ] && { echo "--- $1 run $i"; tail -30 "$RUNNER_TEMP/o.txt"; } >> "$out/$t-fail.txt"; fi; done; echo "$1: $f failed of $n" | tee -a "$out/$t-counts.txt"; n=0; f=0; }
           run idle
           for i in $(seq "$(nproc)"); do (yes >/dev/null) & done
           run loaded
           pkill yes || true
           cat "$out/$t-counts.txt" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
       - uses: actions/upload-artifact@v4
         if: always()
         with:
