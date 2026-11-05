@@ -129,7 +129,7 @@ enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST, SHLX, SHRX, SARX, BZHI, TZCNT, LZCN
     X(shlx_mem_cnt_rax, "shlx %rax, (%r14), %rsi", SHLX, RSI, MEM, RAX, 64, 0, "", "") \
     X(shlx_mem32, "shlx %ecx, (%r14), %esi", SHLX, RSI, MEM, RCX, 32, 0, "", "") \
     X(shlx_rsp, "shlx %rcx, (%rsp), %rsi", SHLX, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
-    X(shlx_rip, "shlx %rcx, tmem(%rip), %esi", SHLX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(shlx_rip, "shlx %ecx, tmem(%rip), %esi", SHLX, RSI, MEM, RCX, 32, 0, "", "") \
     X(shrx_rr, "shrx %rcx, %rdx, %rsi", SHRX, RSI, RDX, RCX, 64, 0, "", "") \
     X(shrx_dst_cnt, "shrx %rcx, %rdx, %rcx", SHRX, RCX, RDX, RCX, 64, 0, "", "") \
     X(shrx_dst_src, "shrx %rcx, %rdx, %rdx", SHRX, RDX, RDX, RCX, 64, 0, "", "") \
@@ -147,7 +147,7 @@ enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST, SHLX, SHRX, SARX, BZHI, TZCNT, LZCN
     X(shrx_mem_cnt_rax, "shrx %rax, (%r14), %rsi", SHRX, RSI, MEM, RAX, 64, 0, "", "") \
     X(shrx_mem32, "shrx %ecx, (%r14), %esi", SHRX, RSI, MEM, RCX, 32, 0, "", "") \
     X(shrx_rsp, "shrx %rcx, (%rsp), %rsi", SHRX, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
-    X(shrx_rip, "shrx %rcx, tmem(%rip), %esi", SHRX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(shrx_rip, "shrx %ecx, tmem(%rip), %esi", SHRX, RSI, MEM, RCX, 32, 0, "", "") \
     X(sarx_rr, "sarx %rcx, %rdx, %rsi", SARX, RSI, RDX, RCX, 64, 0, "", "") \
     X(sarx_dst_cnt, "sarx %rcx, %rdx, %rcx", SARX, RCX, RDX, RCX, 64, 0, "", "") \
     X(sarx_dst_src, "sarx %rcx, %rdx, %rdx", SARX, RDX, RDX, RCX, 64, 0, "", "") \
@@ -165,7 +165,7 @@ enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST, SHLX, SHRX, SARX, BZHI, TZCNT, LZCN
     X(sarx_mem_cnt_rax, "sarx %rax, (%r14), %rsi", SARX, RSI, MEM, RAX, 64, 0, "", "") \
     X(sarx_mem32, "sarx %ecx, (%r14), %esi", SARX, RSI, MEM, RCX, 32, 0, "", "") \
     X(sarx_rsp, "sarx %rcx, (%rsp), %rsi", SARX, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
-    X(sarx_rip, "sarx %rcx, tmem(%rip), %esi", SARX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(sarx_rip, "sarx %ecx, tmem(%rip), %esi", SARX, RSI, MEM, RCX, 32, 0, "", "") \
     X(bzhi_rr, "bzhi %rcx, %rdx, %rsi", BZHI, RSI, RDX, RCX, 64, 0, "", "") \
     X(bzhi_dst_cnt, "bzhi %rcx, %rdx, %rcx", BZHI, RCX, RDX, RCX, 64, 0, "", "") \
     X(bzhi_dst_src, "bzhi %rcx, %rdx, %rdx", BZHI, RDX, RDX, RCX, 64, 0, "", "") \
@@ -183,7 +183,7 @@ enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST, SHLX, SHRX, SARX, BZHI, TZCNT, LZCN
     X(bzhi_mem_cnt_rax, "bzhi %rax, (%r14), %rsi", BZHI, RSI, MEM, RAX, 64, 0, "", "") \
     X(bzhi_mem32, "bzhi %ecx, (%r14), %esi", BZHI, RSI, MEM, RCX, 32, 0, "", "") \
     X(bzhi_rsp, "bzhi %rcx, (%rsp), %rsi", BZHI, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
-    X(bzhi_rip, "bzhi %rcx, tmem(%rip), %esi", BZHI, RSI, MEM, RCX, 32, 0, "", "") \
+    X(bzhi_rip, "bzhi %ecx, tmem(%rip), %esi", BZHI, RSI, MEM, RCX, 32, 0, "", "") \
     X(tzcnt_rr, "tzcnt %rcx, %rsi", TZCNT, RSI, RCX, 0, 64, 0, "", "") \
     X(tzcnt_alias, "tzcnt %rcx, %rcx", TZCNT, RCX, RCX, 0, 64, 0, "", "") \
     X(tzcnt_rax, "tzcnt %rax, %rax", TZCNT, RAX, RAX, 0, 64, 0, "", "") \
