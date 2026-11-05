@@ -58,6 +58,7 @@ shape(lz lzcnt.c -mlzcnt)
 shape(execer execer.c)
 shape(selfprobe selfprobe.c)
 shape(clone3 clone3.c)
+shape(vfork_sig vfork_sig.c)
 add_executable(selfprobe_nopie selfprobe.c)
 target_link_options(selfprobe_nopie PRIVATE -no-pie)
 target_compile_options(selfprobe_nopie PRIVATE -fno-pie)
@@ -199,6 +200,14 @@ if(MUSL_GCC)
     v3test(selfprobe-${k} stdout-has PASS exit 0 -- ${RUN} -- ${M}/selfprobe_${k} ${M}/selfprobe_${k})
   endforeach()
 endif()
+
+# A vfork child dying of a signal must not hang its parent, at the death or at the parent's own exit.
+foreach(k dyn static spie)
+  v3test(vfork-sig-${k} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:vfork_sig_${k}>)
+  v3test(vfork-sig-term-${k} stdout-has ok signal 15 -- ${RUN} -- $<TARGET_FILE:vfork_sig_${k}> term)
+  set_tests_properties(vfork-sig-${k} vfork-sig-term-${k} PROPERTIES TIMEOUT 60)
+endforeach()
+v3test(vfork-sig-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_sig_static>)
 
 # clone3 with CLONE_CLEAR_SIGHAND, as glibc's posix_spawn uses it; the native run shows the test's expectations hold.
 foreach(k dyn static spie)
