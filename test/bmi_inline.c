@@ -1,7 +1,7 @@
-// bmi_inline: rorx, andn, mulx and movbe compared with a C model, in the register aliasings and memory
+// bmi_inline: rorx, andn, mulx, movbe, shlx, shrx, sarx, bzhi, tzcnt and lzcnt compared with a C model, in the register aliasings and memory
 // forms an inline expansion could get wrong: a destination that is a source, the address base, rax or rdx;
-// 16-, 32- and 64-bit; rsp-based and rip-relative memory. Every case also checks the flags (kept, or for
-// andn SF ZF CF OF) and that no other register changed. Runs the same under V3COMPAT_HELPERS_ONLY=1.
+// 16-, 32- and 64-bit; rsp-based and rip-relative memory. Every case also checks the flags (kept, or the defined ones
+// of the forms that write them) and that no other register changed. Runs the same under V3COMPAT_HELPERS_ONLY=1.
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +13,7 @@ uint64_t tfl_in, tfl_out;
 uint8_t tmem[16] __attribute__((aligned(16)));
 
 enum { RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI, R8, R9, R10, R11, R12, R13, R14, R15, MEM = -1 };
-enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST };
+enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST, SHLX, SHRX, SARX, BZHI, TZCNT, LZCNT };
 
 #define LD(k, r) "mov tin+" #k "*8(%rip), %" #r "\n"
 #define ST(k, r) "mov %" #r ", tout+" #k "*8(%rip)\n"
@@ -33,6 +33,7 @@ enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST };
 // name, instruction, kind, p0 p1 p2, bits, imm, pre, post.
 //   rorx: p0 = destination, p1 = source or MEM.   andn: p0 = destination, p1 = vvvv (inverted), p2 = r/m or MEM.
 //   mulx: p0 = low (vvvv), p1 = high, p2 = source or MEM.   movbe load: p0 = destination.   store: p0 = source.
+//   shlx shrx sarx bzhi: p0 = destination, p1 = source or MEM, p2 = count or index.   tzcnt lzcnt: p0 = destination, p1 = source or MEM.
 #define CASES(X)                                                                                         \
     X(rorx_rr, "rorx $13, %rcx, %rdx", RORX, RDX, RCX, 0, 64, 13, "", "")                               \
     X(rorx_alias, "rorx $13, %rcx, %rcx", RORX, RCX, RCX, 0, 64, 13, "", "")                            \
@@ -110,7 +111,101 @@ enum { RORX, ANDN, MULX, MOVBE_LD, MOVBE_ST };
     X(movbe_st16_bx, "movbe %bx, (%r14)", MOVBE_ST, RBX, 0, 0, 16, 0, "", "")                           \
     X(movbe_st16_base, "movbe %r14w, (%r14)", MOVBE_ST, R14, 0, 0, 16, 0, "", "")                       \
     X(movbe_st_rsp, "movbe %rsi, (%rsp)", MOVBE_ST, RSI, 0, 0, 64, 0, RSP_PRE, RSP_POST)                \
-    X(movbe_st_rip, "movbe %esi, tmem(%rip)", MOVBE_ST, RSI, 0, 0, 32, 0, "", "")
+    X(movbe_st_rip, "movbe %esi, tmem(%rip)", MOVBE_ST, RSI, 0, 0, 32, 0, "", "") \
+    X(shlx_rr, "shlx %rcx, %rdx, %rsi", SHLX, RSI, RDX, RCX, 64, 0, "", "") \
+    X(shlx_dst_cnt, "shlx %rcx, %rdx, %rcx", SHLX, RCX, RDX, RCX, 64, 0, "", "") \
+    X(shlx_dst_src, "shlx %rcx, %rdx, %rdx", SHLX, RDX, RDX, RCX, 64, 0, "", "") \
+    X(shlx_same, "shlx %rcx, %rcx, %rcx", SHLX, RCX, RCX, RCX, 64, 0, "", "") \
+    X(shlx_cnt_rax, "shlx %rax, %rdx, %rsi", SHLX, RSI, RDX, RAX, 64, 0, "", "") \
+    X(shlx_dst_rax, "shlx %rcx, %rdx, %rax", SHLX, RAX, RDX, RCX, 64, 0, "", "") \
+    X(shlx_src_rcx, "shlx %rdx, %rcx, %rsi", SHLX, RSI, RCX, RDX, 64, 0, "", "") \
+    X(shlx_src_rax_cnt_rax, "shlx %rax, %rax, %rbx", SHLX, RBX, RAX, RAX, 64, 0, "", "") \
+    X(shlx_high, "shlx %r12, %r11, %r15", SHLX, R15, R11, R12, 64, 0, "", "") \
+    X(shlx32, "shlx %ecx, %edx, %esi", SHLX, RSI, RDX, RCX, 32, 0, "", "") \
+    X(shlx32_alias, "shlx %ecx, %ecx, %ecx", SHLX, RCX, RCX, RCX, 32, 0, "", "") \
+    X(shlx32_rax, "shlx %eax, %edx, %eax", SHLX, RAX, RDX, RAX, 32, 0, "", "") \
+    X(shlx_mem, "shlx %rcx, (%r14), %rsi", SHLX, RSI, MEM, RCX, 64, 0, "", "") \
+    X(shlx_mem_base, "shlx %rcx, (%r14), %r14", SHLX, R14, MEM, RCX, 64, 0, "", "") \
+    X(shlx_mem_cnt_rax, "shlx %rax, (%r14), %rsi", SHLX, RSI, MEM, RAX, 64, 0, "", "") \
+    X(shlx_mem32, "shlx %ecx, (%r14), %esi", SHLX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(shlx_rsp, "shlx %rcx, (%rsp), %rsi", SHLX, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
+    X(shlx_rip, "shlx %rcx, tmem(%rip), %esi", SHLX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(shrx_rr, "shrx %rcx, %rdx, %rsi", SHRX, RSI, RDX, RCX, 64, 0, "", "") \
+    X(shrx_dst_cnt, "shrx %rcx, %rdx, %rcx", SHRX, RCX, RDX, RCX, 64, 0, "", "") \
+    X(shrx_dst_src, "shrx %rcx, %rdx, %rdx", SHRX, RDX, RDX, RCX, 64, 0, "", "") \
+    X(shrx_same, "shrx %rcx, %rcx, %rcx", SHRX, RCX, RCX, RCX, 64, 0, "", "") \
+    X(shrx_cnt_rax, "shrx %rax, %rdx, %rsi", SHRX, RSI, RDX, RAX, 64, 0, "", "") \
+    X(shrx_dst_rax, "shrx %rcx, %rdx, %rax", SHRX, RAX, RDX, RCX, 64, 0, "", "") \
+    X(shrx_src_rcx, "shrx %rdx, %rcx, %rsi", SHRX, RSI, RCX, RDX, 64, 0, "", "") \
+    X(shrx_src_rax_cnt_rax, "shrx %rax, %rax, %rbx", SHRX, RBX, RAX, RAX, 64, 0, "", "") \
+    X(shrx_high, "shrx %r12, %r11, %r15", SHRX, R15, R11, R12, 64, 0, "", "") \
+    X(shrx32, "shrx %ecx, %edx, %esi", SHRX, RSI, RDX, RCX, 32, 0, "", "") \
+    X(shrx32_alias, "shrx %ecx, %ecx, %ecx", SHRX, RCX, RCX, RCX, 32, 0, "", "") \
+    X(shrx32_rax, "shrx %eax, %edx, %eax", SHRX, RAX, RDX, RAX, 32, 0, "", "") \
+    X(shrx_mem, "shrx %rcx, (%r14), %rsi", SHRX, RSI, MEM, RCX, 64, 0, "", "") \
+    X(shrx_mem_base, "shrx %rcx, (%r14), %r14", SHRX, R14, MEM, RCX, 64, 0, "", "") \
+    X(shrx_mem_cnt_rax, "shrx %rax, (%r14), %rsi", SHRX, RSI, MEM, RAX, 64, 0, "", "") \
+    X(shrx_mem32, "shrx %ecx, (%r14), %esi", SHRX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(shrx_rsp, "shrx %rcx, (%rsp), %rsi", SHRX, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
+    X(shrx_rip, "shrx %rcx, tmem(%rip), %esi", SHRX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(sarx_rr, "sarx %rcx, %rdx, %rsi", SARX, RSI, RDX, RCX, 64, 0, "", "") \
+    X(sarx_dst_cnt, "sarx %rcx, %rdx, %rcx", SARX, RCX, RDX, RCX, 64, 0, "", "") \
+    X(sarx_dst_src, "sarx %rcx, %rdx, %rdx", SARX, RDX, RDX, RCX, 64, 0, "", "") \
+    X(sarx_same, "sarx %rcx, %rcx, %rcx", SARX, RCX, RCX, RCX, 64, 0, "", "") \
+    X(sarx_cnt_rax, "sarx %rax, %rdx, %rsi", SARX, RSI, RDX, RAX, 64, 0, "", "") \
+    X(sarx_dst_rax, "sarx %rcx, %rdx, %rax", SARX, RAX, RDX, RCX, 64, 0, "", "") \
+    X(sarx_src_rcx, "sarx %rdx, %rcx, %rsi", SARX, RSI, RCX, RDX, 64, 0, "", "") \
+    X(sarx_src_rax_cnt_rax, "sarx %rax, %rax, %rbx", SARX, RBX, RAX, RAX, 64, 0, "", "") \
+    X(sarx_high, "sarx %r12, %r11, %r15", SARX, R15, R11, R12, 64, 0, "", "") \
+    X(sarx32, "sarx %ecx, %edx, %esi", SARX, RSI, RDX, RCX, 32, 0, "", "") \
+    X(sarx32_alias, "sarx %ecx, %ecx, %ecx", SARX, RCX, RCX, RCX, 32, 0, "", "") \
+    X(sarx32_rax, "sarx %eax, %edx, %eax", SARX, RAX, RDX, RAX, 32, 0, "", "") \
+    X(sarx_mem, "sarx %rcx, (%r14), %rsi", SARX, RSI, MEM, RCX, 64, 0, "", "") \
+    X(sarx_mem_base, "sarx %rcx, (%r14), %r14", SARX, R14, MEM, RCX, 64, 0, "", "") \
+    X(sarx_mem_cnt_rax, "sarx %rax, (%r14), %rsi", SARX, RSI, MEM, RAX, 64, 0, "", "") \
+    X(sarx_mem32, "sarx %ecx, (%r14), %esi", SARX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(sarx_rsp, "sarx %rcx, (%rsp), %rsi", SARX, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
+    X(sarx_rip, "sarx %rcx, tmem(%rip), %esi", SARX, RSI, MEM, RCX, 32, 0, "", "") \
+    X(bzhi_rr, "bzhi %rcx, %rdx, %rsi", BZHI, RSI, RDX, RCX, 64, 0, "", "") \
+    X(bzhi_dst_cnt, "bzhi %rcx, %rdx, %rcx", BZHI, RCX, RDX, RCX, 64, 0, "", "") \
+    X(bzhi_dst_src, "bzhi %rcx, %rdx, %rdx", BZHI, RDX, RDX, RCX, 64, 0, "", "") \
+    X(bzhi_same, "bzhi %rcx, %rcx, %rcx", BZHI, RCX, RCX, RCX, 64, 0, "", "") \
+    X(bzhi_cnt_rax, "bzhi %rax, %rdx, %rsi", BZHI, RSI, RDX, RAX, 64, 0, "", "") \
+    X(bzhi_dst_rax, "bzhi %rcx, %rdx, %rax", BZHI, RAX, RDX, RCX, 64, 0, "", "") \
+    X(bzhi_src_rcx, "bzhi %rdx, %rcx, %rsi", BZHI, RSI, RCX, RDX, 64, 0, "", "") \
+    X(bzhi_src_rax_cnt_rax, "bzhi %rax, %rax, %rbx", BZHI, RBX, RAX, RAX, 64, 0, "", "") \
+    X(bzhi_high, "bzhi %r12, %r11, %r15", BZHI, R15, R11, R12, 64, 0, "", "") \
+    X(bzhi32, "bzhi %ecx, %edx, %esi", BZHI, RSI, RDX, RCX, 32, 0, "", "") \
+    X(bzhi32_alias, "bzhi %ecx, %ecx, %ecx", BZHI, RCX, RCX, RCX, 32, 0, "", "") \
+    X(bzhi32_rax, "bzhi %eax, %edx, %eax", BZHI, RAX, RDX, RAX, 32, 0, "", "") \
+    X(bzhi_mem, "bzhi %rcx, (%r14), %rsi", BZHI, RSI, MEM, RCX, 64, 0, "", "") \
+    X(bzhi_mem_base, "bzhi %rcx, (%r14), %r14", BZHI, R14, MEM, RCX, 64, 0, "", "") \
+    X(bzhi_mem_cnt_rax, "bzhi %rax, (%r14), %rsi", BZHI, RSI, MEM, RAX, 64, 0, "", "") \
+    X(bzhi_mem32, "bzhi %ecx, (%r14), %esi", BZHI, RSI, MEM, RCX, 32, 0, "", "") \
+    X(bzhi_rsp, "bzhi %rcx, (%rsp), %rsi", BZHI, RSI, MEM, RCX, 64, 0, RSP_PRE, RSP_POST) \
+    X(bzhi_rip, "bzhi %rcx, tmem(%rip), %esi", BZHI, RSI, MEM, RCX, 32, 0, "", "") \
+    X(tzcnt_rr, "tzcnt %rcx, %rsi", TZCNT, RSI, RCX, 0, 64, 0, "", "") \
+    X(tzcnt_alias, "tzcnt %rcx, %rcx", TZCNT, RCX, RCX, 0, 64, 0, "", "") \
+    X(tzcnt_rax, "tzcnt %rax, %rax", TZCNT, RAX, RAX, 0, 64, 0, "", "") \
+    X(tzcnt_high, "tzcnt %r12, %r15", TZCNT, R15, R12, 0, 64, 0, "", "") \
+    X(tzcnt32, "tzcnt %ecx, %esi", TZCNT, RSI, RCX, 0, 32, 0, "", "") \
+    X(tzcnt32_alias, "tzcnt %edx, %edx", TZCNT, RDX, RDX, 0, 32, 0, "", "") \
+    X(tzcnt_mem, "tzcnt (%r14), %rsi", TZCNT, RSI, MEM, 0, 64, 0, "", "") \
+    X(tzcnt_mem_base, "tzcnt (%r14), %r14", TZCNT, R14, MEM, 0, 64, 0, "", "") \
+    X(tzcnt_mem32, "tzcnt (%r14), %esi", TZCNT, RSI, MEM, 0, 32, 0, "", "") \
+    X(tzcnt_rsp, "tzcnt (%rsp), %rsi", TZCNT, RSI, MEM, 0, 64, 0, RSP_PRE, RSP_POST) \
+    X(tzcnt_rip, "tzcnt tmem(%rip), %esi", TZCNT, RSI, MEM, 0, 32, 0, "", "") \
+    X(lzcnt_rr, "lzcnt %rcx, %rsi", LZCNT, RSI, RCX, 0, 64, 0, "", "") \
+    X(lzcnt_alias, "lzcnt %rcx, %rcx", LZCNT, RCX, RCX, 0, 64, 0, "", "") \
+    X(lzcnt_rax, "lzcnt %rax, %rax", LZCNT, RAX, RAX, 0, 64, 0, "", "") \
+    X(lzcnt_high, "lzcnt %r12, %r15", LZCNT, R15, R12, 0, 64, 0, "", "") \
+    X(lzcnt32, "lzcnt %ecx, %esi", LZCNT, RSI, RCX, 0, 32, 0, "", "") \
+    X(lzcnt32_alias, "lzcnt %edx, %edx", LZCNT, RDX, RDX, 0, 32, 0, "", "") \
+    X(lzcnt_mem, "lzcnt (%r14), %rsi", LZCNT, RSI, MEM, 0, 64, 0, "", "") \
+    X(lzcnt_mem_base, "lzcnt (%r14), %r14", LZCNT, R14, MEM, 0, 64, 0, "", "") \
+    X(lzcnt_mem32, "lzcnt (%r14), %esi", LZCNT, RSI, MEM, 0, 32, 0, "", "") \
+    X(lzcnt_rsp, "lzcnt (%rsp), %rsi", LZCNT, RSI, MEM, 0, 64, 0, RSP_PRE, RSP_POST) \
+    X(lzcnt_rip, "lzcnt tmem(%rip), %esi", LZCNT, RSI, MEM, 0, 32, 0, "", "")
 
 #define DEF(name, insn, kind, p0, p1, p2, bits, imm, pre, post) STUB(name, pre, insn, post);
 CASES(DEF)
@@ -149,6 +244,8 @@ static void run_case(const tcase *c, int iter) {
     tfl_in = 2 | (rnd() & ARITH);
     if (iter == 0) tfl_in = 2;
     if (iter == 1) tfl_in = 2 | ARITH;
+    if (c->kind == BZHI)   // half the indices inside the width, the rest anywhere
+        tin[c->p2] = (tin[c->p2] & ~0xffull) | (iter % 2 ? (uint64_t)(rnd() % (c->bits + 2)) : (rnd() & 0xff));
     uint64_t exp[16], memv = 0, fl = tfl_in & ARITH, flmask = ARITH;
     uint8_t expmem[16];
     memcpy(exp, tin, sizeof exp);
@@ -178,6 +275,28 @@ static void run_case(const tcase *c, int iter) {
         uint64_t v = c->bits == 64 ? __builtin_bswap64(memv)
                      : c->bits == 32 ? __builtin_bswap32((uint32_t)memv) : __builtin_bswap16((uint16_t)memv);
         exp[c->p0] = c->bits == 16 ? (tin[c->p0] & ~0xffffull) | v : v;
+        break;
+    }
+    case SHLX: case SHRX: case SARX: case BZHI: {
+        uint64_t sv = (c->p1 == MEM ? memv : tin[c->p1]) & m, cn = tin[c->p2];
+        if (c->kind == BZHI) {
+            uint64_t idx = cn & 0xff, r = idx >= (uint64_t)c->bits ? sv : sv & ((1ull << idx) - 1);
+            exp[c->p0] = r;
+            fl = (idx >= (uint64_t)c->bits ? 1 : 0) | (r == 0 ? 0x40 : 0) | ((r >> (c->bits - 1)) & 1 ? 0x80 : 0);
+            flmask = 0x8C1;   // SF ZF CF OF; AF and PF are undefined
+        } else {
+            int sh = (int)(cn & (uint64_t)(c->bits - 1));
+            int64_t sg = c->bits == 64 ? (int64_t)sv : (int64_t)(int32_t)sv;
+            exp[c->p0] = (c->kind == SHLX ? sv << sh : c->kind == SHRX ? sv >> sh : (uint64_t)(sg >> sh)) & m;
+        }
+        break;
+    }
+    case TZCNT: case LZCNT: {
+        uint64_t sv = (c->p1 == MEM ? memv : tin[c->p1]) & m;
+        int n = sv == 0 ? c->bits : c->kind == TZCNT ? __builtin_ctzll(sv) : __builtin_clzll(sv) - (64 - c->bits);
+        exp[c->p0] = (uint64_t)n;
+        fl = (sv == 0 ? 1 : 0) | (n == 0 ? 0x40 : 0);
+        flmask = 0x41;   // CF ZF; the rest is undefined
         break;
     }
     case MOVBE_ST: {
