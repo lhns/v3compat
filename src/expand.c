@@ -189,8 +189,8 @@ static void expand_inline(emit_t *e, instr_t *in) {
         hi_b = reg(t1x);
         lo_b = reg(xmm_of(src));
     }
-    op_128(e, opc, t0x, reg(t0x), hi_b);
-    op_128(e, opc, t1x, reg(xmm_of(a)), lo_b);
+    op_128(e, opc == OP_vpcmpeqd ? OP_vpcmpgtd : opc, t0x, reg(t0x), hi_b);
+    op_128(e, opc == OP_vpcmpeqd ? OP_vpcmpgtd : opc, t1x, reg(xmm_of(a)), lo_b);
     put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(t0x), OPND_CREATE_INT8(1)));
     if (mem) reload_y(e, 2);
     reload_y(e, 0);
@@ -278,7 +278,6 @@ static void expand_oneop(emit_t *e, instr_t *in) {
     reload_y(e, 0);
     put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
     instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
-    reload_y(e, 1);
 }
 
 static void refuse_call(app_pc pc, int opc) {
