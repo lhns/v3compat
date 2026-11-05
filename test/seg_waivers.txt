@@ -1,0 +1,26 @@
+vfmaddsub132ps refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmaddsub213ps refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmaddsub231ps refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmaddsub132pd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmaddsub213pd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmaddsub231pd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmsubadd132ps refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmsubadd213ps refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmsubadd231ps refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmsubadd132pd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmsubadd213pd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vfmsubadd231pd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vphaddsw refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vphaddw refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vphsubd refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vphsubsw refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vphsubw refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vmpsadbw refused whatever the operand: not on the audited list (ADR 0008), exit 86
+vgatherdpd refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vgatherdps refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vgatherqpd refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vgatherqps refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vpgatherdd refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vpgatherdq refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vpgatherqd refused on main (exit 86); the PR that emulates gathers must add fs/gs rows
+vpgatherqq refused on main (exit 86); the PR that emulates gathers must add fs/gs rows

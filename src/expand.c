@@ -67,21 +67,25 @@ static void pick_scratch(emit_t *e, instr_t *in) {
         if (!instr_uses_reg(in, y) && !instr_uses_reg(in, xmm_of(y))) e->scratch[n++] = y;
 }
 
-/* DR keeps its own TLS in gs, so a meta instruction cannot reach the application's. */
+/* A meta instruction's fs: and gs: reach DR's segments, not the application's, so those operands are
+ * rewritten by unseg. Refused: a 32-bit address (0x67, whose wrap the rewrite would not reproduce) and
+ * rip-relative with a segment (the address is out of disp32 range once the base is added). */
+static bool uses_seg(opnd_t m) { return opnd_get_segment(m) == DR_SEG_FS || opnd_get_segment(m) == DR_SEG_GS; }
 static bool mem_supported(opnd_t m) {
-    if (opnd_get_segment(m) == DR_SEG_FS && opnd_is_base_disp(m) &&
+    if (opnd_is_far_rel_addr(m)) return false;
+    if (uses_seg(m) && opnd_is_base_disp(m) &&
         ((opnd_get_base(m) != DR_REG_NULL && !reg_is_64bit(opnd_get_base(m))) ||
          (opnd_get_index(m) != DR_REG_NULL && !reg_is_64bit(opnd_get_index(m)))))
-        return false;   /* 0x67 with fs: not worth the wrap */
-    return opnd_get_segment(m) != DR_SEG_GS && !opnd_is_far_rel_addr(m) && !opnd_is_far_abs_addr(m);
+        return false;
+    return true;
 }
-static bool needs_abs(opnd_t m) { return opnd_is_rel_addr(m) || opnd_is_abs_addr(m); }
-static bool uses_fs(opnd_t m) { return opnd_get_segment(m) == DR_SEG_FS; }
+static bool needs_abs(opnd_t m) { return (opnd_is_rel_addr(m) || opnd_is_abs_addr(m)) && !uses_seg(m); }
 
-/* DR keeps the application's fs apart from the hardware one, so a meta instruction with an fs: override
- * reaches DR's. Returns m without it, with the base in `r` (which the caller has saved): fs base + base. */
+/* Returns m without the override, the segment base plus base in `r` (which the caller has saved). */
 static opnd_t unseg(emit_t *e, opnd_t m, reg_id_t r) {
-    dr_insert_get_seg_base(e->dc, e->bb, e->where, DR_SEG_FS, r);
+    dr_insert_get_seg_base(e->dc, e->bb, e->where, opnd_get_segment(m), r);
+    if (opnd_is_far_abs_addr(m))   /* no base or index: disp32, sign-extended */
+        return opnd_create_base_disp(r, DR_REG_NULL, 0, (int)(ptr_int_t)opnd_get_addr(m), opnd_get_size(m));
     reg_id_t b = opnd_get_base(m);
     if (b != DR_REG_NULL) put(e, INSTR_CREATE_lea(e->dc, reg(r), opnd_create_base_disp(b, r, 1, 0, OPSZ_lea)));
     return opnd_create_base_disp(r, opnd_get_index(m), opnd_get_scale(m), opnd_get_disp(m), opnd_get_size(m));
@@ -91,14 +95,14 @@ static opnd_t unseg(emit_t *e, opnd_t m, reg_id_t r) {
 static void load_mem(emit_t *e, opnd_t m, reg_id_t t) {
     uint size = opnd_size_in_bytes(opnd_get_size(m));
     /* The application's address may be out of rip reach from the code cache. */
-    bool abs = needs_abs(m), fs = uses_fs(m);
+    bool abs = needs_abs(m), seg = uses_seg(m);
     reg_id_t sr = DR_REG_RAX;
-    while (fs && opnd_uses_reg(m, sr)) sr++;   /* rax, rcx, rdx: an operand names two registers at most */
-    if (abs || fs) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(sr)));
+    while (seg && opnd_uses_reg(m, sr)) sr++;   /* rax, rcx, rdx: an operand names two registers at most */
+    if (abs || seg) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(sr)));
     if (abs) {
         instrlist_insert_mov_immed_ptrsz(e->dc, (ptr_int_t)opnd_get_addr(m), reg(sr), e->bb, e->where, NULL, NULL);
         m = opnd_create_base_disp(sr, DR_REG_NULL, 0, 0, opnd_get_size(m));
-    } else if (fs) {
+    } else if (seg) {
         m = unseg(e, m, sr);
     }
     reg_id_t x = xmm_of(t);
@@ -112,7 +116,7 @@ static void load_mem(emit_t *e, opnd_t m, reg_id_t t) {
     default: i = INSTR_CREATE_vpinsrb(e->dc, reg(x), reg(x), m, OPND_CREATE_INT8(0)); break;
     }
     put(e, i);
-    if (abs || fs) put(e, INSTR_CREATE_mov_ld(e->dc, reg(sr), SAVE_G(0)));
+    if (abs || seg) put(e, INSTR_CREATE_mov_ld(e->dc, reg(sr), SAVE_G(0)));
 }
 
 static void save_y(emit_t *e, int i) { put(e, INSTR_CREATE_vmovdqu(e->dc, SAVE_Y(i), reg(e->scratch[i]))); }
@@ -510,12 +514,12 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
         if (g == DR_REG_NULL) g = c;
         else if (addr == DR_REG_NULL) addr = c;
     }
-    bool fs = uses_fs(m);
-    if (abs || fs) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(addr)));
+    bool seg = uses_seg(m);
+    if (abs || seg) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(addr)));
     if (abs) {
         instrlist_insert_mov_immed_ptrsz(e->dc, (ptr_int_t)opnd_get_addr(m), reg(addr), e->bb, e->where, NULL, NULL);
         m = opnd_create_base_disp(addr, DR_REG_NULL, 0, 0, opnd_get_size(m));
-    } else if (fs) {
+    } else if (seg) {
         m = unseg(e, m, addr);
     }
     put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(g)));
@@ -530,7 +534,7 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
     put(e, INSTR_CREATE_mov_st(e->dc, m, reg(reg_resize_to_opsz(g, opnd_get_size(m)))));
     instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(g), SAVE_G(0)));
-    if (abs || fs) put(e, INSTR_CREATE_mov_ld(e->dc, reg(addr), SAVE_G(1)));
+    if (abs || seg) put(e, INSTR_CREATE_mov_ld(e->dc, reg(addr), SAVE_G(1)));
 }
 
 static void expand_bmi(emit_t *e, instr_t *in, const form_t *f) {
@@ -609,7 +613,7 @@ static void load_gpr(emit_t *e, opnd_t m, reg_id_t t, uint bytes) {
     if (needs_abs(m)) {   /* the application's address may be out of rip reach from the code cache */
         instrlist_insert_mov_immed_ptrsz(e->dc, (ptr_int_t)opnd_get_addr(m), reg(t), e->bb, e->where, NULL, NULL);
         m = opnd_create_base_disp(t, DR_REG_NULL, 0, 0, opnd_get_size(m));
-    } else if (uses_fs(m)) {
+    } else if (uses_seg(m)) {
         m = unseg(e, m, t);
     }
     if (bytes == 2) put(e, INSTR_CREATE_movzx(e->dc, reg(gsz(t, 4)), m));

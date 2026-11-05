@@ -25,3 +25,6 @@ must stay 32-byte aligned for speed. Refused forms stop the program with exit st
 
 ## Amendment, 2026-11-05
 The scalar `rorx`, `andn`, `mulx` and `movbe` (load; the store already was) are inline too: a clean call costs far more than the operation, whatever the program's mix. Flags are not left to liveness: `rorx` and `mulx` clobber them, so each saves them with `lahf`/`seto` into raw TLS and restores them after, always; `andn` needs no save as `and` writes the flags it defines.
+
+## Amendment, 2026-11-05
+Memory operands with `fs:` or `gs:` (absolute, base, index forms) are rewritten with the application's segment base from `dr_insert_get_seg_base`, as `fs:` already was; an `fs:`/`gs:` operand with a 32-bit address (0x67) or rip-relative is refused (exit 86). The application's gs base is 0: a program that sets it (`arch_prctl(ARCH_SET_GS)`) crashes under DynamoRIO itself.
