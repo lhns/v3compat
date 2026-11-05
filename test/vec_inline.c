@@ -4,11 +4,13 @@
 // per case: the sources and the three highest ymm registers (the scratch) are unchanged, and a memory source
 // is read for exactly the bytes the instruction reads (it sits at the end of a page, the next page is PROT_NONE).
 // Runs the same under V3COMPAT_HELPERS_ONLY=1; natively it checks the model.
+#define _GNU_SOURCE
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
 #include <sys/mman.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 // run(a, m, out): ymm1 = a[0..32), ymm13..15 = a[32..128), ymm2 = a[128..160); BODY leaves its result in ymm0;
@@ -79,11 +81,17 @@ static uint64_t rnd(void) {
 
 static int failures;
 static const char *volatile cur;   // the case running, for a crash report
-static void on_segv(int sig) {
+static void hex(char *out, unsigned long v) {
+    for (int i = 15; i >= 0; i--, v >>= 4) out[i] = "0123456789abcdef"[v & 15];
+}
+static void on_segv(int sig, siginfo_t *si, void *vc) {
     (void)sig;
+    char buf[64] = "  addr ................ rip ................\n";
+    hex(buf + 7, (unsigned long)si->si_addr);
+    hex(buf + 28, (unsigned long)((ucontext_t *)vc)->uc_mcontext.gregs[REG_RIP]);
     write(2, "SEGV in ", 8);
     write(2, cur, strlen(cur));
-    write(2, "\n", 1);
+    write(2, buf, strlen(buf));
     _exit(3);
 }
 typedef struct { uint8_t y[6][32]; } out_t;   // result, ymm13..15, ymm1, ymm2
@@ -180,7 +188,11 @@ static void oneop(const char *name, fn t_r, fn t_m, int kind, int e, int d, int 
 }
 
 int main(void) {
-    signal(SIGSEGV, on_segv);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = on_segv;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, 0);
     for (int iter = 0; iter < 60; iter++) {
 #define RUN_BIN(mn) lanewise(#mn, (fn)t_##mn##_r, (fn)t_##mn##_m, (fn)r_##mn, iter);
         BINS(RUN_BIN)
