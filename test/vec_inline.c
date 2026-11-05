@@ -18,7 +18,7 @@
 // caller points at a copy of ymm2 (or at the end of a page).
 #define STUBV(name, body)                                                                                 \
     __asm__(".text\n.globl " #name "\n.type " #name ",@function\n" #name ":\n"                            \
-            "vmovdqu (%rdi), %ymm1\nvmovdqu (%rsi), %ymm2\nvmovdqu 32(%rdi), %ymm13\n"                    \
+            "vmovdqu (%rdi), %ymm1\nvmovdqu 128(%rdi), %ymm2\nvmovdqu 32(%rdi), %ymm13\n"                    \
             "vmovdqu 64(%rdi), %ymm14\nvmovdqu 96(%rdi), %ymm15\n" body                                   \
             "vmovdqu %ymm0, (%rdx)\nvmovdqu %ymm13, 32(%rdx)\nvmovdqu %ymm14, 64(%rdx)\n"                 \
             "vmovdqu %ymm15, 96(%rdx)\nvmovdqu %ymm1, 128(%rdx)\nvmovdqu %ymm2, 160(%rdx)\nret\n");
