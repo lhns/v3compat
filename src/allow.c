@@ -1,11 +1,7 @@
 /* Classifies instructions and looks them up on the generated list. Runs at translation only. */
 #include "allow.h"
+#include "str.h"
 
-/* DR exports no libc string functions to clients (calling one dies at first use). */
-static bool starts(const char *s, const char *p) {
-    while (*p) if (*s++ != *p++) return false;
-    return true;
-}
 static bool contains(const char *s, const char *p) {
     for (; *s; s++) if (starts(s, p)) return true;
     return false;
