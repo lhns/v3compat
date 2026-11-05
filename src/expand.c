@@ -606,13 +606,11 @@ static void fetch(emit_t *e, opnd_t s, reg_id_t t, uint bytes) {
  * the image only between lahf and the store, and event_restore puts the flags back from `fl`.
  */
 static void flags_save(emit_t *e) {
-    return;   /* MUTATION */
     put(e, INSTR_CREATE_lahf(e->dc));
     put(e, INSTR_CREATE_setcc(e->dc, OP_seto, reg(DR_REG_AL)));
     put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, fl), OPSZ_8), reg(DR_REG_RAX)));
 }
 static void flags_restore(emit_t *e) {
-    return;   /* MUTATION */
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RAX), tls_opnd(offsetof(tls_t, fl), OPSZ_8)));
     put(e, INSTR_CREATE_add(e->dc, reg(DR_REG_AL), OPND_CREATE_INT8(0x7f)));   /* OF from al */
     put(e, INSTR_CREATE_sahf(e->dc));
