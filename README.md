@@ -22,7 +22,7 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
   rule of three they are about 0.8% and 1.0%. Zero failures do not prove a rate of zero. It is unclear from the docs whether
   the 296 run was under the client or DynamoRIO alone.
 - Programs that keep generating and unmapping code (JIT) grow memory without bound and abort with status 255 at a memory limit.
-- A `vfork` child killed by a signal before it execs hangs its parent. A fix is in progress and is not in this tree.
+- A process hangs if one thread ends it while another waits in `vfork` for a child that has not exited yet.
 - Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet. JVM workloads (13x to 84x) are out of scope.
 
 **Untested or unverified:**

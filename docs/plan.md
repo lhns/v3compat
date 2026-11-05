@@ -212,9 +212,10 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   AMD (1.67x with no client) and needs more forms inline.
 - **Thread-creation stress test.** A test creating threads without limit near exit died after 50 minutes on stock and fork,
   passed natively; cause unknown. To return with a thread cap.
-- **vfork child killed by a signal before exec** hangs the parent, as with `clone3`: DynamoRIO's exit waits for the parent,
-  which the kernel holds until the child is gone **[measured]**. glibc's `posix_spawn` case is fixed in the fork
-  (`test/clone3.c`).
+- **A thread of a vfork parent ending the process** while another waits in `vfork` for a child that has not exited hangs
+  (3 of 3; native exits): the waiting thread cannot answer the exit's synch. Not tested: a child killed holding a DynamoRIO
+  lock, or before its thread init. A child dying of a signal otherwise no longer hangs the parent, with `vfork` or `clone3`
+  (`test/vfork_sig.c`): 9 of 9 before, 0 of 300 after, at most 1% (95%) **[measured]**.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
   (likely upstream i#4219, not tested), hangs under reset with code churn. A rare SIGSEGV with reset off and no client is
   unexplained: 1 of 495 on the earlier pin, 1 of 1,896 on this one, no wrong output (at most 0.3%, 95%). Anything new that
