@@ -48,7 +48,7 @@ jobs:
           sudo apt-get install -y zstd
           set -o pipefail
           sh test/apps/audit.sh build/inst/bin/v3compat-run ./duckdb
-          sh test/apps/duckdb-reset.sh "build/inst/bin/v3compat-run --" ./duckdb 10
+          sh test/apps/duckdb-reset.sh "build/inst/bin/v3compat-run --" ./duckdb 15
           sh test/apps/duckdb.sh "" ./duckdb | tee native.txt
           # Repeated: thread-interleaving faults are intermittent (docs/adr/0010).
           sh test/apps/duckdb.sh "build/inst/bin/v3compat-run --" ./duckdb 30 | tee client.txt

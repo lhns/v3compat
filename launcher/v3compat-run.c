@@ -174,13 +174,14 @@ __attribute__((used)) void run(long *sp) {
     x->fd = v3c_pin(x->fd);
     if (x->fd < 0) die(125, "cannot keep ", x->final, " open");
 
-    /* DYNAMORIO_OPTIONS: -code_api, the user's options, then the client with its options. */
+    /* DYNAMORIO_OPTIONS: -code_api, no cache reset (it corrupts multithreaded programs: ADR 0010), the user's options,
+     * then the client with its options. */
     opts = grab(8192);
     {
         const char *user = envget(envp, "V3COMPAT_DR_OPTS="), *s;
         char *p = opts;
         if (user && slen(user) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", ""); /* before it is copied */
-        p = scpy(p, "DYNAMORIO_OPTIONS=-code_api ");
+        p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset ");
         if (user && *user) { p = scpy(p, user); *p++ = ' '; }
         p = scpy(p, "-client_lib \""); p = scpy(p, client); p = scpy(p, ";0;");
         s = envget(envp, "V3COMPAT_STATS=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-stats ");
