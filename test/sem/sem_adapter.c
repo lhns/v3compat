@@ -40,9 +40,14 @@ static int run_form(const specform *f, int full) {
     for (int k = 0; k < total; k++) {
         int smoke = is_smoke(k);
         if (!full && !smoke) continue;
-        sem_case c; sem_out ho; uint8_t ph[1024];
+        sem_case c; sem_out ho; uint8_t ph[2048];
+        int rbad = 0;
         gen_case(f, k, &c);
-        run_hw(&c, &ho);
+        run_case(run_hw, &c, &ho, &rbad);   // a faulted gather is also restarted: the digest holds both
+        if (rbad) {
+            printf("MISMATCH: %s case %d: the restart after the fault differs from an uninterrupted run\n", f->name, k);
+            bad = 1;
+        }
         size_t nh = pack(&ho, ph);
         if (getenv("SEM_DUMP")) {     /* per-case line, to diff a native run against a client run */
             char hx[80] = "";

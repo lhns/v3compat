@@ -45,7 +45,7 @@ int classify(void *dc, instr_t *in) {
         return C_AVX2;
     case OP_vbroadcastss: case OP_vbroadcastsd:   /* the register-source form is AVX2 */
         return opnd_is_reg(instr_get_src(in, 0)) ? C_AVX2 : C_N;
-    case OP_vmovntdqa:   /* the ymm load is AVX2 */
+    case OP_vmovntdqa: case OP_vmpsadbw:   /* the ymm forms are AVX2 */
         return has_ymm(in) ? C_AVX2 : C_N;
     default: break;
     }
