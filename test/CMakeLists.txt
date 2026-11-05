@@ -21,6 +21,13 @@ target_compile_options(gather PRIVATE -O1 -w)
 target_link_options(gather PRIVATE -static)
 add_executable(fs_operand fs_operand.c)
 target_link_options(fs_operand PRIVATE -static)
+add_executable(hadd_fma_forms hadd_fma_forms.c)
+add_executable(seg_threads seg_threads.c)
+target_link_libraries(seg_threads PRIVATE pthread)
+target_link_options(seg_threads PRIVATE -static)
+add_executable(seg_operand seg_operand.c)
+target_link_options(seg_operand PRIVATE -static -no-pie)
+target_compile_options(seg_operand PRIVATE -fno-pie -O0)
 add_executable(bench_bmi bench_bmi.c)
 add_executable(misc_forms misc_forms.c)
 add_executable(refuse_forms refuse_forms.c)
@@ -245,6 +252,16 @@ set_tests_properties(gather gather-native PROPERTIES TIMEOUT 600)
 # Thread-local (%fs:) memory operands of expanded forms, against a C model; native checks the model.
 v3test(fs-operand stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:fs_operand>)
 v3test(fs-operand-native stdout-has PASS exit 0 -- $<TARGET_FILE:fs_operand>)
+# Every expanded memory form with fs: and gs: operands in each addressing shape: fault state, restart, result.
+v3test(seg-operand stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:seg_operand>)
+v3test(seg-operand-native stdout-has PASS exit 0 -- $<TARGET_FILE:seg_operand>)
+v3test(hadd-fma-forms stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:hadd_fma_forms>)
+v3test(hadd-fma-forms-native stdout-has PASS exit 0 -- $<TARGET_FILE:hadd_fma_forms>)
+add_test(NAME seg-coverage COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/seg_coverage.sh")
+# Threads with different fs bases, concurrently.
+v3test(seg-threads stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:seg_threads>)
+v3test(seg-threads-native stdout-has PASS exit 0 -- $<TARGET_FILE:seg_threads>)
+set_tests_properties(seg-operand seg-operand-native seg-threads seg-threads-native PROPERTIES TIMEOUT 300)
 # lzcnt in code the client sees late: a dlopen'd library, and a static program after exec.
 v3test(lzcnt-dlopen stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> dl $<TARGET_FILE:lzlib>)
 v3test(lzcnt-static-exec stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> exec $<TARGET_FILE:lzcnt_static>)
@@ -255,7 +272,8 @@ set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynam
 
 # ADR 0008: off the audited list exits 86, on it runs, whatever this CPU would do with it.
 foreach(f xop-bextr-imm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tpause umonitor adcx adox
-          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb)
+          sha1rnds4 clflushopt clwb rdpid rdseed xsavec movdiri gf2p8mulb kmovw vzeroupper-w1 vmmcall cmpccxadd jz-66 pause-rexb
+          andn-fs-addr32 andn-gs-addr32 andn-fs-rip andn-gs-rip)
   v3test(refused-${f} exit 86 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(refused-${f} PROPERTIES TIMEOUT 120)
 endforeach()
