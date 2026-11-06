@@ -1,6 +1,7 @@
 #!/bin/bash
 . lab/loop.sh
 grep -m1 "model name" /proc/cpuinfo
+grep -q avx512f /proc/cpuinfo || { echo "RESULT skip: no AVX-512"; exit 0; }
 RUN="build/inst/bin/v3compat-run --"
 RS=build/test/regstress
 mkdir -p lab-out/core; sudo sysctl -q kernel.core_pattern="$PWD/lab-out/core/core.%p"; ulimit -c unlimited
