@@ -1,7 +1,7 @@
 name: dr-diag
 on:
   push:
-    branches: [suite-pad]
+    branches: [suite-pad-diag-off]
 permissions:
   contents: read
 jobs:
