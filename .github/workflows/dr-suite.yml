@@ -13,8 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sha: [5e4ffb15d98963972a5e9cac86cb2bb4f72236bf]
-        build: [debug, release]
+        sha: [5121abc2ef45180a3f3a5546ec2edb1d75aaa32e, 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf]
+        build: [release]
+        rep: [a, b]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,6 +45,7 @@ jobs:
         run: |
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
           t="${{ matrix.sha }}-${{ matrix.build }}"
+          { grep -m1 'model name' /proc/cpuinfo; grep -o -m1 avx512f /proc/cpuinfo; } | tee "$out/$t-cpu.txt"
           extract() { sed -n 's/^[0-9]*://p' Testing/Temporary/LastTestsFailed.log 2>/dev/null | sort > "$1"; }
           ctest -j"$(nproc)" --timeout 300 --output-on-failure || true
           extract "$out/$t-first.txt"
@@ -61,5 +63,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: results-${{ matrix.sha }}-${{ matrix.build }}
+          name: results-${{ matrix.sha }}-${{ matrix.build }}-${{ matrix.rep }}
           path: ${{ runner.temp }}/out
