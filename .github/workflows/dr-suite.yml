@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sha: [5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, 5cad0fe448935f09b52d7e14e1b1972d04b4c679]
+        sha: [5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, f7166961d69bc0606522421b86eef5f779a0ddb5]
         build: [release, debug]
         rep: [a, b]
     steps:
@@ -51,6 +51,7 @@ jobs:
           extract "$out/$t-first.txt"
           cp Testing/Temporary/LastTest.log "$out/$t-LastTest.log" || true
           ctest -j"$(nproc)" --timeout 300 --output-on-failure --rerun-failed || true
+          for k in linux.synchall-restore client.annotation-concurrency linux.syscall_pwait client.events client.pcache; do f=0; for i in $(seq 20); do ctest -R "\|$k\$" --timeout 300 >/dev/null 2>&1 || f=$((f+1)); done; echo "repeat-count $k: $f of 20 failed" | tee -a "$out/$t-repeat.txt"; done
           extract "$out/$t-rerun.txt"
           cp Testing/Temporary/LastTest.log "$out/$t-LastTest-rerun.log" || true
           {
