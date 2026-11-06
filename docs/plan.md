@@ -189,7 +189,8 @@ handler now defers the walk to the thread's next real synch point. `regstress 8 
 job **[measured]**: without the change, 17 of 9,000 on main and 21 of 12,000 on the same lab with an unrelated
 change; with it, 0 of 12,000 (at most 0.025%, 95%), on AMD EPYC 7763, 9V45
 and 9V74. On main with the fix: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and
-0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 with `-no_ignore_syscalls` and 0 of 4,500 without.
+0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 with `-no_ignore_syscalls` and 0 of 4,500 without. Still open: with code churn and no app
+signals, 2 of 12,000 crashed under the client with the fix (2 of 3,000 before; 0 of 6,000 on DynamoRIO alone), cause unknown.
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
