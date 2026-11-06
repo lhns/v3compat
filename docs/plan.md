@@ -178,8 +178,17 @@ address in `rax`.
 Reset off and code generation, [ADR 0011](adr/0011-no-ignored-syscalls.md): a program that generates and unmaps code while
 another thread waits in a system call grew 18.4 KB per region on `-ignore_syscalls`, the default, and 0.0 on
 `-no_ignore_syscalls`, over 3,000 regions **[measured]**. Cost: `getppid` 485-491 ns against 488-494, duckdb's query 39.8-40.1 s
-against 39.8-40.3 s, three runs each. Stress on this config (with the fork's vfork fix): duckdb 0 of 240; signal stress 1 of 390
-and DynamoRIO-alone stress 1 of 306, both crashes with no wrong output, see the SIGSEGV under "Open items".
+against 39.8-40.3 s, three runs each.
+
+**The rare crash, fixed in the fork** (branch `fix-signal-unlink-walk`). A signal arriving while a thread is in a fragment, or
+in `fcache_enter` about to jump to one, unlinks that fragment from the signal handler, and the synch point it took walked the
+deletion queues. The walk dropped the thread's own claim on fragments retired since its last synch point, so the fragment
+could be freed under it; it then ran the free list (SIGSEGV, SIGBUS, or a silent status 255 from inside DynamoRIO). If the
+slot was reused first, it could have run another fragment's code, so a wrong result was possible; none was seen. The
+handler now defers the walk to the thread's next real synch point. `regstress 8 1 sig jit` under the client, 1,500 runs a
+job **[measured]**: without the change, 48 of 36,000 across five builds (0.13%); with it, 0 of 12,000 (at most 0.025%, 95%), on AMD EPYC 7763, 9V45
+and 9V74. On main with the fix: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and
+0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 with `-no_ignore_syscalls` and 0 of 4,500 without.
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
@@ -219,9 +228,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   lock, or before its thread init. A child dying of a signal otherwise no longer hangs the parent, with `vfork` or `clone3`
   (`test/vfork_sig.c`): 9 of 9 before, 0 of 300 after, at most 1% (95%) **[measured]**.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
-  (likely upstream i#4219, not tested), hangs under reset with code churn. A rare SIGSEGV with reset off and no client is
-  unexplained: 1 of 495 on the earlier pin, 1 of 1,896 on this one, no wrong output (at most 0.3%, 95%). Anything new that
-  relocates a thread needs `test/regstress.c`.
+  (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
+  `test/regstress.c`.
 - **Signal injection** into an expansion is untested; asynchronous signals arrive at fragment boundaries.
 - **Intel NaN priority** is unverified until a recording on Intel AVX2 hardware.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
