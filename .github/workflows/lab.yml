@@ -12,26 +12,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: p1, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p2, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p3, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p4, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p5, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p6, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p7, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p8, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p9, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
-          - {name: p10, dr: 69d678e66466e6804526c09721ab2cb8052bf1b1, arg: "3000 jit"}
+          - {name: p1, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p2, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p3, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p4, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p5, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p6, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p7, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
+          - {name: p8, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 jit"}
           - {name: c1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
           - {name: c2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
           - {name: c3, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
           - {name: c4, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
           - {name: c5, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
           - {name: c6, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
-          - {name: c7, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
-          - {name: c8, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
-          - {name: c9, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
-          - {name: c10, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "3000 jit"}
+          - {name: s1, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 sig jit"}
+          - {name: s2, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 sig jit"}
+          - {name: s3, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 sig jit"}
+          - {name: s4, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 sig jit"}
+          - {name: s5, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 sig jit"}
+          - {name: s6, dr: 416dd4b5c6d2cba0c1005f3f05b11a2200113f4e, arg: "3000 sig jit"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
