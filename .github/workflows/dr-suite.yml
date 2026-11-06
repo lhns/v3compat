@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sha: [5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, 9cdd0b89322b561a358540e69def88cd4a5c8f3e]
+        sha: [5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, 7abc05ea0abc2489453c3c729264a846cb167ce1]
         build: [release, debug]
         rep: [a, b]
     steps:
