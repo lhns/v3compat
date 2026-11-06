@@ -12,7 +12,7 @@ loop() {
       echo "$name run $i: hang"
     else
       wait $pid; rc=$?
-      if [ $rc != 0 ]; then bad=$((bad+1)); codes="$codes $rc"; echo "$name run $i: rc=$rc"; grep -a -h '@@' lab-out/$name.err | tail -8 | cut -c1-260; cp lab-out/$name.err lab-out/$name.fail$bad.err; fi
+      if [ $rc != 0 ]; then bad=$((bad+1)); codes="$codes $rc"; echo "$name run $i: rc=$rc"; grep -a -h '@@|check failure|Internal|rash|Error' lab-out' lab-out/$name.err | tail -8 | cut -c1-260; cp lab-out/$name.err lab-out/$name.fail$bad.err; fi
     fi
   done
   echo "RESULT $name: $bad of $N bad (hang $hang; codes:$codes)"

@@ -12,10 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: j1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 jit"}
-          - {name: j2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 jit"}
-          - {name: j3, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 jit"}
-          - {name: j4, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 jit"}
+          - {name: dr1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "2000 dr jit"}
+          - {name: dr2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "2000 dr jit"}
+          - {name: dr3, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "2000 dr jit"}
+          - {name: cl1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "2000 cl jit"}
+          - {name: cl2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "2000 cl jit"}
+          - {name: cl3, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "2000 cl jit"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -32,6 +34,7 @@ jobs:
         timeout-minutes: 280
         env:
           ARG: ${{ matrix.arg }}
+          DRSHA: ${{ matrix.dr }}
         run: |
           mkdir -p lab-out
           bash lab/run.sh $ARG 2>&1 | tee lab-out/log.txt | tail -200
