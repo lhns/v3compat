@@ -186,7 +186,8 @@ deletion queues. The walk dropped the thread's own claim on fragments retired si
 could be freed under it; it then ran the free list (SIGSEGV, SIGBUS, or a silent status 255 from inside DynamoRIO). If the
 slot was reused first, it could have run another fragment's code, so a wrong result was possible; none was seen. The
 handler now defers the walk to the thread's next real synch point. `regstress 8 1 sig jit` under the client, 1,500 runs a
-job **[measured]**: without the change, 48 of 36,000 across five builds (0.13%); with it, 0 of 12,000 (at most 0.025%, 95%), on AMD EPYC 7763, 9V45
+job **[measured]**: without the change, 17 of 9,000 on main and 21 of 12,000 on the same lab with an unrelated
+change; with it, 0 of 12,000 (at most 0.025%, 95%), on AMD EPYC 7763, 9V45
 and 9V74. On main with the fix: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and
 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 with `-no_ignore_syscalls` and 0 of 4,500 without.
 
