@@ -12,26 +12,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: duck1, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "duck 60"}
-          - {name: duck2, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "duck 60"}
-          - {name: duck3, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "duck 60"}
-          - {name: duck4, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "duck 60"}
-          - {name: sig1, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "sig 130"}
-          - {name: sig2, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "sig 130"}
-          - {name: sig3, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "sig 130"}
-          - {name: regc1, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "regc 34"}
-          - {name: regc2, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "regc 34"}
-          - {name: regc3, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "regc 34"}
-          - {name: regd1, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "regd 34"}
-          - {name: regd2, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "regd 34"}
-          - {name: regd3, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "regd 34"}
-          - {name: short1, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "short 1500"}
-          - {name: short2, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "short 1500"}
-          - {name: short3, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "short 1500"}
-          - {name: old1, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "shortold 1500"}
-          - {name: old2, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "shortold 1500"}
-          - {name: old3, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "shortold 1500"}
-          - {name: tests, dr: 9cdd0b89322b561a358540e69def88cd4a5c8f3e, arg: "tests 100"}
+          - {name: duck1, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "duck 60"}
+          - {name: duck2, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "duck 60"}
+          - {name: duck3, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "duck 60"}
+          - {name: duck4, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "duck 60"}
+          - {name: sig1, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "sig 130"}
+          - {name: sig2, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "sig 130"}
+          - {name: sig3, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "sig 130"}
+          - {name: regc1, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "regc 34"}
+          - {name: regc2, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "regc 34"}
+          - {name: regc3, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "regc 34"}
+          - {name: regd1, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "regd 34"}
+          - {name: regd2, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "regd 34"}
+          - {name: regd3, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "regd 34"}
+          - {name: short1, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "short 1500"}
+          - {name: short2, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "short 1500"}
+          - {name: short3, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "short 1500"}
+          - {name: old1, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "shortold 1500"}
+          - {name: old2, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "shortold 1500"}
+          - {name: old3, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "shortold 1500"}
+          - {name: tests, dr: 7abc05ea0abc2489453c3c729264a846cb167ce1, arg: "tests 100"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
