@@ -1,7 +1,7 @@
 name: dr-suite
 on:
   push:
-    branches: [suite-unlink]
+    branches: [suite-pad]
 
 permissions:
   contents: read
@@ -13,8 +13,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sha: [5121abc2ef45180a3f3a5546ec2edb1d75aaa32e, 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf]
-        build: [release]
+        sha: [5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, 69d678e66466e6804526c09721ab2cb8052bf1b1]
+        build: [release, debug]
         rep: [a, b]
     steps:
       - uses: actions/checkout@v4
