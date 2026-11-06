@@ -41,7 +41,7 @@ jobs:
           done
           if [ "${{ matrix.build }}" = debug ]; then
             cmdline=$(ctest -R "\|linux.syscall_pwait\$" -N -V | sed -n 's/^[0-9]*: Test command: //p' | head -1)
-            mkdir -p "$out/logs"; c=$(echo "$cmdline" | sed "s#bin64/drrun\" #bin64/drrun\" \"-loglevel\" \"3\" \"-logmask\" \"0x00a00\" \"-logdir\" \"$out/logs\" #")
+            mkdir -p "$out/logs"; c=$(echo "$cmdline" | sed "s#bin64/drrun\" #bin64/drrun\" \"-loglevel\" \"3\" \"-logmask\" \"0x18\" \"-logdir\" \"$out/logs\" #")
             eval timeout 120 $c > "$out/pwait-log.out" 2>&1; echo "logged rc=$?"; du -sh "$out/logs"
           fi
       - uses: actions/upload-artifact@v4
