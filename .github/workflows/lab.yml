@@ -1,0 +1,46 @@
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: m32, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "m32 300"}
+          - {name: gather1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "gather 150"}
+          - {name: gather2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "gather 150"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: lab-dr-${{ matrix.dr }}
+      - name: Packages
+        run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools gdb zstd
+      - name: Build
+        run: |
+          sed -i "s/^set(V3COMPAT_DR_COMMIT .*/set(V3COMPAT_DR_COMMIT ${{ matrix.dr }})/" cmake/FetchDynamoRIO.cmake
+          cmake -S . -B build && cmake --build build -j
+      - name: Run
+        timeout-minutes: 280
+        env:
+          ARG: ${{ matrix.arg }}
+        run: |
+          mkdir -p lab-out
+          bash lab/run.sh $ARG 2>&1 | tee lab-out/log.txt | tail -200
+      - name: Summary
+        if: always()
+        run: |
+          { echo "### ${{ matrix.name }}"; echo '```'; tail -40 lab-out/log.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lab-${{ matrix.name }}
+          path: lab-out
+          if-no-files-found: ignore
