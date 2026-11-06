@@ -12,14 +12,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: g1, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g2, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g3, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g4, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g5, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g6, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g7, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
-          - {name: g8, dr: 958e58d46dc55d8593835d9f35a9f65ce74b9274, arg: "1500 sig jit"}
+          - {name: g1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g3, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g4, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g5, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g6, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g7, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
+          - {name: g8, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "1500 sig jit"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
