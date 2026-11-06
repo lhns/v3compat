@@ -12,12 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: e1, dr: 5333c962d1e8dcec851a46963d1b439f4d012403, arg: "1500 sig jit"}
-          - {name: e2, dr: 5333c962d1e8dcec851a46963d1b439f4d012403, arg: "1500 sig jit"}
-          - {name: e3, dr: 5333c962d1e8dcec851a46963d1b439f4d012403, arg: "1500 sig jit"}
-          - {name: e4, dr: 5333c962d1e8dcec851a46963d1b439f4d012403, arg: "1500 sig jit"}
-          - {name: e5, dr: 5333c962d1e8dcec851a46963d1b439f4d012403, arg: "1500 sig jit"}
-          - {name: e6, dr: 5333c962d1e8dcec851a46963d1b439f4d012403, arg: "1500 sig jit"}
+          - {name: r1, dr: 8872a857ad28efe7ec90c50e23d54d8518ff1a22, arg: "1500 jit"}
+          - {name: r2, dr: 8872a857ad28efe7ec90c50e23d54d8518ff1a22, arg: "1500 jit"}
+          - {name: r3, dr: 8872a857ad28efe7ec90c50e23d54d8518ff1a22, arg: "1500 jit"}
+          - {name: r4, dr: 8872a857ad28efe7ec90c50e23d54d8518ff1a22, arg: "1500 jit"}
+          - {name: r5, dr: 8872a857ad28efe7ec90c50e23d54d8518ff1a22, arg: "1500 jit"}
+          - {name: r6, dr: 8872a857ad28efe7ec90c50e23d54d8518ff1a22, arg: "1500 jit"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
