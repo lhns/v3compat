@@ -12,9 +12,28 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: m32, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "m32 300"}
-          - {name: gather1, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "gather 150"}
-          - {name: gather2, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "gather 150"}
+          - {name: before-map32, dr: 5e4ffb15d98963972a5e9cac86cb2bb4f72236bf, arg: "map32 20"}
+          - {name: map32, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "map32 300"}
+          - {name: m32, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "m32 300"}
+          - {name: gather1, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "gather 300"}
+          - {name: gather2, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "gather 300"}
+          - {name: duck1, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "duck 60"}
+          - {name: duck2, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "duck 60"}
+          - {name: duck3, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "duck 60"}
+          - {name: duck4, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "duck 60"}
+          - {name: sig1, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "sig 130"}
+          - {name: sig2, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "sig 130"}
+          - {name: sig3, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "sig 130"}
+          - {name: regc1, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "regc 34"}
+          - {name: regc2, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "regc 34"}
+          - {name: regc3, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "regc 34"}
+          - {name: regd1, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "regd 34"}
+          - {name: regd2, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "regd 34"}
+          - {name: regd3, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "regd 34"}
+          - {name: short1, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "short 1500"}
+          - {name: short2, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "short 1500"}
+          - {name: short3, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "short 1500"}
+          - {name: tests, dr: 14c91db026d5cfc2ec08d685393d9932943498d0, arg: "tests 100"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4

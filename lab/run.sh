@@ -12,6 +12,7 @@ regc) for k in "jit" "sig" "idle jit"; do loop regc "$2" 60 $RUN $RS 8 10 $k; do
 regd) for k in "jit" "sig" "sig jit"; do loop regd "$2" 60 $DRRUN -no_enable_reset -no_ignore_syscalls -- $RS 8 10 $k; done ;;
 short) loop short $2 60 $RUN $RS 8 1 sig jit ;;
 shortold) V3COMPAT_DR_OPTS="$OLD" loop short $2 60 $RUN $RS 8 1 sig jit ;;
+map32) loop map32 $2 30 $RUN build/test/map32; V3COMPAT_DR_OPTS="-vm_base 0x40000000 -vm_max_offset 0x10000" loop map32covered $2 30 $RUN build/test/map32; cat lab-out/map32covered.out lab-out/map32covered.err | head -5 ;;
 gather) loop gather $2 120 $RUN build/test/gather ;;
 m32)
   gcc -O1 -static lab/m32.c -o m32s; gcc -O1 lab/m32.c -o m32p
