@@ -19,6 +19,8 @@ add_executable(bmi_inline bmi_inline.c)
 add_executable(gather gather.c)
 target_compile_options(gather PRIVATE -O1 -w)
 target_link_options(gather PRIVATE -static)
+add_executable(map32 map32.c)
+target_link_options(map32 PRIVATE -static)
 add_executable(fs_operand fs_operand.c)
 target_link_options(fs_operand PRIVATE -static)
 add_executable(hadd_fma_forms hadd_fma_forms.c)
@@ -265,6 +267,11 @@ set_tests_properties(bmi-inline bmi-helpers bmi-native PROPERTIES TIMEOUT 120)
 v3test(gather stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:gather>)
 v3test(gather-native stdout-has PASS exit 0 -- $<TARGET_FILE:gather>)
 set_tests_properties(gather gather-native PROPERTIES TIMEOUT 600)
+# MAP_32BIT below a low (non-PIE) app: the kernel looks only in [1G,2G), which DynamoRIO's code reservation covers
+# in some runs. -vm_base puts it over all of that every run.
+v3test(map32 stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:map32>)
+v3test(map32-covered stdout-has PASS exit 0 -- env "V3COMPAT_DR_OPTS=-vm_base 0x40000000 -vm_max_offset 0x10000"
+       ${RUN} -- $<TARGET_FILE:map32>)
 # Thread-local (%fs:) memory operands of expanded forms, against a C model; native checks the model.
 v3test(fs-operand stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:fs_operand>)
 v3test(fs-operand-native stdout-has PASS exit 0 -- $<TARGET_FILE:fs_operand>)
