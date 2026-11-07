@@ -1,7 +1,7 @@
 name: dr-diag
 on:
   push:
-    branches: [suite-pad-diag-off]
+    branches: [suite-pad]
 permissions:
   contents: read
 jobs:
@@ -12,11 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         build: [debug, release]
+        sha: [7abc05ea0abc2489453c3c729264a846cb167ce1, 8ef72a76c053ae75afdc9ee8dfcf77a898d39b10]
     steps:
       - uses: actions/checkout@v4
         with:
           repository: lhns/dynamorio
-          ref: f7166961d69bc0606522421b86eef5f779a0ddb5
+          ref: ${{ matrix.sha }}
           submodules: true
           path: dr
       - name: Packages
@@ -30,22 +31,9 @@ jobs:
         working-directory: build
         run: |
           out="$RUNNER_TEMP/out"; mkdir -p "$out"; grep -m1 'model name' /proc/cpuinfo
-          for t in linux.syscall_pwait client.annotation-concurrency; do
-            cmdline=$(ctest -R "\|$t\$" -N -V | sed -n 's/^[0-9]*: Test command: //p' | head -1)
-            echo "== $t: $cmdline" | cut -c1-300
-            for mode in asis nopad; do
-              c="$cmdline"; [ $mode = nopad ] && c=$(echo "$cmdline" | sed 's#bin64/drrun" #bin64/drrun" "-no_pad_jmps" #')
-              f=0; for i in $(seq 10); do eval timeout 120 $c > "$out/$t-$mode.out" 2>&1 || f=$((f+1)); done
-              echo "$t $mode: rc-fail $f of 10; last tail:"; tail -3 "$out/$t-$mode.out" | cut -c1-200
-            done
-          done
-          if [ "${{ matrix.build }}" = debug ]; then
-            cmdline=$(ctest -R "\|linux.syscall_pwait\$" -N -V | sed -n 's/^[0-9]*: Test command: //p' | head -1)
-            mkdir -p "$out/logs"; c=$(echo "$cmdline" | sed "s#bin64/drrun\" #bin64/drrun\" \"-loglevel\" \"3\" \"-logmask\" \"0x18\" \"-logdir\" \"$out/logs\" #")
-            eval timeout 120 $c > "$out/pwait-log.out" 2>&1; echo "logged rc=$?"; du -sh "$out/logs"
-          fi
+          for k in linux.syscall_pwait client.annotation-concurrency; do f=0; for i in $(seq 20); do ctest -R "\|$k\$" --timeout 300 >/dev/null 2>&1 || { f=$((f+1)); cp Testing/Temporary/LastTest.log "$out/$k-fail$f.log"; }; done; echo "repeat-count $k: $f of 20 failed" | tee -a "$out/repeat.txt"; done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: diag-${{ matrix.build }}
+          name: diag-${{ matrix.build }}-${{ matrix.sha }}
           path: ${{ runner.temp }}/out
