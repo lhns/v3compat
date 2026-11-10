@@ -225,7 +225,8 @@ thread init, left the count of threads not yet initialized raised, and under the
 (about 50 s from the option defaults); parent and child now share it and whoever gets to it drops it. Failing vforks
 under the client: 15 of 15 waited over 20 s before, 0 of 200 after **[measured]**; the killed child is not measured
 (below). DynamoRIO's suite, base and fix on the same runner: the same failures apart from the known flake
-`client.attach_test`.
+`client.attach_test`. No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
+client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500.
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
