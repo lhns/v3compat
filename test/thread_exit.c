@@ -55,6 +55,12 @@ int main(int argc, char **argv) {
         if (getrlimit(RLIMIT_NPROC, &none)) return 2;
         none.rlim_cur = 0;
         if (setrlimit(RLIMIT_NPROC, &none)) return 2;
+        /* A vfork that fails the same way. */
+        for (int i = 0; i < 10; i++) {
+            pid_t c = vfork();
+            if (c == 0) _exit(0);
+            if (c > 0) waitpid(c, 0, 0);
+        }
     }
     nanosleep(&d, 0);
     printf("created %d, failed %d\n", created, failed);
