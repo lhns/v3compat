@@ -83,8 +83,8 @@ With a translator every executed instruction passes through it, so tests matter 
    unverified until a recording on Intel AVX2 hardware. `test/sem/known-dr.txt` lists forms where plain DynamoRIO differs
    from native (OF around `movbe` and `vbroadcasti128` loads).
 4. **Paths.** In `v3compat` the suite runs through the client on Ivy Bridge with inline expansions on and off.
-5. **Process.** Partly built: faults and flags, `test/regstress.c`, exec identity, setuid races. Signal injection into an
-   expansion is not.
+5. **Process.** Partly built: faults and flags, `test/regstress.c` (with asynchronous signals: `sig`, and `xlsig`, below),
+   exec identity, setuid races.
 6. **Applications.** duckdb output hashes match native on Ivy Bridge; CI also runs zstd.
 
 Strong evidence, not proof. Keep storage and database primaries off it.
@@ -227,6 +227,16 @@ under the client: 15 of 15 waited over 20 s before, 0 of 200 after **[measured]*
 (below). DynamoRIO's suite, base and fix on the same runner: the same failures apart from the known flake
 `client.attach_test`.
 
+**Signals sent by `kill`, fixed in the fork** (branch `fix-kill-signal-hold`). DynamoRIO holds an asynchronous signal to
+the end of the fragment it interrupted, but not one it may not always delay (SIGXCPU, SIGSEGV, SIGABRT and others): sent by
+another thread, that one was delivered at once, its state translated from wherever the fragment was, inside an expansion
+too. That state was often wrong: `regstress xlsig` (SIGXCPU from another thread) failed 30 of 30 runs under the client,
+with helpers only, and on DynamoRIO alone (crashes, wrong flags, a GPR wrong at an emulated instruction); natively 0
+**[measured]**. A signal sent with `kill` or `tgkill` now waits for the fragment's end like SIGUSR1: 0 of 180 runs in each
+of those three and with code churn (at most 1.7%, 95%), on EPYC 7763, 9V74 and 9V45 and Xeon 8573C, with 4,000-8,000
+signals a run at an emulated instruction and every register right **[measured]**. SIGUSR1 was already clean. A signal
+from another thread is no longer delivered inside an expansion; faults there are translated (`test/fault_state.c`).
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -276,7 +286,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   release 0-5 of 20); the torn-exit fix's layout makes release fail every time. v3compat does not use static attach.
 - **DynamoRIO's debug suite is unusable on 9V45:** debug builds print `<Unknown processor cache size>`, failing 460 of 520
   tests on base and fix alike.
-- **Signal injection** into an expansion is untested; asynchronous signals arrive at fragment boundaries.
+- **A kernel-raised asynchronous signal DynamoRIO may not always delay** (SIGXCPU at `RLIMIT_CPU`, say) is still delivered
+  at once from inside a fragment; only ones sent with `kill` or `tgkill` are held. Untested.
 - **Intel NaN priority** is unverified until a recording on Intel AVX2 hardware.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
