@@ -28,7 +28,7 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
 **Untested or unverified:**
 - Ivy Bridge since the last fix: the reset and stress results above come from AVX2 runners, not Ivy Bridge. The earlier
   Ivy Bridge runs predate it.
-- Intel NaN priority (references are from AMD); anything on a CPU other than Ivy Bridge
+- Anything on a CPU other than Ivy Bridge
   without AVX2.
 - The OCI wrapper in [v3compat-runtime](https://github.com/lhns/v3compat-runtime) still wraps Intel SDE, not `v3compat-run`; the integration is not done. No production use.
 
