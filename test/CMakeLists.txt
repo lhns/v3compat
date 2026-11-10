@@ -208,6 +208,12 @@ target_compile_options(regstress PRIVATE -O1 -w -ftls-model=local-exec)
 target_link_options(regstress PRIVATE -static -pthread)
 v3test(regstress stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 sig jit)
 v3test(regstress-control exit 77 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 badsig)
+# SIGXCPU from another thread, a signal DynamoRIO may not always delay: it must not be delivered mid-fragment.
+v3test(regstress-xlsig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 xlsig jit)
+# Those signals sent from outside to a process with no handler: it still dies of each.
+add_executable(killed killed.c)
+v3test(killed stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:killed>)
+v3test(killed-native stdout-has PASS exit 0 -- $<TARGET_FILE:killed>)
 # Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
 add_executable(jitgrowth jitgrowth.c)
 target_link_options(jitgrowth PRIVATE -pthread)

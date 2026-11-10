@@ -1,6 +1,9 @@
-/* regstress THREADS SECONDS [jit] [sig] [idle] [badsig]: threads run hot shared code with every register at a known value and
- * check them all constantly, while other threads make DR flush, deliver signals or sit blocked. A wrong register
- * prints which and exits 77; badsig makes the handler flip a flag, which must be caught. */
+/* regstress THREADS SECONDS [jit] [sig] [xlsig] [idle] [badsig]: threads run hot shared code with every register at a
+ * known value and check them all constantly, while other threads make DR flush, deliver signals or sit blocked. A wrong
+ * register prints which and exits 77; badsig makes the handler flip a flag, which must be caught. sig sends SIGUSR1;
+ * xlsig sends SIGXCPU, which DynamoRIO delivered at once from wherever the thread was, inside an expansion too, until
+ * the fork held a kill-sent signal to the fragment's end like SIGUSR1. Interrupted at an emulated instruction, every
+ * GPR must hold its value. */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <signal.h>
@@ -47,6 +50,8 @@ void report(uint64_t ret) {
 #define CMPR(i, r) "cmp %fs:exp_@tpoff+8*" #i ", %" #r "\n jne fail" #i "\n"
 /* AVX1 only, so the check itself runs natively under the client. */
 #define CMPY(i) "vmovdqu %fs:yexp@tpoff+32*" #i ", %ymm15\n vxorps %ymm" #i ", %ymm15, %ymm15\n vptest %ymm15, %ymm15\n jnz faily" #i "\n"
+/* An emulated instruction; its address goes to section exppc, where the handler checks every GPR. */
+#define EXP(insn) "13: " insn "\n .pushsection exppc,\"a\"\n .quad 13b\n .popsection\n"
 /* An expansion's result in ymm14 against the value worked out in plain C. */
 #define CHK14(k) "vmovdqu %fs:rexp@tpoff+32*" #k ", %ymm15\n vxorps %ymm14, %ymm15, %ymm15\n vptest %ymm15, %ymm15\n jnz failx\n"
 #define FAILR(i) "fail" #i ":\n movq $" #i ", %fs:failk@tpoff\n jmp fail\n"
@@ -103,11 +108,11 @@ FAILY(0) FAILY(1) FAILY(2) FAILY(3) FAILY(4) FAILY(5) FAILY(6) FAILY(7) FAILY(8)
 " mov %rax,%rdx\n lock cmpxchg %rdx,%fs:iters@tpoff\n mov %fs:exp_@tpoff+0,%rax\n mov %fs:exp_@tpoff+24,%rdx\n"
 " push %rax\n pop %rax\n stc\n call chk\n7:\n"
 /* inline forms, then a helper form, each result checked */
-" vpaddq %ymm0, %ymm1, %ymm14\n" CHK14(0)
-" vpmuludq %ymm2, %ymm3, %ymm14\n" CHK14(1)
-" vpsllq $3, %ymm4, %ymm14\n" CHK14(2)
-" vpsrlq $1, %ymm5, %ymm14\n" CHK14(3)
-" vpaddd %ymm6, %ymm7, %ymm14\n" CHK14(4)
+EXP("vpaddq %ymm0, %ymm1, %ymm14") CHK14(0)
+EXP("vpmuludq %ymm2, %ymm3, %ymm14") CHK14(1)
+EXP("vpsllq $3, %ymm4, %ymm14") CHK14(2)
+EXP("vpsrlq $1, %ymm5, %ymm14") CHK14(3)
+EXP("vpaddd %ymm6, %ymm7, %ymm14") CHK14(4)
 /* all arithmetic flags live across ret, indirect jump and indirect call */
 " call setf1\n CHECKF 0x8d5\n call setf0\n CHECKF 0x000\n"
 " pushq $0x8d7\n popfq\n jmp *6f(%rip)\n6: .quad 9f\n9:\n CHECKF 0x8d5\n"
@@ -155,7 +160,18 @@ static void *jitter(void *arg) {
 }
 #include <ucontext.h>
 static int badsig;
-static uint64_t nsig, nsigblk;
+static uint64_t nsig, nsigblk, nsigexp;
+extern const uint64_t __start_exppc[], __stop_exppc[];
+/* The emulated instructions' addresses, in order. */
+static int at_exp(uint64_t pc) {
+    long lo = 0, hi = __stop_exppc - __start_exppc - 1;
+    while (lo <= hi) {
+        long m = (lo + hi) / 2;
+        if (__start_exppc[m] == pc) return 1;
+        if (__start_exppc[m] < pc) lo = m + 1; else hi = m - 1;
+    }
+    return 0;
+}
 static void onsig(int s, siginfo_t *si, void *u) {
     (void)s; (void)si;
     ucontext_t *uc = (ucontext_t *)u;
@@ -174,6 +190,17 @@ static void onsig(int s, siginfo_t *si, void *u) {
                 n = snprintf(b, sizeof b, "@@FAIL handler gpr %s exp=%016lx got=%016lx pc_off=%ld\n", names[ei[i]], (unsigned long)exp_[ei[i]], (unsigned long)g[gi[i]], (long)(pc - (uint64_t)blocks_start));
                 write(2, b, n); _exit(80);
             }
+        if (at_exp(pc)) {
+            /* Interrupted in or right before an expansion: every GPR holds its loaded value there. */
+            static const int ga[] = {REG_RAX, REG_RBX, REG_RCX, REG_RDX, REG_RSI, REG_RDI, REG_RBP, REG_R8, REG_R9,
+                                     REG_R10, REG_R11, REG_R12, REG_R13, REG_R14, REG_R15, REG_RSP};
+            __atomic_add_fetch(&nsigexp, 1, __ATOMIC_RELAXED);
+            for (int i = 0; i < 16; i++)
+                if ((uint64_t)g[ga[i]] != exp_[i] + (i == 15 ? 8 : 0)) {   /* exp_ holds rsp as chk sees it */
+                    n = snprintf(b, sizeof b, "@@FAIL handler at an expansion: %s exp=%016lx got=%016lx pc_off=%ld\n", names[i], (unsigned long)exp_[i], (unsigned long)g[ga[i]], (long)(pc - (uint64_t)blocks_start));
+                    write(2, b, n); _exit(82);
+                }
+        }
         char *fp = (char *)uc->uc_mcontext.fpregs;
         for (int y = 0; y < 14; y++) {
             uint64_t lo[2], hi[2];
@@ -189,20 +216,20 @@ static void onsig(int s, siginfo_t *si, void *u) {
 }
 static void *idler(void *arg) { (void)arg; for (;;) pause(); return NULL; }
 int main(int c, char **v) {
-    int n = atoi(v[1]), secs = atoi(v[2]), jit = 0, sg = 0, idle = 0;
-    for (int i = 3; i < c; i++) { if (!strcmp(v[i], "jit")) jit = 1; if (!strcmp(v[i], "sig")) sg = 1; if (!strcmp(v[i], "idle")) idle = 1; if (!strcmp(v[i], "badsig")) { badsig = 1; sg = 1; } }
+    int n = atoi(v[1]), secs = atoi(v[2]), jit = 0, sg = 0, idle = 0, signo = SIGUSR1;
+    for (int i = 3; i < c; i++) { if (!strcmp(v[i], "jit")) jit = 1; if (!strcmp(v[i], "sig")) sg = 1; if (!strcmp(v[i], "xlsig")) { sg = 1; signo = SIGXCPU; } if (!strcmp(v[i], "idle")) idle = 1; if (!strcmp(v[i], "badsig")) { badsig = 1; sg = 1; } }
     pthread_t t[64], j, d;
-    struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = onsig; sa.sa_flags = SA_SIGINFO | SA_RESTART; sigaction(SIGUSR1, &sa, 0);
+    struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = onsig; sa.sa_flags = SA_SIGINFO | SA_RESTART; sigaction(SIGUSR1, &sa, 0); sigaction(SIGXCPU, &sa, 0);
     for (long i = 0; i < n; i++) pthread_create(&t[i], 0, worker, (void *)i);
     if (jit) pthread_create(&j, 0, jitter, 0);
     if (idle) pthread_create(&d, 0, idler, 0);
     for (int ms = 0; ms < secs * 100; ms++) {
         if (!sg) { usleep(10000); continue; }
-        for (int k = 0; k < 20; k++) { usleep(400); for (int i = 0; i < n; i++) pthread_kill(t[i], SIGUSR1); }
+        for (int k = 0; k < 20; k++) { usleep(400); for (int i = 0; i < n; i++) pthread_kill(t[i], signo); }
     }
     stopf = 1;
     for (int i = 0; i < n; i++) pthread_join(t[i], 0);
     if (jit) pthread_join(j, 0);
-    printf("ok sig=%lu inblocks=%lu iters=%lu jits=%lu\n", (unsigned long)nsig, (unsigned long)nsigblk, (unsigned long)total, (unsigned long)jits);
+    printf("ok sig=%lu inblocks=%lu atexp=%lu iters=%lu jits=%lu\n", (unsigned long)nsig, (unsigned long)nsigblk, (unsigned long)nsigexp, (unsigned long)total, (unsigned long)jits);
     return 0;
 }
