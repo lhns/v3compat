@@ -1,12 +1,13 @@
 /* thread_exit [cap] [ms] [nproc]: threads keep creating threads, at most cap alive, and the main thread ends the
  * process after ms, while threads are starting and ending. nproc makes every creation fail (RLIMIT_NPROC 0), as at a
- * thread limit. The process must end with status 3, promptly. Same natively and translated. */
+ * thread limit, and tries vfork there too. The process must end with status 3, promptly. Same natively and translated. */
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
