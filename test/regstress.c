@@ -1,8 +1,9 @@
 /* regstress THREADS SECONDS [jit] [sig] [xlsig] [idle] [badsig]: threads run hot shared code with every register at a
  * known value and check them all constantly, while other threads make DR flush, deliver signals or sit blocked. A wrong
- * register prints which and exits 77; badsig makes the handler flip a flag, which must be caught. sig sends SIGUSR1,
- * which DR holds to the end of the fragment; xlsig sends SIGXCPU, which it delivers at once from wherever the thread
- * is, so a signal lands inside an expansion and the handler sees the state DR rebuilt there. */
+ * register prints which and exits 77; badsig makes the handler flip a flag, which must be caught. sig sends SIGUSR1;
+ * xlsig sends SIGXCPU, which DynamoRIO delivered at once from wherever the thread was, inside an expansion too, until
+ * the fork held a kill-sent signal to the fragment's end like SIGUSR1. Interrupted at an emulated instruction, every
+ * GPR must hold its value. */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <signal.h>
