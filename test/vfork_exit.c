@@ -2,7 +2,8 @@
  * not exited. Natively the process ends at once and the child runs on. The child here waits on a pipe that is closed
  * only once the process is gone, so a process that waits for its child shows as a timeout; then the child must still
  * finish. In the race mode the child exits or execs on its own as the process ends, which can let the waiting thread
- * go first. nodump makes the process non-dumpable; noready ends it without waiting for the child to start (lab only:
+ * go first. In the last mode every vfork fails, which must not leave the translator waiting for a child at exit.
+ * nodump makes the process non-dumpable; noready ends it without waiting for the child to start (lab only:
  * the child may not run at all). Same output natively and translated: "PASS" as the last line. */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -14,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -24,9 +26,10 @@
 
 struct args { uint64_t flags, pidfd, child_tid, parent_tid, exit_signal, stack, stack_size, tls; };
 
-enum { EXIT, SIGNAL, MAIN_WAITS, CLONE3, RACE, NMODES };
+enum { EXIT, SIGNAL, MAIN_WAITS, CLONE3, RACE, FAILED, NMODES };
 static const char *names[] = {"another thread exits", "SIGTERM", "main thread waits, another exits",
-                              "clone3 CLONE_VFORK", "the child exits or execs as the process ends"};
+                              "clone3 CLONE_VFORK", "the child exits or execs as the process ends",
+                              "vfork fails at a process limit, then the process exits"};
 static int mode, hold[2], ready[2], alive[2], nodump, noready;
 static volatile long spin;
 static char *const targv[] = {"true", 0};
@@ -84,9 +87,26 @@ static void *ender(void *a) {
     _exit(7);
 }
 
+/* Every vfork fails with EAGAIN (RLIMIT_NPROC 0, which root ignores: then it exits 9), then the process exits. */
+static void failed_vforks(void) {
+    struct rlimit none;
+    int failed = 0;
+    if (getrlimit(RLIMIT_NPROC, &none)) _exit(2);
+    none.rlim_cur = 0;
+    if (setrlimit(RLIMIT_NPROC, &none)) _exit(2);
+    for (int i = 0; i < 10; i++) {
+        pid_t c = vfork();
+        if (c == 0) _exit(0);
+        if (c < 0) failed++;
+        else waitpid(c, 0, 0);
+    }
+    _exit(failed == 10 ? 7 : 9);
+}
+
 static void scenario(void) {
     pthread_t t;
     close(hold[1]);
+    if (mode == FAILED) failed_vforks();
     if (nodump) prctl(PR_SET_DUMPABLE, 0);
     if (pipe(ready)) _exit(2);
     if (pthread_create(&t, 0, mode == MAIN_WAITS ? ender : waiter, 0)) _exit(2);
@@ -146,7 +166,7 @@ int main(int argc, char **argv) {
             int st = wait_for(p, 10);
             double took = now() - t0;
             close(hold[1]); /* the child finishes */
-            int finished = mode == RACE || child_finished();
+            int finished = mode == RACE || mode == FAILED || child_finished();
             if (noready && !finished) { unfinished++; finished = 1; }
             close(alive[0]);
             if (st == -1) {
