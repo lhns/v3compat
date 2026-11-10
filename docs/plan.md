@@ -210,6 +210,23 @@ of 300 and a bare `MAP_32BIT` mmap 17 of 300 (PIE 0 of 300, native 0 of 300), th
 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and 0 of 306 on DynamoRIO alone, the short loop
 0 of 4,500.
 
+**A process ending while a thread waits in `vfork`, fixed in the fork** (branch `fix-vfork-exit`). The exit's synch sent
+each other thread a suspend signal and waited for it, but the kernel holds a thread in `vfork` until its child execs or
+exits, so the process waited for its child; the child could also block on a lock the exiting thread held. A thread blocked
+in a vfork-like syscall is now left to the kernel: its record is dropped, its state kept, and if the child lets it go
+first it exits. Whether it is in the kernel comes from `/proc/<pid>/task/<tid>/syscall`; a non-dumpable process cannot
+read that, and then the mark DynamoRIO sets around the syscall decides. A group that dies of a signal while a vfork child
+shares the address space now ends only itself, so the child runs on, as natively. `test/vfork_exit.c`, GitHub runners
+**[measured]**: before, every run hung, under the client and on DynamoRIO alone, in all four ways of ending (another thread
+exits, SIGTERM, the main thread waiting, `clone3`); after, 0 of 1,200 bad under the client and 0 of 1,200 on DynamoRIO
+alone (at most 0.25%, 95%), including 200 where the child exits or execs as the process ends, the child finishing every
+time; non-dumpable 0 of 300 (before the fallback 3 of 3 runs hung). A vfork that fails, or a child killed before its
+thread init, left the count of threads not yet initialized raised, and under the client the exit then waited for it
+(about 50 s from the option defaults); parent and child now share it and whoever gets to it drops it. Failing vforks
+under the client: 15 of 15 waited over 20 s before, 0 of 200 after **[measured]**; the killed child is not measured
+(below). DynamoRIO's suite, base and fix on the same runner: the same failures apart from the known flake
+`client.attach_test`.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -243,10 +260,14 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   AMD (1.67x with no client) and needs more forms inline.
 - **Thread-creation stress test.** A test creating threads without limit near exit died after 50 minutes on stock and fork,
   passed natively; cause unknown. To return with a thread cap.
-- **A thread of a vfork parent ending the process** while another waits in `vfork` for a child that has not exited hangs
-  (3 of 3; native exits): the waiting thread cannot answer the exit's synch. Not tested: a child killed holding a DynamoRIO
-  lock, or before its thread init. A child dying of a signal otherwise no longer hangs the parent, with `vfork` or `clone3`
-  (`test/vfork_sig.c`): 9 of 9 before, 0 of 300 after, at most 1% (95%) **[measured]**.
+- **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
+  300 children a run at random points from their creation on **[measured]**: under the client 10 of 10 runs bad on base
+  (8 hangs, 2 crashes) and 8 of 10 on the fix (7, 1); on DynamoRIO alone 10 of 10 hang on both; native 0 of 10. The hung
+  parent waits in `cleanup_after_vfork_child_death()` for `thread_initexit_lock`, which the dead child held through its
+  thread init **[measured]**; DynamoRIO's locks do not survive their owner, so fixing it means robust locks **[source]**.
+  The crashes are in `common_heap_free()` while the parent cleans up the dead child, likely its half-built thread state
+  **[estimate]**. A child dying of a signal otherwise no longer hangs the parent (`test/vfork_sig.c`): 9 of 9 before,
+  0 of 300 after, at most 1% (95%) **[measured]**.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
   (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
   `test/regstress.c`.
