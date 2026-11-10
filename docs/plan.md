@@ -80,9 +80,9 @@ With a translator every executed instruction passes through it, so tests matter 
 2. **Decoder.** Differential against a real disassembler.
 3. **Semantics.** Differential against real AVX2 silicon, references recorded on AVX2 and replayed on AVX-only CPUs. The
    forms match the references apart from `mem_read` zero-fill. The reference was recorded on AMD EPYC. On Intel Xeon
-   8370C (GitHub runners, two machines) all 494 forms, every case, match it natively, under the client and with helpers
-   only, so NaN priority and every other recorded value agree with Intel **[measured]**. lhns/avxemu's recording on an
-   older Intel part differs only in a faulting `movbe` store, which the 8370C does as AMD does.
+   8370C (GitHub runners, two machines) all 574 forms of the suite, every case, match it natively, under the client and
+   with helpers only, so NaN priority and every other recorded value agree with Intel **[measured]**. lhns/avxemu's
+   recording on an older Intel part differs only in a faulting `movbe` store, which the 8370C does as AMD does.
    `test/sem/known-dr.txt` lists forms where plain DynamoRIO differs from native (OF around `movbe` and
    `vbroadcasti128` loads).
 4. **Paths.** In `v3compat` the suite runs through the client on Ivy Bridge with inline expansions on and off.
