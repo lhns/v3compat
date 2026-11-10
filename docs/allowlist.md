@@ -9,19 +9,19 @@ keys go through the expansions, and anything else exits with status 86 if execut
 - AVX2 evidence: `AuthenticAMD family=25 model=17`
 - Each machine's results held with the rows in sequence, reversed, shuffled twice and each in its own process.
 - Universe: 51356 test rows, 3429 XED iforms reached of 9001 in XED's tables.
-- Listed: 9795 native keys, 836 emulated keys.
+- Listed: 9807 native keys, 836 emulated keys.
 
 ## Rows by outcome
 
 | Outcome | Rows |
 |---|---|
 | differs-on-avx2 | 289 |
-| dr-invalid | 1017 |
+| dr-invalid | 977 |
 | emulated | 1244 |
 | excluded:far-control-flow | 168 |
 | excluded:kernel-entry | 240 |
 | excluded:nondeterministic | 218 |
-| excluded:privileged | 672 |
+| excluded:privileged | 692 |
 | excluded:segment-state | 184 |
 | excluded:state-layout | 4 |
 | faults-on-both | 916 |
@@ -31,7 +31,7 @@ keys go through the expansions, and anything else exits with status 86 if execut
 | native-faults | 72 |
 | native-tested | 43673 |
 | native-untested | 152 |
-| not-on-ivy-bridge | 1219 |
+| not-on-ivy-bridge | 1239 |
 
 ## Iforms never reached by the sweep, by ISA set: all refused
 
@@ -156,7 +156,7 @@ Refused unless policy says it is a hint: `prefetchwt1`, `vmmcall`
 - **far-control-flow**: `call_far`, `iret`, `iretd`, `iretq`, `jmp_far`, `ret_far`
 - **kernel-entry**: `int`, `int1`, `rsm`, `sysenter`
 - **nondeterministic**: `cpuid`, `rdfsbase`, `rdgsbase`, `rdpid`, `rdpmc`, `rdseed`, `sgdt`, `sidt`, `sldt`, `str`
-- **privileged**: `clac`, `clrssbsy`, `clts`, `encls`, `enqcmds`, `erets`, `eretu`, `invd`, `invept`, `invlpg`, `invlpga`, `invpcid`, `invvpid`, `lgdt`, `lidt`, `lldt`, `lmsw`, `loadiwkey`, `ltr`, `monitor`, `mov_cr`, `mov_dr`, `mwait`, `rdmsr`, `seamcall`, `setssbsy`, `stac`, `swapgs`, `sysexit`, `sysret`, `sysret64`, `vmcall`, `vmclear`, `vmlaunch`, `vmptrld`, `vmptrst`, `vmread`, `vmresume`, `vmwrite`, `vmxoff`, `vmxon`, `wbinvd`, `wbnoinvd`, `wrmsr`, `xrstors`, `xrstors64`, `xsaves`, `xsaves64`, `xsetbv`
+- **privileged**: `clac`, `clrssbsy`, `clts`, `encls`, `enqcmds`, `erets`, `eretu`, `invd`, `invept`, `invlpg`, `invlpga`, `invpcid`, `invvpid`, `lgdt`, `lidt`, `lkgs`, `lldt`, `lmsw`, `loadiwkey`, `ltr`, `monitor`, `mov_cr`, `mov_dr`, `mwait`, `rdmsr`, `seamcall`, `setssbsy`, `stac`, `swapgs`, `sysexit`, `sysret`, `sysret64`, `vmcall`, `vmclear`, `vmlaunch`, `vmptrld`, `vmptrst`, `vmread`, `vmresume`, `vmwrite`, `vmxoff`, `vmxon`, `wbinvd`, `wbnoinvd`, `wrmsr`, `wrussd`, `wrussq`, `xrstors`, `xrstors64`, `xsaves`, `xsaves64`, `xsetbv`
 - **segment-state**: `lfs`, `lgs`, `lss`, `mov`, `pop`, `wrfsbase`, `wrgsbase`
 - **state-layout**: `xsavec`, `xsavec64`
 
