@@ -1,6 +1,6 @@
-/* thread_exit [cap] [ms] [nproc]: threads keep creating threads, at most cap alive, and the main thread ends the
+/* thread_exit [cap] [ms] [nproc|vfork]: threads keep creating threads, at most cap alive, and the main thread ends the
  * process after ms, while threads are starting and ending. nproc makes every creation fail (RLIMIT_NPROC 0), as at a
- * thread limit, and tries vfork there too. The process must end with status 3, promptly. Same natively and translated. */
+ * thread limit, and tries vfork there too; vfork does only that. The process must end with status 3, promptly. Same natively and translated. */
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
@@ -48,9 +48,10 @@ int main(int argc, char **argv) {
     cap = argc > 1 ? atoi(argv[1]) : 64;
     int ms = argc > 2 ? atoi(argv[2]) : 300;
     struct timespec d = {ms / 1000, (ms % 1000) * 1000000L};
-    for (int i = 0; i < 4; i++)
+    int vfork_only = argc > 3 && !strcmp(argv[3], "vfork");
+    for (int i = 0; i < 4 && !vfork_only; i++)
         if (pthread_create(&t, 0, spawner, 0)) return 2;
-    if (argc > 3 && !strcmp(argv[3], "nproc")) {
+    if (argc > 3 && (!strcmp(argv[3], "nproc") || vfork_only)) {
         struct rlimit none = {0, RLIM_INFINITY};
         if (getrlimit(RLIMIT_NPROC, &none)) return 2;
         none.rlim_cur = 0;
