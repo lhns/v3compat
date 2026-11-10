@@ -1,9 +1,10 @@
 /* vfork_exit [runs]: a process ends while one of its threads waits in vfork for a child that has not exited.
  * Natively the process ends at once and the child runs on. The child here waits on a pipe that is closed only once
- * the process is gone, so a process that waits for its child shows as a timeout. Same output natively and
- * translated: "PASS" as the last line. */
+ * the process is gone, so a process that waits for its child shows as a timeout; then the child must still finish.
+ * Same output natively and translated: "PASS" as the last line. */
 #define _GNU_SOURCE
 #include <errno.h>
+#include <poll.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -23,7 +24,7 @@ struct args { uint64_t flags, pidfd, child_tid, parent_tid, exit_signal, stack, 
 enum { EXIT, SIGNAL, MAIN_WAITS, CLONE3, NMODES };
 static const char *names[] = {"another thread exits", "SIGTERM", "main thread waits, another exits",
                               "clone3 CLONE_VFORK"};
-static int mode, hold[2], ready[2];
+static int mode, hold[2], ready[2], alive[2];
 
 static long sc3(long n, long a, long b, long c) {
     long r;
@@ -31,11 +32,13 @@ static long sc3(long n, long a, long b, long c) {
     return r;
 }
 
-/* The child: raw syscalls only, as it shares the parent's memory. Says it runs, then waits for the pipe to close. */
+/* The child: raw syscalls only, as it shares the parent's memory. Says it runs, waits for the pipe to close, then
+ * says it finished. Once the process is gone, only the child holds alive[1]. */
 static __attribute__((noreturn)) void child(void) {
     char b;
     sc3(SYS_write, ready[1], (long)"x", 1);
     sc3(SYS_read, hold[0], (long)&b, 1);
+    sc3(SYS_write, alive[1], (long)"d", 1);
     sc3(SYS_exit_group, 0, 0, 0);
     __builtin_unreachable();
 }
@@ -99,19 +102,36 @@ static int wait_for(pid_t p, double secs) {
     return -1;
 }
 
+/* The child's "d", then end of file: it ran to its exit. */
+static int child_finished(void) {
+    struct pollfd pf = {alive[0], POLLIN, 0};
+    double end = now() + 10;
+    char b = 0;
+    int n = 0;
+    while (now() < end && poll(&pf, 1, 100) >= 0) {
+        if (!(pf.revents & (POLLIN | POLLHUP))) continue;
+        if (read(alive[0], &b, 1) <= 0) return n == 1 && b == 'd';
+        n++;
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     int runs = argc > 1 ? atoi(argv[1]) : 1, bad = 0;
     for (int i = 0; i < runs; i++)
         for (mode = 0; mode < NMODES; mode++) {
-            if (pipe(hold)) return 2;
+            if (pipe(hold) || pipe(alive)) return 2;
             fflush(stdout);
             pid_t p = fork();
             if (p == 0) scenario();
             close(hold[0]);
+            close(alive[1]);
             double t0 = now();
             int st = wait_for(p, 10);
             double took = now() - t0;
-            close(hold[1]); /* the child exits */
+            close(hold[1]); /* the child finishes */
+            int finished = child_finished();
+            close(alive[0]);
             if (st == -1) {
                 st = wait_for(p, 10);
                 if (st == -1) { kill(p, SIGKILL); waitpid(p, &st, 0); }
@@ -120,8 +140,9 @@ int main(int argc, char **argv) {
                 continue;
             }
             int ok = mode == SIGNAL ? WIFSIGNALED(st) && WTERMSIG(st) == SIGTERM : WIFEXITED(st) && WEXITSTATUS(st) == 7;
-            printf("%s %s: status %#x in %.2f s\n", ok ? "ok" : "FAIL", names[mode], st, took);
-            if (!ok) bad = 1;
+            printf("%s %s: status %#x in %.2f s, the child %s\n", ok && finished ? "ok" : "FAIL", names[mode], st, took,
+                   finished ? "finished" : "did not finish");
+            if (!ok || !finished) bad = 1;
         }
     printf("%s\n", bad ? "FAILED" : "PASS");
     return bad;
