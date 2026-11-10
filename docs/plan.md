@@ -235,8 +235,8 @@ count of threads not yet initialized and allocates the new thread's stack, both 
 failed left both, so every later synch of all threads, the exit's included, waited for the count until its loop limit,
 and each failure leaked the stack **[source]**. Every creation failing, 10 runs each **[measured]**: before, every exit
 took 51 s, under the client and on DynamoRIO alone, with RSS at 78-82 MB after about 19,000 failures; after, 0.4-0.6 s
-and 6 MB after 64,000. With 1,000 threads churning under the client the exit is prompt: 0 of 300 runs bad, at most 5.7 s
-(at most 1%, 95%), half of them on EPYC 7763. The original uncapped run's death after 50 minutes was not reproduced.
+and 6 MB after 64,000. With 1,000 threads churning under the client the exit is prompt: 0 of 420 runs bad, at most 5.9 s
+(at most 0.7%, 95%), 195 of them on EPYC 7763. The original uncapped run's death after 50 minutes was not reproduced.
 No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and 0 of 306 on
 DynamoRIO alone, the short loop 0 of 4,500.
 
@@ -272,9 +272,9 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 - **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
   AMD (1.67x with no client) and needs more forms inline.
 - **DynamoRIO alone, threads churning at exit** (no client, 1,000 threads) stalls the exit for a minute or more on EPYC
-  7763 and 9V45, base and fix alike: 10 of 30 runs past 120 s on two 7763s **[measured]**. With no exit event DynamoRIO
+  7763 and 9V45, base and fix alike: 21 of 45 runs past 120 s on three 7763s **[measured]**. With no exit event DynamoRIO
   marks itself exited before it synchs, so new threads spin in thread init on `thread_initexit_lock` against the exit's
-  synch and about 1,000 exiting threads **[measured]**. With `-synch_at_exit` 0 of 30 past 6.3 s on the same runners.
+  synch and about 1,000 exiting threads **[measured]**. With `-synch_at_exit` 0 of 45 past 6.7 s on the same runners.
   v3compat always has a client, which synchs first.
 - **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
   300 children a run **[measured]**. At random points from their creation on, 10 runs each: under the client 10 of 10 bad
