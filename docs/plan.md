@@ -225,7 +225,8 @@ thread init, left the count of threads not yet initialized raised, and under the
 (about 50 s from the option defaults); parent and child now share it and whoever gets to it drops it. Failing vforks
 under the client: 15 of 15 waited over 20 s before, 0 of 200 after **[measured]**; the killed child is not measured
 (below). DynamoRIO's suite, base and fix on the same runner: the same failures apart from the known flake
-`client.attach_test`.
+`client.attach_test`. No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
+client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500.
 
 **Thread creation that fails, fixed in the fork** (branch `fix-thread-exit`). The thread-creation stress test is back,
 capped, as `test/thread_exit.c`: threads keep starting threads (at most 64, or 1,000) while the main thread exits; in one
@@ -276,11 +277,12 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   synch and about 1,000 exiting threads **[measured]**. With `-synch_at_exit` 0 of 30 past 6.3 s on the same runners.
   v3compat always has a client, which synchs first.
 - **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
-  300 children a run at random points from their creation on **[measured]**: under the client 10 of 10 runs bad on base
-  (8 hangs, 2 crashes) and 8 of 10 on the fix (7, 1); on DynamoRIO alone 10 of 10 hang on both; native 0 of 10. The hung
-  parent waits in `cleanup_after_vfork_child_death()` for `thread_initexit_lock`, which the dead child held through its
-  thread init **[measured]**; DynamoRIO's locks do not survive their owner, so fixing it means robust locks **[source]**.
-  The crashes are in `common_heap_free()` while the parent cleans up the dead child, likely its half-built thread state
+  300 children a run **[measured]**. At random points from their creation on, 10 runs each: under the client 10 of 10 bad
+  on base (8 hangs, 2 crashes) and 10 of 10 on the first fix commit (9, 1); on DynamoRIO alone 10 of 10 hang on both. At
+  once, on the final commit: 8 of 10 under the client (7, 1), 10 of 10 on DynamoRIO alone. Native 0 of 10 in each. The hung
+  parent waits in `cleanup_after_vfork_child_death()` for `thread_initexit_lock` **[measured]**, which the dead child held
+  through its thread init; DynamoRIO's locks do not survive their owner, so fixing it means robust locks **[source]**. The
+  crashes are in `common_heap_free()` while the parent cleans up the dead child, likely its half-built thread state
   **[estimate]**. A child dying of a signal otherwise no longer hangs the parent (`test/vfork_sig.c`): 9 of 9 before,
   0 of 300 after, at most 1% (95%) **[measured]**.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
