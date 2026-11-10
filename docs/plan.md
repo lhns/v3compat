@@ -245,10 +245,10 @@ DynamoRIO alone, the short loop 0 of 4,500.
 **Signals sent by `kill`, fixed in the fork** (branch `fix-kill-signal-hold`). DynamoRIO holds an asynchronous signal to
 the end of the fragment it interrupted, but not one it may not always delay (SIGXCPU, SIGSEGV, SIGABRT and others): sent by
 another thread, that one was delivered at once, its state translated from wherever the fragment was, inside an expansion
-too. That state was often wrong: `regstress xlsig` (SIGXCPU from another thread) failed 30 of 30 runs under the client,
-with helpers only, and on DynamoRIO alone (crashes, wrong flags, a GPR wrong at an emulated instruction); natively 0
-**[measured]**. A signal sent with `kill` or `tgkill` now waits for the fragment's end like SIGUSR1: 0 of 180 runs in each
-of those three and with code churn (at most 1.7%, 95%), on EPYC 7763, 9V74 and 9V45 and Xeon 8573C, with 4,000-8,000
+too. That state was often wrong: `regstress xlsig` (SIGXCPU from another thread) failed every run (at least 100 each) under
+the client, with helpers only, and on DynamoRIO alone (crashes, wrong flags, a GPR wrong at an emulated instruction); natively 0
+**[measured]**. A signal sent with `kill` or `tgkill` now waits for the fragment's end like SIGUSR1: 0 of 190 runs in each
+of those three and with code churn (at most 1.6%, 95%), on EPYC 7763, 9V74 and 9V45 and Xeon 8573C, with 4,000-8,000
 signals a run at an emulated instruction and every register right **[measured]**. SIGUSR1 was already clean. A signal
 from another thread is no longer delivered inside an expansion; faults there are translated (`test/fault_state.c`). The stress
 numbers above were taken with this change in.
