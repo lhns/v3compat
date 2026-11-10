@@ -196,8 +196,9 @@ crashed under the client with the fix (2 of 3,000 before; 0 of 6,000 on DynamoRI
 exit `jmp` while another thread re-links it jumped to neither the old nor the new target: instruction fetch read the rel32
 half old, half new when it straddled a 16-byte boundary. DynamoRIO only kept patched offsets within a cache line. Each bb's
 start now shifts by 0-3 bytes so that every exit offset stays within 16 bytes (a quadword where possible); trace exits and
-stubs are padded to 4 bytes. 9V45 lab, `regstress 6000 jit` **[measured]**: base TODO_CONTROL, fix TODO_FIX. DynamoRIO's
-own suite, base and fix built on the same runner: the same failures, except `api.static_prepop` (below).
+stubs are padded to 4 bytes. 9V45 lab, `regstress 8 1 jit` under the client, 6,000 runs a job **[measured]**: base 6 of
+24,000, fix 0 of 102,000 (at most 0.003%, 95%). DynamoRIO's own suite, base and fix built on the same runner: the same
+failures, except `api.static_prepop` (below).
 
 **`MAP_32BIT`, fixed in the fork** (branch `fix-map32bit`). The kernel looks for `MAP_32BIT` space only in [1G,2G), above a
 floor randomized by up to 32 MB. For a non-PIE program DynamoRIO reserves its 1 GB of code space at `-vm_base` (0x3f000000)
