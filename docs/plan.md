@@ -4,7 +4,7 @@ Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have A
 Ivy Bridge, at close to native speed.
 
 **Status:** Phase 1. Emulation, the launcher and exec follow run on DynamoRIO built from our fork. Phase 1's whole-process
-time and the thread-creation stress test are unmet; see "Open items". Decisions are in the [ADRs](adr/README.md);
+time is unmet; see "Open items". Decisions are in the [ADRs](adr/README.md);
 this file holds the current state and the numbers behind it.
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
@@ -227,6 +227,18 @@ under the client: 15 of 15 waited over 20 s before, 0 of 200 after **[measured]*
 `client.attach_test`. No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
 client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500.
 
+**Thread creation that fails, fixed in the fork** (branch `fix-thread-exit`). The thread-creation stress test is back,
+capped, as `test/thread_exit.c`: threads keep starting threads (at most 64, or 1,000) while the main thread exits; in one
+mode every creation fails, as at a thread limit (`RLIMIT_NPROC` 0). Before a thread-creating clone DynamoRIO raises its
+count of threads not yet initialized and allocates the new thread's stack, both undone by the new thread; a clone that
+failed left both, so every later synch of all threads, the exit's included, waited for the count until its loop limit,
+and each failure leaked the stack **[source]**. Every creation failing, 10 runs each **[measured]**: before, every exit
+took 51 s, under the client and on DynamoRIO alone, with RSS at 78-82 MB after about 19,000 failures; after, 0.4-0.6 s
+and 6 MB after 64,000. With 1,000 threads churning under the client the exit is prompt: 0 of 420 runs bad, at most 5.9 s
+(at most 0.7%, 95%), 195 of them on EPYC 7763. The original uncapped run's death after 50 minutes was not reproduced.
+No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and 0 of 306 on
+DynamoRIO alone, the short loop 0 of 4,500.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -249,7 +261,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 
 | Phase | Go/no-go | State |
 |---|---|---|
-| **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met, except the thread-creation stress test |
+| **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
 | **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | Not started |
 | **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
@@ -258,8 +270,11 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 
 - **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
   AMD (1.67x with no client) and needs more forms inline.
-- **Thread-creation stress test.** A test creating threads without limit near exit died after 50 minutes on stock and fork,
-  passed natively; cause unknown. To return with a thread cap.
+- **DynamoRIO alone, threads churning at exit** (no client, 1,000 threads) stalls the exit for a minute or more on EPYC
+  7763 and 9V45, base and fix alike: 21 of 45 runs past 120 s on three 7763s **[measured]**. With no exit event DynamoRIO
+  marks itself exited before it synchs, so new threads spin in thread init on `thread_initexit_lock` against the exit's
+  synch and about 1,000 exiting threads **[measured]**. With `-synch_at_exit` 0 of 45 past 6.7 s on the same runners.
+  v3compat always has a client, which synchs first.
 - **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
   300 children a run **[measured]**. At random points from their creation on, 10 runs each: under the client 10 of 10 bad
   on base (8 hangs, 2 crashes) and 10 of 10 on the first fix commit (9, 1); on DynamoRIO alone 10 of 10 hang on both. At
