@@ -1,27 +1,30 @@
-/* thread_exit [cap] [ms]: threads keep creating threads, at most cap alive, and the main thread ends the process
- * after ms, while threads are starting and ending. The process must end with status 3. Same natively and
- * translated. */
+/* thread_exit [cap] [ms] [nproc]: threads keep creating threads, at most cap alive, and the main thread ends the
+ * process after ms, while threads are starting and ending. nproc makes every creation fail (RLIMIT_NPROC 0), as at a
+ * thread limit. The process must end with status 3, promptly. Same natively and translated. */
 #include <pthread.h>
 #include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/resource.h>
 #include <time.h>
 #include <unistd.h>
 
 static int cap;
-static volatile int live, created;
+static volatile int live, created, failed;
 static void *worker(void *arg);
 
 /* Takes a slot for a new thread and starts it; arg says whether it may start one more. */
 static int start(void *arg) {
     pthread_t t;
-    if (__atomic_add_fetch(&live, 1, __ATOMIC_RELAXED) <= cap && pthread_create(&t, 0, worker, arg) == 0) {
-        pthread_detach(t);
-        __atomic_add_fetch(&created, 1, __ATOMIC_RELAXED);
-        return 1;
+    int ok = 0;
+    if (__atomic_add_fetch(&live, 1, __ATOMIC_RELAXED) <= cap) {
+        ok = pthread_create(&t, 0, worker, arg) == 0;
+        __atomic_add_fetch(ok ? &created : &failed, 1, __ATOMIC_RELAXED);
+        if (ok) pthread_detach(t);
     }
-    __atomic_sub_fetch(&live, 1, __ATOMIC_RELAXED);
-    return 0;
+    if (!ok) __atomic_sub_fetch(&live, 1, __ATOMIC_RELAXED);
+    return ok;
 }
 
 /* Each worker may start one more before it ends, so threads also start from threads that are ending. */
@@ -46,8 +49,14 @@ int main(int argc, char **argv) {
     struct timespec d = {ms / 1000, (ms % 1000) * 1000000L};
     for (int i = 0; i < 4; i++)
         if (pthread_create(&t, 0, spawner, 0)) return 2;
+    if (argc > 3 && !strcmp(argv[3], "nproc")) {
+        struct rlimit none = {0, RLIM_INFINITY};
+        if (getrlimit(RLIMIT_NPROC, &none)) return 2;
+        none.rlim_cur = 0;
+        if (setrlimit(RLIMIT_NPROC, &none)) return 2;
+    }
     nanosleep(&d, 0);
-    printf("created %d\n", created);
+    printf("created %d, failed %d\n", created, failed);
     fflush(stdout);
     _exit(3);
 }

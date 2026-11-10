@@ -337,3 +337,11 @@ option(V3COMPAT_SEMANTIC "Add the opt-in semantic suite test (fetches lhns/avxem
 if(V3COMPAT_SEMANTIC)
   add_subdirectory(sem)
 endif()
+
+# Threads starting and ending, or failing to start at a thread limit, while the process exits: it must end promptly.
+add_executable(thread_exit thread_exit.c)
+target_link_libraries(thread_exit PRIVATE pthread)
+v3test(thread-exit exit 3 -- ${RUN} -- $<TARGET_FILE:thread_exit> 64 300)
+v3test(thread-exit-nproc exit 3 -- ${RUN} -- $<TARGET_FILE:thread_exit> 64 300 nproc)
+v3test(thread-exit-native exit 3 -- $<TARGET_FILE:thread_exit> 64 300 nproc)
+set_tests_properties(thread-exit thread-exit-nproc PROPERTIES TIMEOUT 30)
