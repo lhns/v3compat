@@ -75,6 +75,8 @@ shape(execer execer.c)
 shape(selfprobe selfprobe.c)
 shape(clone3 clone3.c)
 shape(vfork_sig vfork_sig.c)
+shape(vfork_exit vfork_exit.c)
+shape(vfork_kill vfork_kill.c)
 add_executable(selfprobe_nopie selfprobe.c)
 target_link_options(selfprobe_nopie PRIVATE -no-pie)
 target_compile_options(selfprobe_nopie PRIVATE -fno-pie)
@@ -231,6 +233,14 @@ foreach(k dyn static spie)
   set_tests_properties(vfork-sig-${k} vfork-sig-term-${k} PROPERTIES TIMEOUT 60)
 endforeach()
 v3test(vfork-sig-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_sig_static>)
+
+# A process ending while a thread waits in vfork must not wait for the child. (vfork_kill, a child killed at any
+# point, is lab only: a child killed holding a DynamoRIO lock hangs its parent, docs/plan.md.)
+foreach(k dyn static spie)
+  v3test(vfork-exit-${k} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:vfork_exit_${k}> 3)
+  set_tests_properties(vfork-exit-${k} PROPERTIES TIMEOUT 300)
+endforeach()
+v3test(vfork-exit-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_exit_static> 3)
 
 # clone3 with CLONE_CLEAR_SIGHAND, as glibc's posix_spawn uses it; the native run shows the test's expectations hold.
 foreach(k dyn static spie)
