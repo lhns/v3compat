@@ -1,6 +1,7 @@
-/* vfork_kill [runs]: a vfork child is SIGKILLed at a random point from its creation on, so some die before their
+/* vfork_kill [runs] [zero]: a vfork child is SIGKILLed at a random point from its creation on, so some die before their
  * thread setup or while holding a lock of the translator's; the rest exec /bin/true. The parent must go on: create
- * a thread, vfork again, exit. Same output natively and translated: "PASS" as the last line. */
+ * a thread, vfork again, exit. zero kills at once, mostly before the child's thread setup. Same output natively and
+ * translated: "PASS" as the last line. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <pthread.h>
@@ -65,13 +66,13 @@ static void *killer(void *a) {
 static void *nothing(void *a) { return a; }
 
 int main(int argc, char **argv) {
-    int runs = argc > 1 ? atoi(argv[1]) : 300, by_kill = 0, by_exec = 0, bad = 0, st;
+    int runs = argc > 1 ? atoi(argv[1]) : 300, zero = argc > 2 && !strcmp(argv[2], "zero"), by_kill = 0, by_exec = 0, bad = 0, st;
     pthread_t k, t;
     if (pthread_create(&k, 0, killer, 0)) return 2;
     srand(1);
     for (int i = 0; i < runs; i++) {
         /* Most kills land in the first few tens of microseconds. */
-        delay = rand() % 4 ? rand() % 2000 : rand() % 200000;
+        delay = zero ? 0 : rand() % 4 ? rand() % 2000 : rand() % 200000;
         killed = 0;
         pid_t c = clone3_vfork();
         if (c < 0) { printf("FAIL clone3: %s\n", strerror(errno)); return 1; }
