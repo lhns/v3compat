@@ -189,8 +189,16 @@ handler now defers the walk to the thread's next real synch point. `regstress 8 
 job **[measured]**: without the change, 17 of 9,000 on main and 21 of 12,000 on the same lab with an unrelated
 change; with it, 0 of 12,000 (at most 0.025%, 95%), on AMD EPYC 7763, 9V45
 and 9V74. On main with the fix: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and
-0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 with `-no_ignore_syscalls` and 0 of 4,500 without. Still open: with code churn and no app
-signals, 2 of 12,000 crashed under the client with the fix (2 of 3,000 before; 0 of 6,000 on DynamoRIO alone), cause unknown.
+0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 with `-no_ignore_syscalls` and 0 of 4,500 without. With code churn and no app signals, 2 of 12,000 still
+crashed under the client with the fix (2 of 3,000 before; 0 of 6,000 on DynamoRIO alone); that is the torn exit below.
+
+**The torn exit, fixed in the fork** (branch `fix-exit-offset-16`). On AMD EPYC 9V45 (Zen 5) a thread running a fragment's
+exit `jmp` while another thread re-links it jumped to neither the old nor the new target: instruction fetch read the rel32
+half old, half new when it straddled a 16-byte boundary. DynamoRIO only kept patched offsets within a cache line. Each bb's
+start now shifts by 0-3 bytes so that every exit offset stays within 16 bytes (a quadword where possible); trace exits and
+stubs are padded to 4 bytes. 9V45 lab, `regstress 8 1 jit` under the client, 6,000 runs a job **[measured]**: base 6 of
+24,000, fix 0 of 102,000 (at most 0.003%, 95%). DynamoRIO's own suite, base and fix built on the same runner: the same
+failures apart from known flakes, except `api.static_prepop` (below).
 
 **`MAP_32BIT`, fixed in the fork** (branch `fix-map32bit`). The kernel looks for `MAP_32BIT` space only in [1G,2G), above a
 floor randomized by up to 32 MB. For a non-PIE program DynamoRIO reserves its 1 GB of code space at `-vm_base` (0x3f000000)
@@ -242,6 +250,11 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
   (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
   `test/regstress.c`.
+- **DynamoRIO static re-attach loses AVX-512 state.** `api.static_prepop` fails in its second attach on AVX-512 CPUs only
+  (glibc's EVEX `strchrnul` returns a wrong position); 0 of 10 with glibc's AVX-512 routines disabled. Base fails too (debug 20 of 20,
+  release 0-5 of 20); the torn-exit fix's layout makes release fail every time. v3compat does not use static attach.
+- **DynamoRIO's debug suite is unusable on 9V45:** debug builds print `<Unknown processor cache size>`, failing 460 of 520
+  tests on base and fix alike.
 - **Signal injection** into an expansion is untested; asynchronous signals arrive at fragment boundaries.
 - **Intel NaN priority** is unverified until a recording on Intel AVX2 hardware.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
