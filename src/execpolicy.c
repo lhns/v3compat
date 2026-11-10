@@ -323,7 +323,7 @@ void exec_policy_init(void) {
             dr_free_module_data(m);
         }
     }
-    dr_register_filter_syscall_event(event_filter);
+    drmgr_register_filter_syscall_event(event_filter);
     drmgr_register_pre_syscall_event(event_pre);
     drmgr_register_post_syscall_event(event_post);
 }
