@@ -80,8 +80,7 @@ With a translator every executed instruction passes through it, so tests matter 
 2. **Decoder.** Differential against a real disassembler.
 3. **Semantics.** Differential against real AVX2 silicon, references recorded on AVX2 and replayed on AVX-only CPUs. The
    forms match the references apart from `mem_read` zero-fill. References come from AMD EPYC, so Intel NaN priority is
-   unverified until a recording on Intel AVX2 hardware. `test/sem/known-dr.txt` lists forms where plain DynamoRIO differs
-   from native (OF around `movbe` and `vbroadcasti128` loads).
+   unverified until a recording on Intel AVX2 hardware.
 4. **Paths.** In `v3compat` the suite runs through the client on Ivy Bridge with inline expansions on and off.
 5. **Process.** Partly built: faults and flags, `test/regstress.c`, exec identity, setuid races. Signal injection into an
    expansion is not.
