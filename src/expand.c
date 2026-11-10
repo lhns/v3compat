@@ -945,8 +945,8 @@ static bool vec_shape_ok(instr_t *in) {
 /* EVEX has no DR flag in this version: it is opcode 0x62 after any legacy padding. */
 /*
  * AVX1 has the same operation under another opcode for these, faults and all, so the application
- * instruction stays and only its opcode changes. DR's vmovntdqa and the store forms of the masked
- * moves list their operands in the other order.
+ * instruction stays and only its opcode changes. DR lists the store forms of the masked moves'
+ * operands in the other order.
  */
 static bool substitute(instr_t *in) {
     int to = OP_INVALID;
@@ -971,11 +971,6 @@ static bool substitute(instr_t *in) {
         opnd_t s0 = instr_get_src(in, 0);
         instr_set_src(in, 0, instr_get_src(in, 1));
         instr_set_src(in, 1, s0);
-    }
-    if (from == OP_vmovntdqa && opnd_is_memory_reference(instr_get_dst(in, 0))) {
-        opnd_t d = instr_get_dst(in, 0);
-        instr_set_dst(in, 0, instr_get_src(in, 0));
-        instr_set_src(in, 0, d);
     }
     return true;
 }
