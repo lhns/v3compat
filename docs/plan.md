@@ -83,8 +83,6 @@ With a translator every executed instruction passes through it, so tests matter 
    8370C (GitHub runners, two machines) all 574 forms of the suite, every case, match it natively, under the client and
    with helpers only, so NaN priority and every other recorded value agree with Intel **[measured]**. lhns/avxemu's
    recording on an older Intel part differs only in a faulting `movbe` store, which the 8370C does as AMD does.
-   `test/sem/known-dr.txt` lists forms where plain DynamoRIO differs from native (OF around `movbe` and
-   `vbroadcasti128` loads).
 4. **Paths.** In `v3compat` the suite runs through the client on Ivy Bridge with inline expansions on and off.
 5. **Process.** Partly built: faults and flags, `test/regstress.c` (with asynchronous signals: `sig`, and `xlsig`, below),
    exec identity, setuid races.
