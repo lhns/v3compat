@@ -17,11 +17,14 @@ static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, 
 /* Executed count per DR opcode of the classes the CPU lacks. */
 static uint64 op_counts[OP_LAST];
 static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELAXED); }
+/* LAB ONLY: blocks translated, for traces, and re-translated for a fault or signal. */
+static uint64 ev_bb, ev_trace, ev_xl;
 
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
                                      bool translating) {
     /* Runs when translating too: DR maps PCs through the list, so it must come out the same. */
     (void)tag; (void)for_trace; (void)translating;
+    __atomic_add_fetch(translating ? &ev_xl : for_trace ? &ev_trace : &ev_bb, 1, __ATOMIC_RELAXED);
     int n[C_N] = {0};
     instr_t *next;
     for (instr_t *in = instrlist_first_app(bb); in != NULL; in = next) {
@@ -76,6 +79,11 @@ static void event_exit(void) {
         dr_fprintf(STDERR, "v3compat: stats pid=%d", (int)dr_get_process_id());
         for (int i = 0; i < C_N; i++) dr_fprintf(STDERR, " %s=%llu", cls_name[i], (unsigned long long)counts[i]);
         dr_fprintf(STDERR, "\n");
+        dr_stats_t st = {sizeof st};
+        dr_get_stats(&st);
+        dr_fprintf(STDERR, "v3compat: drstats pid=%d bbs_built=%llu ev_bb=%llu ev_trace=%llu ev_translate=%llu threads=%llu\n",
+                   (int)dr_get_process_id(), (unsigned long long)st.basic_block_count, (unsigned long long)ev_bb,
+                   (unsigned long long)ev_trace, (unsigned long long)ev_xl, (unsigned long long)st.num_threads_created);
         for (int op = 0; op < OP_LAST; op++)
             if (op_counts[op] != 0)
                 dr_fprintf(STDERR, "v3compat: op %s %llu\n", decode_opcode_name(op),
