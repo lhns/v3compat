@@ -4,7 +4,8 @@
  * finish. In the race mode the child exits or execs on its own as the process ends, which can let the waiting thread
  * go first. In the last mode every vfork fails, which must not leave the translator waiting for a child at exit.
  * nodump makes the process non-dumpable; noready ends it without waiting for the child to start (lab only:
- * the child may not run at all). Same output natively and translated: "PASS" as the last line. */
+ * the child may not run at all). VFORK_EXIT_MODE=n runs only mode n. Same output natively and translated: "PASS" as
+ * the last line. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <poll.h>
@@ -152,9 +153,11 @@ int main(int argc, char **argv) {
     int runs = argc > 1 ? atoi(argv[1]) : 1, bad = 0, unfinished = 0;
     nodump = argc > 2 && !strcmp(argv[2], "nodump");
     noready = argc > 2 && !strcmp(argv[2], "noready");
+    int only = getenv("VFORK_EXIT_MODE") ? atoi(getenv("VFORK_EXIT_MODE")) : -1;
     srand(1);
     for (int i = 0; i < runs; i++)
         for (mode = 0; mode < NMODES; mode++) {
+            if (only >= 0 && mode != only) continue;
             spin = rand() % 20000;
             if (pipe(hold) || pipe(alive)) return 2;
             fflush(stdout);

@@ -247,6 +247,8 @@ foreach(k dyn static spie)
   set_tests_properties(vfork-exit-${k} PROPERTIES TIMEOUT 300)
 endforeach()
 v3test(vfork-exit-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_exit_static> 3)
+add_test(NAME vfork-exit-load COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/vfork_exit_load.sh" ${RUN} $<TARGET_FILE:vfork_exit_dyn> 60)
+set_tests_properties(vfork-exit-load PROPERTIES TIMEOUT 200)
 
 # clone3 with CLONE_CLEAR_SIGHAND, as glibc's posix_spawn uses it; the native run shows the test's expectations hold.
 foreach(k dyn static spie)
