@@ -254,7 +254,8 @@ numbers above were taken with this change in.
 
 **The fork on upstream master** (branch `rebase-master-20261110`). The fixes above are rebased from `6847bb2`
 (2025-01-10) onto upstream `058821c` (2026-11-09). Upstream had made none of them redundant, so none was dropped; its
-widened TLS offsets made the spill-slot fix key on `reg_spilled`. Its decoder now names CET, WAITPKG and FRED
+widened TLS offsets made the spill-slot fix key on `reg_spilled`; the reset query on DynamoRIO alone, resets
+forced, is still bad 159 of 160 on upstream and 0 of 160 on the fork **[measured]**. Its decoder now names CET, WAITPKG and FRED
 instructions it took for `nop`, fences or `clac`, and lists `movntdqa` load-first, so the list's keys were recomputed
 from the committed rows: the evidence is unchanged, and 12 keys were added (`endbr32`, `endbr64`, `rdssp`). Its
 `drmgr.h` turns the plain exit and syscall-filter registrations into undefined symbols, so the client registers them
