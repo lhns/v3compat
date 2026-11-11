@@ -259,7 +259,7 @@ instructions it took for `nop`, fences or `clac`, and lists `movntdqa` load-firs
 from the committed rows: the evidence is unchanged, and 12 keys were added (`endbr32`, `endbr64`, `rdssp`). Its
 `drmgr.h` turns the plain exit and syscall-filter registrations into undefined symbols, so the client registers them
 through drmgr. On the rebased fork **[measured]**: the 9V45 torn-exit lab 0 of 28,000 (7 runners); `regstress xlsig` 0
-of 200 under the client, with helpers only and on DynamoRIO alone; `vfork_exit 20` 0 of 20 runs on DynamoRIO alone, under the
+of 200 under the client, with helpers only and on DynamoRIO alone; `vfork_exit` 0 of 2,400 process ends on DynamoRIO alone, under the
 client see "Open items"; failed thread creation exits in at most 0.6 s and 1,000 churning
 threads in at most 5.3 s (120 runs); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
 client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500. DynamoRIO's suite, upstream and fork on the same
@@ -312,8 +312,10 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   **[estimate]**. A child dying of a signal otherwise no longer hangs the parent (`test/vfork_sig.c`): 9 of 9 before,
   0 of 300 after, at most 1% (95%) **[measured]**.
 - **A process ending while a thread waits in vfork** can still die with status 1: DynamoRIO cannot deliver a SIGCHLD
-  ("multiple native handlers"). `vfork_exit 20` under the client 1 of 120 runs on `8029afd`, 2 of 140 on the rebased
-  fork; DynamoRIO alone 0 of 20 **[measured]**. Not seen in the fix's own runs.
+  ("multiple native handlers"). `vfork_exit` under the client 1 of 14,400 process ends on `8029afd`, 2 of 16,800 on the
+  rebased fork; DynamoRIO alone 0 of 2,400 **[measured]**. Too rare for the fix's 1,200.
+- **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
+  0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
   (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
   `test/regstress.c`.
