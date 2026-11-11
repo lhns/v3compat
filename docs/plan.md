@@ -273,7 +273,7 @@ from the committed rows: the evidence is unchanged, and 12 keys were added (`end
 `drmgr.h` turns the plain exit and syscall-filter registrations into undefined symbols, so the client registers them
 through drmgr. On the rebased fork **[measured]**: the 9V45 torn-exit lab 0 of 28,000 (7 runners); `regstress xlsig` 0
 of 200 under the client, with helpers only and on DynamoRIO alone; `vfork_exit` 0 of 2,400 process ends on DynamoRIO alone, under the
-client see "Open items"; failed thread creation exits in at most 0.6 s and 1,000 churning
+client see "That fix had two races" above; failed thread creation exits in at most 0.6 s and 1,000 churning
 threads in at most 5.3 s (120 runs); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
 client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500. DynamoRIO's suite, upstream and fork on the same
 runner, release and debug on four runners: the same failures apart from known flakes, once the decoder test expects
