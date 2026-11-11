@@ -234,13 +234,13 @@ then waited without bound for its suspend signal; a thread still inside the clon
 not abandoned, then slept in vfork with the signal pending: a hang. Now the wait also abandons it once it is in vfork.
 An abandoned thread let go by its child came back with no record and its DR TLS still the clone copy, so its child's
 SIGCHLD aborted the process ("multiple native handlers", status 40); it now exits on any signal. Both need load:
-`test/vfork_exit_load.sh` (CI, 60 s) runs each way of ending, 8 copies at once; it failed 19 of 20 runs before, 0 of
-20 after. Same runner, `vfork_exit 20` per run, 1,920 runs a way of ending under the client on EPYC 7763, 9V45 and
-9V74 **[measured]**: before, the hang in 28, 29, 2 and 31 runs (another thread exits, SIGTERM, the main thread waiting, `clone3`) and 16 in the race mode (12 aborts, 4
-hangs); after, 0 in 9,600 (at most 0.16% a way, 95%). DynamoRIO alone, 1,600 runs: 14 before, 0 after. DynamoRIO's
-suite, base and fix on the same runner: the same failures apart from known flakes. No change
-elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and 0 of 306 on DynamoRIO
-alone, the short loop 0 of 4,500.
+`test/vfork_exit_load.sh` (CI, 60 s) runs each way of ending, 8 copies at once; it failed 19 of 20 runs before, 0 of 20
+after. Same runner, `vfork_exit 20` per run, 1,920 runs a way of ending under the client on EPYC 7763, 9V45 and 9V74
+**[measured]**: before, the hang in 28, 29, 2 and 31 runs (another thread exits, SIGTERM, the main thread waiting,
+`clone3`) and 16 in the race mode (12 aborts, 4 hangs); after, 0 in 9,600 (at most 0.16% a way, 95%). DynamoRIO alone,
+1,600 runs: 14 before, 0 after. DynamoRIO's suite, base and fix on the same runner: the same failures apart from known
+flakes. No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and 0
+of 306 on DynamoRIO alone, the short loop 0 of 4,500.
 
 **Thread creation that fails, fixed in the fork** (branch `fix-thread-exit`). The thread-creation stress test is back,
 capped, as `test/thread_exit.c`: threads keep starting threads (at most 64, or 1,000) while the main thread exits; in one
