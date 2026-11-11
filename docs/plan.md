@@ -229,6 +229,19 @@ under the client: 15 of 15 waited over 20 s before, 0 of 200 after **[measured]*
 `client.attach_test`. No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
 client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500.
 
+That fix had two races, both fixed (fork branch `fix-vfork-exit-race`). The exit looked once for a thread in vfork and
+then waited without bound for its suspend signal; a thread still inside the clone syscall reads as `running`, so it was
+not abandoned, then slept in vfork with the signal pending: a hang. Now the wait also abandons it once it is in vfork.
+An abandoned thread let go by its child came back with no record and its DR TLS still the clone copy, so its child's
+SIGCHLD aborted the process ("multiple native handlers", status 40); it now exits on any signal. Both need load:
+`test/vfork_exit_load.sh` (CI, 60 s) runs each way of ending, 8 copies at once; it failed 19 of 20 runs before, 0 of 20
+after. Same runner, `vfork_exit 20` per run, 1,920 runs a way of ending under the client on EPYC 7763, 9V45 and 9V74
+**[measured]**: before, the hang in 28, 29, 2 and 31 runs (another thread exits, SIGTERM, the main thread waiting,
+`clone3`) and 16 in the race mode (12 aborts, 4 hangs); after, 0 in 9,600 (at most 0.16% a way, 95%). DynamoRIO alone,
+1,600 runs: 14 before, 0 after. DynamoRIO's suite, base and fix on the same runner: the same failures apart from known
+flakes. No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the client and 0
+of 306 on DynamoRIO alone, the short loop 0 of 4,500.
+
 **Thread creation that fails, fixed in the fork** (branch `fix-thread-exit`). The thread-creation stress test is back,
 capped, as `test/thread_exit.c`: threads keep starting threads (at most 64, or 1,000) while the main thread exits; in one
 mode every creation fails, as at a thread limit (`RLIMIT_NPROC` 0). Before a thread-creating clone DynamoRIO raises its
@@ -261,7 +274,7 @@ from the committed rows: the evidence is unchanged, and 12 keys were added (`end
 `drmgr.h` turns the plain exit and syscall-filter registrations into undefined symbols, so the client registers them
 through drmgr. On the rebased fork **[measured]**: the 9V45 torn-exit lab 0 of 28,000 (7 runners); `regstress xlsig` 0
 of 200 under the client, with helpers only and on DynamoRIO alone; `vfork_exit` 0 of 2,400 process ends on DynamoRIO alone, under the
-client see "Open items"; failed thread creation exits in at most 0.6 s and 1,000 churning
+client see "That fix had two races" above; failed thread creation exits in at most 0.6 s and 1,000 churning
 threads in at most 5.3 s (120 runs); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
 client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500. DynamoRIO's suite, upstream and fork on the same
 runner, release and debug on four runners: the same failures apart from known flakes, once the decoder test expects
@@ -312,9 +325,6 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   crashes are in `common_heap_free()` while the parent cleans up the dead child, likely its half-built thread state
   **[estimate]**. A child dying of a signal otherwise no longer hangs the parent (`test/vfork_sig.c`): 9 of 9 before,
   0 of 300 after, at most 1% (95%) **[measured]**.
-- **A process ending while a thread waits in vfork** can still die with status 1: DynamoRIO cannot deliver a SIGCHLD
-  ("multiple native handlers"). `vfork_exit` under the client 1 of 14,400 process ends on `8029afd`, 2 of 16,800 on the
-  rebased fork; DynamoRIO alone 0 of 2,400 **[measured]**. Too rare for the fix's 1,200.
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
