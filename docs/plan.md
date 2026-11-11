@@ -252,6 +252,20 @@ signals a run at an emulated instruction and every register right **[measured]**
 from another thread is no longer delivered inside an expansion; faults there are translated (`test/fault_state.c`). The stress
 numbers above were taken with this change in.
 
+**The fork on upstream master** (branch `rebase-master-20261110`). The fixes above are rebased from `6847bb2`
+(2025-01-10) onto upstream `058821c` (2026-11-09). Upstream had made none of them redundant, so none was dropped; its
+widened TLS offsets made the spill-slot fix key on `reg_spilled`. Its decoder now names CET, WAITPKG and FRED
+instructions it took for `nop`, fences or `clac`, and lists `movntdqa` load-first, so the list's keys were recomputed
+from the committed rows: the evidence is unchanged, and 12 keys were added (`endbr32`, `endbr64`, `rdssp`). Its
+`drmgr.h` turns the plain exit and syscall-filter registrations into undefined symbols, so the client registers them
+through drmgr. On the rebased fork **[measured]**: the 9V45 torn-exit lab 0 of 28,000 (7 runners); `regstress xlsig` 0
+of 200 under the client, with helpers only and on DynamoRIO alone; `vfork_exit 20` 0 of 20 runs on DynamoRIO alone, under the
+client see "Open items"; failed thread creation exits in at most 0.6 s and 1,000 churning
+threads in at most 5.3 s (120 runs); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306 under the
+client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500. DynamoRIO's suite, upstream and fork on the same
+runner, release and debug on four runners: the same failures apart from known flakes, once the decoder test expects
+66 `movbe` as `data16 movbe`, as it does 66 `lzcnt`.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -297,6 +311,9 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   crashes are in `common_heap_free()` while the parent cleans up the dead child, likely its half-built thread state
   **[estimate]**. A child dying of a signal otherwise no longer hangs the parent (`test/vfork_sig.c`): 9 of 9 before,
   0 of 300 after, at most 1% (95%) **[measured]**.
+- **A process ending while a thread waits in vfork** can still die with status 1: DynamoRIO cannot deliver a SIGCHLD
+  ("multiple native handlers"). `vfork_exit 20` under the client 1 of 120 runs on `8029afd`, 2 of 140 on the rebased
+  fork; DynamoRIO alone 0 of 20 **[measured]**. Not seen in the fix's own runs.
 - **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
   (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
   `test/regstress.c`.
