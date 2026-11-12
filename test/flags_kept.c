@@ -39,6 +39,14 @@ WRITERS(rorx32, "rorx $5, %r9d, %r10d");
 WRITERS(mulx, "mulx %r9, %r10, %r11");
 WRITERS(mulx_rax, "mulx %rax, %rax, %rdx");
 WRITERS(mulx32_mem, "mulx (%rdi), %r10d, %r11d");
+WRITERS(inline_cmp, "vpcmpeqd (%rdi), %ymm1, %ymm2");
+WRITERS(inline_shift_d, "vpsrld $3, %ymm1, %ymm2");
+WRITERS(widen_mem, "vpmovzxbq (%rdi), %ymm2");
+WRITERS(widen_reg, "vpmovsxdq %xmm1, %ymm2");
+WRITERS(bcast_mem, "vpbroadcastb (%rdi), %ymm2");
+WRITERS(bcast_reg, "vpbroadcastq %xmm1, %ymm2");
+WRITERS(abs_mem, "vpabsd (%rdi), %ymm2");
+WRITERS(logic_mem, "vpand (%rdi), %ymm1, %ymm2");
 WRITERS(shlx, "shlx %r9, %r10, %r11");
 WRITERS(shrx_mem, "shrx %rcx, (%rdi), %r10");
 WRITERS(sarx32, "sarx %eax, %r9d, %r10d");
@@ -50,7 +58,7 @@ WRITERS(shlx_rax, "shlx %rax, %rcx, %rax");
 DECL(inline) DECL(inline_shift) DECL(frame) DECL(frame_gpr) DECL(frame_fma) DECL(subst) DECL(subst_mem)
 DECL(movbe_store) DECL(movbe_load) DECL(movbe_load16) DECL(movbe_load32) DECL(scalar) DECL(rorx_mem)
 DECL(rorx32) DECL(mulx) DECL(mulx_rax) DECL(mulx32_mem)
-DECL(shlx) DECL(shrx_mem) DECL(sarx32) DECL(shlx_rax)
+DECL(inline_cmp) DECL(inline_shift_d) DECL(widen_mem) DECL(widen_reg) DECL(bcast_mem) DECL(bcast_reg) DECL(abs_mem) DECL(logic_mem) DECL(shlx) DECL(shrx_mem) DECL(sarx32) DECL(shlx_rax)
 
 typedef uint64_t (*fn)(void *, uint64_t);
 #define ROW(kind) {#kind, {k_##kind##_shl, k_##kind##_shr, k_##kind##_rol, k_##kind##_cmps, k_##kind##_none}}
@@ -60,7 +68,7 @@ static const struct {
 } rows[] = {ROW(inline), ROW(inline_shift), ROW(frame), ROW(frame_gpr), ROW(frame_fma), ROW(subst),
             ROW(subst_mem), ROW(movbe_store), ROW(movbe_load), ROW(movbe_load16), ROW(movbe_load32), ROW(scalar),
             ROW(rorx_mem), ROW(rorx32), ROW(mulx), ROW(mulx_rax), ROW(mulx32_mem),
-            ROW(shlx), ROW(shrx_mem), ROW(sarx32), ROW(shlx_rax)};
+            ROW(inline_cmp), ROW(inline_shift_d), ROW(widen_mem), ROW(widen_reg), ROW(bcast_mem), ROW(bcast_reg), ROW(abs_mem), ROW(logic_mem), ROW(shlx), ROW(shrx_mem), ROW(sarx32), ROW(shlx_rax)};
 static const char *const writers[5] = {"shl $0", "shr %cl", "rol %cl", "repz cmpsb", "none"};
 
 int main(void) {

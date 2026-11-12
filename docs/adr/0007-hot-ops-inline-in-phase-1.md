@@ -37,3 +37,6 @@ Segments: memory operands with `fs:` or `gs:` (absolute, base, index forms) are 
 
 ## Amendment, 2026-11-12
 `shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt` and `lzcnt` are inline too, chosen by executed counts in duckdb. The shifts save the flags like `rorx`; `bzhi`, `tzcnt` and `lzcnt` branch on the zero or out-of-width case and write only flags the instruction defines (the undefined AF and PF follow the sequence, as for `andn`). `bextr`, `blsi`/`blsr`/`blsmsk`, `pdep` and `pext` stay on the helper: too rare to pay.
+
+## Amendment, 2026-11-12 (2)
+Vector forms by the same counts: `vpand`, `vpor`, `vpxor` and `vpandn` on ymm are substituted by `vandps`, `vorps`, `vxorps` and `vandnps` (same bits, same faults). The lane-wise add, subtract, compare, min, max, multiply-low, `vpshufb` and shift forms join the two-half inline path; `vpmovzx`/`vpmovsx`, `vpbroadcastb/w/d/q` (register source) and `vpabs` get their own two-half sequence, and narrow memory sources read exactly their width. Lane-crossing forms (`vpermd`, `vpermq`, `vpermpd`), `vpmovmskb` and `vpshufd` stay on the helper.

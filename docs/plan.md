@@ -46,11 +46,11 @@ needed. Instructions the CPU has are copied; the others are expanded or sent to 
 
 | Instruction | Handling | Cost per op |
 |---|---|---|
-| Hot lane-wise AVX2: `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq` | Inline, two 128-bit operations | 3 ns; 5 ns from memory **[measured]** |
-| Forms AVX1 has under another opcode | Native substitution | Native |
-| Other vector forms, FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
-| `lzcnt`, `tzcnt`, BMI1, BMI2, MOVBE loads | Helper through the mcontext | 320-400 ns **[measured]** |
-| MOVBE stores | Inline byte swap and store | Small **[estimate]** |
+| Hot lane-wise AVX2: add, sub, compare, min, max, `vpmullw`/`vpmulld`/`vpmuludq`, `vpshufb`, shifts; `vpmovzx`/`vpmovsx`, `vpbroadcast` (register source), `vpabs` | Inline, two 128-bit halves | 2-5 ns **[measured]**; 2.2 ns for `vpcmpeqd`, `vpmovzxbq`, `vpbroadcastb`, `vpabsd` on EPYC 9V45 |
+| Forms AVX1 has under another opcode, including ymm `vpand`/`vpor`/`vpxor`/`vpandn` | Native substitution | Native (`vpand` 0.06 ns **[measured]**) |
+| Other vector forms (`vperm*`, `vpmovmskb`, `vpshufd`, ...), FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
+| `rorx`, `andn`, `mulx`, `shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`, MOVBE loads and stores | Inline | 0.6-1.7 ns **[measured]** for the shifts, `bzhi`, `tzcnt`, `lzcnt` (Xeon 8573C; 80-85 ns as helpers) |
+| `bextr`, `blsi`/`blsr`/`blsmsk`, `pdep`, `pext` | Helper through the mcontext | 320-400 ns **[measured]** |
 | `cpuid` | Translated to report the emulated CPU | Rare |
 | `xgetbv` | Native: AVX2 adds no XCR0 bits | Native |
 
@@ -111,7 +111,7 @@ executed instructions, BMI2 about 0.03%. SIGILL round trip in a VM on Ivy Bridge
 ### Phase 1 results
 
 duckdb's compute query (`select sum(range*range) from range(30000000)`), AMD runner: 1.67G instructions, 135.5M AVX2, of
-which `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq` are 99.8%. BMI 0.63M, `lzcnt` 46k, `tzcnt` 11k, FMA none.
+which `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq` are 99.8%. (The first inline set; the lane-wise forms since added were chosen by executed counts in duckdb and zstd.) BMI 0.63M, `lzcnt` 46k, `tzcnt` 11k, FMA none.
 
 Per operation on Ivy Bridge (an empty loop iteration is about 0.5 ns):
 
@@ -121,7 +121,7 @@ Per operation on Ivy Bridge (an empty loop iteration is about 0.5 ns):
 | Inline `vpaddq` from memory | 4.9 |
 | Inline with the TLS block not 32-byte aligned | 10 |
 | Frame helper | 78-94 |
-| Mcontext helper (`tzcnt`) | 316-402 |
+| Mcontext helper (`tzcnt`, since inlined) | 316-402 |
 | Clean call reading and writing the mcontext | 466-525 |
 
 duckdb 2.0.0 whole-process wall time, cold; output hashes equal in all columns:

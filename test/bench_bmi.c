@@ -1,4 +1,4 @@
-// bench_bmi: time per instruction of rorx, andn, mulx, movbe, shlx, shrx, sarx, bzhi, tzcnt and lzcnt, for CI to run natively,
+// bench_bmi: time per instruction of the scalar BMI forms, movbe and a few vector forms, for CI to run natively,
 // under the client, and under the client with V3COMPAT_HELPERS_ONLY=1. Not a ctest: the numbers are
 // for reading. Each loop body is 64 independent copies of the instruction, so what is timed is the
 // instruction (or its expansion), not a dependency chain.
@@ -33,6 +33,22 @@ LOOP(b_bzhi, "bzhi %%rsi, %%rcx, %%r8\n")
 LOOP(b_tzcnt, "tzcnt %%rcx, %%r8\n")
 LOOP(b_lzcnt, "lzcnt %%rcx, %%r8\n")
 
+// Vector forms: ymm registers are clobbered, nothing else.
+#define LOOPV(name, body)                                                                \
+    static void name(uint64_t n, void *buf) {                                            \
+        __asm__ volatile("1:\n" X64(body "\n") "dec %0\n jnz 1b\n"                      \
+                         : "+r"(n)                                                       \
+                         : "D"(buf)                                                      \
+                         : "xmm0", "xmm1", "xmm2", "cc", "memory");                      \
+    }
+LOOPV(b_vpand, "vpand %%ymm1, %%ymm2, %%ymm0\n")
+LOOPV(b_vpcmpeqd, "vpcmpeqd %%ymm1, %%ymm2, %%ymm0\n")
+LOOPV(b_vpaddq, "vpaddq %%ymm1, %%ymm2, %%ymm0\n")
+LOOPV(b_vpmovzxbq, "vpmovzxbq %%xmm1, %%ymm0\n")
+LOOPV(b_vpbroadcastb, "vpbroadcastb %%xmm1, %%ymm0\n")
+LOOPV(b_vpabsd, "vpabsd %%ymm1, %%ymm0\n")
+LOOPV(b_vpermd, "vpermd %%ymm1, %%ymm2, %%ymm0\n")
+
 static double now(void) {
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
@@ -66,7 +82,9 @@ int main(void) {
     } rows[] = {{"mov", b_mov}, {"rorx", b_rorx}, {"andn", b_andn},
                 {"mulx", b_mulx}, {"movbe_load", b_movbe_ld}, {"movbe_store", b_movbe_st},
                 {"shlx", b_shlx}, {"shrx", b_shrx}, {"sarx", b_sarx}, {"bzhi", b_bzhi}, {"tzcnt", b_tzcnt},
-                {"lzcnt", b_lzcnt}};
+                {"lzcnt", b_lzcnt}, {"vpand", b_vpand}, {"vpcmpeqd", b_vpcmpeqd}, {"vpaddq", b_vpaddq},
+                {"vpmovzxbq", b_vpmovzxbq}, {"vpbroadcastb", b_vpbroadcastb}, {"vpabsd", b_vpabsd},
+                {"vpermd", b_vpermd}};
     for (size_t i = 0; i < sizeof rows / sizeof rows[0]; i++)
         printf("bench %-12s %10.2f ns/op\n", rows[i].name, ns_per_op(rows[i].f, buf));
     return 0;
