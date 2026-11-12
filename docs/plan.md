@@ -73,7 +73,8 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 | DynamoRIO fork | [lhns/dynamorio](https://github.com/lhns/dynamorio) |
 | OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
-The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-cache.md), proposed).
+The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-cache.md), proposed); its design and the
+owner's open decisions: [translation-cache.md](translation-cache.md).
 
 ## Testing
 
@@ -167,6 +168,15 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
 - **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
   0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
   duckdb varied 8.32 to 6.67 s). Neither measured on Ivy Bridge.
+
+### Startup breakdown (2026-11-12)
+
+GitHub runners, lab `lab-pcache-startup`, medians of 10 interleaved reps **[measured]**; details and the profile in
+[translation-cache.md](translation-cache.md). duckdb `select 42` on EPYC 7763: native 0.03 s, DynamoRIO alone 0.69 s (0.50 s without traces), empty
+client 0.89 s (0.65 s), client 1.09 s (0.80 s). It builds 77k blocks and 3.4k traces, all in
+file-backed modules; a static hello is 0.02 s under the client, so startup is per-block work, about 14 µs a block.
+`node -e 0`: 61k blocks, 94% in modules. DynamoRIO's `-persist` without a client: duckdb 1.6-3.0 s using its cache against
+0.47 s without; with a client it writes nothing.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -337,7 +347,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
 | **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
-| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
+| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache ([design](translation-cache.md)) |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
 ## Known flakes
