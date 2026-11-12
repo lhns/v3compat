@@ -12,7 +12,10 @@ V3COMPAT_CI=1 ctest --test-dir build --output-on-failure
 
 - `-DV3COMPAT_SEMANTIC=ON` adds `semantic-hw` (every form against digests recorded on AVX2 silicon, inline and
   helpers only). CI turns it on; leave it on for any change to `src/expand.c`.
-- The first configure builds the pinned DynamoRIO fork into `~/.cache/v3compat/dr-<commit>` (about 10 minutes).
+- The first configure builds the pinned DynamoRIO fork into `~/.cache/v3compat/dr-<commit>` (about 10 minutes);
+  `-DV3COMPAT_DR_ROOT=<install>` uses an existing build instead. avxemu's helpers (and, with the semantic suite, its test
+  cases) are fetched by CMake at the commit pinned in `CMakeLists.txt` (`AVXEMU_COMMIT`).
+- `V3COMPAT_HELPERS_ONLY=1` sends every emulated form to its helper, except `movbe` stores, which are always inline.
 - `allowlist-check` fails after a DynamoRIO or XED bump until `test/allow/regen.sh` is rerun ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)).
 - `test/sem/refused.txt` lists the suite's forms the client refuses (exit 86). It is empty and must stay exact:
   `semantic-hw` fails when a form is refused but not listed, or listed but no longer refused.
@@ -42,7 +45,8 @@ What is there:
 | `bench/ab.sh REPS` | Base against the branch, interleaved per rep: `bench_bmi` ns/op, duckdb compute and varied, `java -version`, Java `bench/Bench.java`, Node `bench/jit.js`; output digests against native |
 | `bench/jit.js`, `bench/Bench.java` | JIT workloads that print per-round times (warmup apart from steady state) and a checksum |
 | `bench/fma.c` | ns/op of each FMA form (vpermd as the helper-call control) and dgemm/sgemm/Horner kernels with checksums |
-| `lab/stress.sh KIND RUNS` | The stress set (`duck`, `sig`, `regc`, `regd`, `short`) and process-level labs (`exit`, `cap`, `xl`, `segv` on 9V45); `lab/loop.sh` classifies each run |
+| `lab/stress.sh KIND RUNS` | The stress set (`duck`, `sig`, `regc`, `regd`, `short`) and process-level labs: `exit` (a process ending while a thread waits in `vfork`), `cap` (thread creation failing or churning at exit), `bigclient` (1,000 threads at exit), `xl` (signals sent with `kill` at emulated instructions), `segv` (the torn exit, 9V45 only); `lab/loop.sh` classifies each run |
+| `lab/javac.sh RUNS` | The javac crash: javac under the client, an empty client (`lab/nullclient`) and DynamoRIO alone, with each crash's offset |
 
 The stress set every PR that touches translation or the fork reports, in the plan's terms: duckdb 0 of 240, signal
 stress 0 of 390, reg/flags stress 0 of 306 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of
@@ -83,8 +87,9 @@ lists each fix and its evidence.
 3. DynamoRIO's own test suite, base and fix on the same runner, when the change is in core: push a v3compat branch
    `suite-<topic>` that sets `BASE` and `FIX` in `.github/workflows/dr-suite.yml`. It builds both with
    `-DBUILD_TESTS=ON`, release and debug, runs `ctest` twice and reruns each test that fails on one side only 20
-   times. The bar is the same failures on both apart from known flakes (the plan lists them).
+   times. The bar is the same failures on both apart from the [known flakes](plan.md#known-flakes).
 4. `gh pr create -R lhns/dynamorio --base rebase-master-20261110 --head <branch>`.
+   The fork PR is merged by the owner, on the same rule as here.
 5. A v3compat PR moving `V3COMPAT_DR_COMMIT` to the head of `rebase-master-20261110` once the fork PR is merged (a
    commit on that branch, not the PR branch's), with the lab evidence and an entry in the plan. The pin moves only after
    the stress set and the lab match the previous pin.
@@ -96,6 +101,10 @@ Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner a
 - **Runners:** GitHub's `ubuntu-24.04` machines, assigned at random: AMD EPYC 7763 (Zen 3), 9V74 (Zen 4), 9V45 (Zen 5;
   the only one that showed the torn exit), Intel Xeon 8370C, 8573C. All have AVX2; some have AVX-512, which `cpuid` under
   the client hides.
+- **Torn exit:** a thread jumping through a fragment's exit while another thread re-links it fetched half the old and half
+  the new jump offset, on 9V45 only (fixed in the fork). Runner models are assigned at random and `segv` skips anything
+  but 9V45: run it as several jobs (one line each in `lab/parts`) and expect a few to land there.
+- **PIE, static-PIE:** position-independent executables; `spie` in test names is a static-PIE build.
 - **Stress set:** `test/regstress.c` runs threads in hot shared code with every register and the flags checked.
   `regc` under the client and `regd` on DynamoRIO alone (modes `jit`: code generated and unmapped, `sig`: async
   signals, `idle`), `sig` (8 threads, signals and code churn), `short` (many 1-second runs, for start and exit
@@ -105,6 +114,11 @@ Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner a
   bbs. A *flush* removes fragments for a code range (a JIT writing code, an `munmap`); they are freed once every thread
   has passed a *synch point* (a safe spot outside the cache). A *cache reset* throws away the whole cache and relocates
   every thread, which we keep off ([ADR 0010](adr/0010-no-cache-reset.md)). A *clean call* saves the whole machine state
-  to call C from the cache; our helpers use it.
+  to call C from the cache; our helpers use it. A *frame helper* gets its operands through raw TLS and saves no
+  application state beyond what it clobbers; an *mcontext helper* reads and writes the full saved machine context
+  (slower, for forms that write flags or several registers). *Linking* patches a fragment's exit to jump straight to
+  the next fragment; *unlinking* sends it back through DynamoRIO (done before a flush, or to get a thread's attention).
+  A *nudge* is DynamoRIO's request to a thread delivered by signal; the *nudge relink* is how the thread's fragment is
+  linked again afterwards.
 - **Counting:** 0 failures in n runs bounds the rate at 3/n (95%, the rule of three); the plan quotes that bound.
 - **Phases:** each has a go/no-go in the plan; a failed gate stops the plan for a decision.
