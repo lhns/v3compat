@@ -1,7 +1,7 @@
 # DynamoRIO is built from our fork at a pinned commit at configure time (ADR 0003), release config only.
 # V3COMPAT_DR_ROOT points at an existing install instead (offline builds).
 set(V3COMPAT_DR_REPO https://github.com/lhns/dynamorio)
-set(V3COMPAT_DR_COMMIT 34132100147790954e7cc367baab7e8d9983a93d)
+set(V3COMPAT_DR_COMMIT 335d2f7b641e7a93ba4f1af1ddc87e1d6da8f80f)
 set(V3COMPAT_DR_ROOT "" CACHE PATH "Use this DynamoRIO install instead of building the pinned commit")
 # Outside the build tree so a fresh build dir does not rebuild it.
 set(V3COMPAT_DR_CACHE "$ENV{HOME}/.cache/v3compat" CACHE PATH "DynamoRIO source build cache")

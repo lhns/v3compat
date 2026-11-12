@@ -13,7 +13,13 @@ for i in $(seq 30); do
   if [ $rc != 0 ]; then
     bad=$((bad+1)); echo "RUN $i rc=$rc"
     echo "DIAG run $i: $(grep -c 'segv-in' /tmp/e) in, $(grep -c 'segv-out' /tmp/e) out, $(grep -c passing /tmp/e) passing, $(grep -c notwritable /tmp/e) notwritable"
-    grep V3DIAG /tmp/e | grep -vE 'segv-|inherit' | tail -14 | sed "s/^/DIAG run $i tail /"
+    mkdir -p lab-out; grep -h 'V3DIAG forge' /tmp/e >> lab-out/forge.txt
+    grep V3DIAG /tmp/e | grep -vE 'segv-|inherit|sighand' | tail -6 | sed "s/^/DIAG run $i tail /"
   fi
 done
 echo "RESULT dr reset off: $bad of 30 bad"
+# Symbolize each forge's return address (offset from the library's start, link base 0x71000000).
+DBG=${DR}lib64/release/libdynamorio.so.debug
+for ra in $(grep -ohE 'forge .* ra0=0x[0-9a-f]+' lab-out/forge.txt 2>/dev/null | grep -oE 'ra0=0x[0-9a-f]+' | cut -d= -f2 | sort -u); do
+  echo "SYM ra0 $ra: $(addr2line -f -i -e $DBG $(printf '%#x' $((0x71000000 + ra))) | tr '\n' ' ')"
+done
