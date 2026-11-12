@@ -785,7 +785,7 @@ static void expand_shx(emit_t *e, instr_t *in) {
     flags_save(e);
     opnd_t cl = reg(DR_REG_CL);
     put(e, opc == OP_shlx ? INSTR_CREATE_shl(e->dc, reg(tt), cl)
-           : opc == OP_shrx ? INSTR_CREATE_shr(e->dc, reg(tt), cl) : INSTR_CREATE_sar(e->dc, reg(tt), cl));
+           : opc == OP_shrx ? INSTR_CREATE_shl(e->dc, reg(tt), cl) : INSTR_CREATE_sar(e->dc, reg(tt), cl));
     flags_restore(e);
     load_g(e, DR_REG_RAX, 0);
     load_g(e, DR_REG_RCX, 1);
