@@ -240,7 +240,7 @@ static void run_case(const tcase *c, int iter) {
     uint64_t m = c->bits == 64 ? ~0ull : 0xffffffffull;
     for (int k = 0; k < 16; k++) tin[k] = pick(iter + k);
     tin[R14] = (uint64_t)tmem;
-    for (int k = 0; k < 16; k++) tmem[k] = (uint8_t)rnd();
+    for (int k = 0; k < 16; k++) tmem[k] = iter % 8 == 3 ? 0 : (uint8_t)rnd();   /* a zero memory source too */
     tfl_in = 2 | (rnd() & ARITH);
     if (iter == 0) tfl_in = 2;
     if (iter == 1) tfl_in = 2 | ARITH;

@@ -2,9 +2,9 @@
  * Every expansion is rewindable and commits last (a gather commits per element, see below): until one final write, the only application
  * state it touches is scratch saved in raw TLS, which event_restore puts back. A memory operand
  * is read by one real load with translation P, so a fault is the real fault at P. Inline code
- * leaves flags alone, except where the instruction writes them (andn) or the sequence clobbers
- * them and saves them first (rorx, mulx; never conditional on flag liveness); the mcontext path
- * writes them in its atomic commit.
+ * leaves flags alone, except where the instruction writes them (andn, bzhi, tzcnt, lzcnt) or the
+ * sequence clobbers them and saves them first (rorx, mulx, shlx, shrx, sarx; never conditional on
+ * flag liveness); the mcontext path writes them in its atomic commit.
  */
 #include "allow.h"
 #include "expand.h"
