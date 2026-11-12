@@ -46,8 +46,8 @@ build/inst/bin/v3compat-run [--] prog args...
 - `V3COMPAT_NATIVE=1` runs `prog` without DynamoRIO. Without it the program always runs under DynamoRIO, even
   on a CPU that has AVX2.
 - `V3COMPAT_DR_OPTS="..."` adds DynamoRIO options; defaults live in `launcher/v3compat-run.c`.
-- `V3COMPAT_STATS=1` prints, at exit to stderr, how many distinct instructions of each class (AVX2, FMA, BMI,
-  LZCNT, TZCNT, MOVBE) were translated. It counts translations, not executions.
+- `V3COMPAT_STATS=1` prints, at exit to stderr, how many instructions of each class (AVX2, FMA, BMI, LZCNT, TZCNT,
+  MOVBE) and of each emulated opcode were executed. It slows the program: never time a run with it.
 - Startup is DynamoRIO translating the program's static init (duckdb `select 42`: about 20 times native). Measured on
   CI runners: `V3COMPAT_DR_OPTS=-disable_traces` cuts it by about 27% (compute query 18%) but costs about 3% wall and
   6% CPU on a long mixed workload, so it is not the default; use it for short-lived programs. `-trace_threshold` does
@@ -66,7 +66,7 @@ refused, and has to be exact. A program that executes a form off the [audited li
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.
 
-See the [plan](docs/plan.md).
+See the [plan](docs/plan.md) and [how to](docs/howto.md) build, test, run labs and change the fork.
 See the [decisions](docs/adr/README.md).
 
 Licensed under [Apache-2.0](LICENSE).
