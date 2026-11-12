@@ -140,7 +140,7 @@ static void op_128(emit_t *e, int opc, reg_id_t d, opnd_t a, opnd_t b) {
 
 /*
  * Inline, in two 128-bit halves: the ops that dominate measured programs (plan, "Phase 1 results").
- * The second source is ymm or memory for add and multiply; xmm, memory or an immediate for shifts.
+ * The second source is ymm or memory; for shifts it is the count: xmm, memory or an immediate.
  */
 static bool inline_form(int opc) {
     switch (opc) {
@@ -272,8 +272,7 @@ static void expand_oneop(emit_t *e, instr_t *in) {
         op_1(e, opc, t0x, reg(t0x));
         op_1(e, opc, t1x, reg(sx));
     }
-    if (bc) put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(t1x), OPND_CREATE_INT8(1)));
-    else put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(t0x), OPND_CREATE_INT8(1)));
+    put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(bc ? t1x : t0x), OPND_CREATE_INT8(1)));
     if (mem) reload_y(e, 2);
     reload_y(e, 0);
     put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
