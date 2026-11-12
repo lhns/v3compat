@@ -5,45 +5,31 @@ on:
 permissions:
   contents: read
 jobs:
-  lab:
+  dbg:
     runs-on: ubuntu-24.04
     timeout-minutes: 300
-    env:
-      FORK_COMMIT: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
-      UP_COMMIT: 058821c92d21c20e5af05edff12668d7eeff77bf
-    strategy:
-      fail-fast: false
-      matrix:
-        side: [fork, upstream]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/v3compat
-          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+          path: ~/.cache/v3dbg
+          key: dynamorio-debug-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
       - name: Packages
-        run: for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time && break; sleep 60; done
-      - name: Build the fork and v3compat, the upstream base, the null client against each
+        run: for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools gdb && break; sleep 60; done
+      - name: Build a debug fork and the null client against it
         run: |
-          cmake -S . -B build && cmake --build build -j
+          sed -i 's/-DDEBUG=OFF/-DDEBUG=ON/' cmake/FetchDynamoRIO.cmake
+          cmake -S . -B build -DV3COMPAT_DR_CACHE=$HOME/.cache/v3dbg > /dev/null 2>&1 || true
+          D=$(ls -d ~/.cache/v3dbg/dr-*[0-9a-f]/); ls $D/lib64
+          cmake -S lab/nullclient -B /tmp/null-dbg-b -DDynamoRIO_DIR=${D}cmake -DDEBUG=ON && cmake --build /tmp/null-dbg-b && mkdir -p /tmp/null-dbg && cp /tmp/null-dbg-b/libnull.so /tmp/null-dbg/
           mkdir -p /tmp/bench/classes && "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
-          if [ ${{ matrix.side }} = upstream ]; then
-            cp -r . ../up && rm -rf ../up/build
-            sed -i "s#^set(V3COMPAT_DR_REPO .*#set(V3COMPAT_DR_REPO https://github.com/DynamoRIO/dynamorio)#; s/^set(V3COMPAT_DR_COMMIT .*/set(V3COMPAT_DR_COMMIT $UP_COMMIT)/" ../up/cmake/FetchDynamoRIO.cmake
-            cmake -S ../up -B ../up/build > /dev/null 2>&1 || true
-            ls ~/.cache/v3compat/dr-$UP_COMMIT/bin64/drrun
-            cmake -S lab/nullclient -B /tmp/null-up-b -DDynamoRIO_DIR=$HOME/.cache/v3compat/dr-$UP_COMMIT/cmake && cmake --build /tmp/null-up-b && mkdir -p /tmp/null-up && cp /tmp/null-up-b/libnull.so /tmp/null-up/
-          else
-            cmake -S lab/nullclient -B /tmp/null-fork-b -DDynamoRIO_DIR=$HOME/.cache/v3compat/dr-$FORK_COMMIT/cmake && cmake --build /tmp/null-fork-b && mkdir -p /tmp/null-fork && cp /tmp/null-fork-b/libnull.so /tmp/null-fork/
-          fi
       - name: Run
         timeout-minutes: 280
         run: |
           export PATH="$JAVA_HOME_21_X64/bin:$PATH"
-          mkdir -p lab-out
-          bash lab/iso.sh ${{ matrix.side }} 8 2>&1 | tee lab-out/log.txt
+          mkdir -p lab-out; bash lab/dbg.sh 2>&1 | tee lab-out/log.txt | grep -E '^== run|ASSERT|pid=|no failure|rc='
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: lab-${{ matrix.side }}
+          name: lab-dbg
           path: lab-out
