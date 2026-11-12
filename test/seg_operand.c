@@ -117,11 +117,11 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     F(X, BIN, vpermd) F(X, MASKLD, vpmaskmovd) F(X, MASKSTD, vpmaskmovd_st) F(X, UN, vpbroadcastb) \
     F(X, UN, vpbroadcastd) F(X, UN, vpmovzxbw) F(X, BIN, vfmadd231ps) F(X, BINX, vfmadd231sd) \
     F(X, EXT, vextracti128) F(X, INS, vinserti128) F(X, CVTST, vcvtps2ph) F(X, UN, vmovntdqa) \
-    F(X, BLENDV, vpblendvb)
+    F(X, BLENDV, vpblendvb) F(X, GX, bzhi) F(X, GX, shlx) F(X, G2, tzcnt)
 // The rest of the memory forms in test/allow/emulated-iforms.txt (seg_coverage.sh checks the list), in two shapes.
 #define L_WIDE(F, X) \
-    F(X, GX, bextr) F(X, GX, bzhi) F(X, GX, sarx) F(X, GX, shlx) F(X, GX, shrx) F(X, G2, blsi) \
-    F(X, G2, blsmsk) F(X, G2, blsr) F(X, G2, tzcnt) F(X, G3, pdep) F(X, G3, pext) F(X, MULX32, mulx_32) \
+    F(X, GX, bextr) F(X, GX, sarx) F(X, GX, shrx) F(X, G2, blsi) \
+    F(X, G2, blsmsk) F(X, G2, blsr) F(X, G3, pdep) F(X, G3, pext) F(X, MULX32, mulx_32) \
     F(X, RORX_32, rorx_32) F(X, LZ32, lzcnt_32) F(X, LZ16, lzcnt_16) F(X, TZ32, tzcnt_32) \
     F(X, BZHI32, bzhi_32) F(X, MASKLD, vpmaskmovq) F(X, MASKSTQ, vpmaskmovq_st) \
     F(X, UN, vbroadcasti128) F(X, UN, vcvtph2ps) \
@@ -234,7 +234,7 @@ static int failures, cross;
 // Accesses of 8 bytes or more through the base register, whose start can lie before the guard page.
 static int crossable(const tcase *c) {
     static const char *const ok[] = {"/andn", "/movbe_ld64", "/movbe_st64", "/vpaddq", "/vpmaxsd", "/vpermd",
-                                     "/vfmadd231ps", "/vextracti128", "/vpmaskmovd"};
+                                     "/vfmadd231ps", "/vextracti128", "/vpmaskmovd", "/shlx", "/bzhi", "/tzcnt"};
     if (!strstr(c->name, "/b_rax/")) return 0;
     for (size_t i = 0; i < sizeof ok / sizeof ok[0]; i++) {
         const char *p = strstr(c->name, ok[i]);

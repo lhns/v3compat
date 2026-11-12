@@ -759,6 +759,103 @@ static void expand_movbe_load(emit_t *e, instr_t *in) {
     load_g(e, t, 0);
 }
 
+/* A register that is neither a, b nor named by the instruction. */
+static reg_id_t pick_not(instr_t *in, reg_id_t a, reg_id_t b) {
+    for (size_t i = 0; i < sizeof gp_cand / sizeof gp_cand[0]; i++)
+        if (gp_cand[i] != a && gp_cand[i] != b && !reg_in_instr(in, gp_cand[i])) return gp_cand[i];
+    return DR_REG_NULL;
+}
+
+/*
+ * shlx, shrx, sarx: a shift by cl, which masks the count as the instruction does. Flags are saved around it
+ * as in rorx. The source is fetched (the one load) before rcx changes, the count is copied before rax
+ * (flags) changes, and rax and rcx are restored before the commit, as the destination may be either.
+ */
+static void expand_shx(emit_t *e, instr_t *in) {
+    int opc = instr_get_opcode(in);
+    reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
+    uint bytes = opnd_size_in_bytes(reg_get_size(d));
+    reg_id_t cnt = reg_to_pointer_sized(opnd_get_reg(instr_get_src(in, 1)));
+    reg_id_t t = pick_not(in, DR_REG_RCX, DR_REG_NULL), tt = gsz(t, bytes);
+    save_g(e, 0, DR_REG_RAX);
+    save_g(e, 1, DR_REG_RCX);
+    save_g(e, 2, t);
+    fetch(e, instr_get_src(in, 0), t, bytes);
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_ECX), reg(gsz(cnt, 4))));
+    flags_save(e);
+    opnd_t cl = reg(DR_REG_CL);
+    put(e, opc == OP_shlx ? INSTR_CREATE_shl(e->dc, reg(tt), cl)
+           : opc == OP_shrx ? INSTR_CREATE_shr(e->dc, reg(tt), cl) : INSTR_CREATE_sar(e->dc, reg(tt), cl));
+    flags_restore(e);
+    load_g(e, DR_REG_RAX, 0);
+    load_g(e, DR_REG_RCX, 1);
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(d), reg(tt)));   /* commit */
+    to_next_pc(e);
+    load_g(e, t, 2);
+}
+
+/*
+ * tzcnt, lzcnt: bsf/bsr plus a branch for a zero source (CF = source is zero, ZF = result is zero; the other
+ * flags are undefined). The flags are written before the commit but by no instruction that reads them,
+ * and the only load is first, so an interrupted expansion is re-executed from the start.
+ */
+static void expand_cnt(emit_t *e, instr_t *in) {
+    bool lz = instr_get_opcode(in) == OP_lzcnt;
+    reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
+    uint bytes = opnd_size_in_bytes(reg_get_size(d));
+    reg_id_t t = PICK(in, DR_REG_NULL), tt = gsz(t, bytes);
+    instr_t *zero = INSTR_CREATE_label(e->dc), *done = INSTR_CREATE_label(e->dc);
+    save_g(e, 0, t);
+    fetch(e, instr_get_src(in, 0), t, bytes);
+    put(e, lz ? INSTR_CREATE_bsr(e->dc, reg(tt), reg(tt)) : INSTR_CREATE_bsf(e->dc, reg(tt), reg(tt)));
+    put(e, INSTR_CREATE_jcc(e->dc, OP_jz, opnd_create_instr(zero)));
+    if (lz) put(e, INSTR_CREATE_xor(e->dc, reg(tt), OPND_CREATE_INT8((int)bytes * 8 - 1)));
+    put(e, INSTR_CREATE_test(e->dc, reg(tt), reg(tt)));
+    put(e, INSTR_CREATE_jmp(e->dc, opnd_create_instr(done)));
+    put(e, zero);
+    put(e, INSTR_CREATE_mov_imm(e->dc, reg(gsz(t, 4)), OPND_CREATE_INT32((int)bytes * 8)));
+    put(e, INSTR_CREATE_test(e->dc, reg(tt), reg(tt)));
+    put(e, INSTR_CREATE_stc(e->dc));
+    put(e, done);
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(d), reg(tt)));   /* commit */
+    to_next_pc(e);
+    load_g(e, t, 0);
+}
+
+/*
+ * bzhi: below the operand width, src & ((1 << idx) - 1) (ZF, SF from it, CF and OF clear); otherwise src
+ * unchanged with CF set. Branch on the width as tzcnt does.
+ */
+static void expand_bzhi(emit_t *e, instr_t *in) {
+    reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
+    uint bytes = opnd_size_in_bytes(reg_get_size(d));
+    reg_id_t idx = reg_to_pointer_sized(opnd_get_reg(instr_get_src(in, 1)));
+    reg_id_t t = pick_not(in, DR_REG_RCX, DR_REG_NULL), t2 = pick_not(in, DR_REG_RCX, t);
+    reg_id_t tt = gsz(t, bytes), tt2 = gsz(t2, bytes);
+    instr_t *big = INSTR_CREATE_label(e->dc), *done = INSTR_CREATE_label(e->dc);
+    save_g(e, 0, t);
+    save_g(e, 1, t2);
+    save_g(e, 2, DR_REG_RCX);
+    fetch(e, instr_get_src(in, 0), t, bytes);
+    put(e, INSTR_CREATE_movzx(e->dc, reg(DR_REG_ECX), reg(reg_resize_to_opsz(idx, OPSZ_1))));
+    put(e, INSTR_CREATE_cmp(e->dc, reg(DR_REG_ECX), OPND_CREATE_INT8((int)bytes * 8)));
+    put(e, INSTR_CREATE_jcc(e->dc, OP_jae, opnd_create_instr(big)));
+    put(e, INSTR_CREATE_mov_imm(e->dc, reg(gsz(t2, 4)), OPND_CREATE_INT32(1)));
+    put(e, INSTR_CREATE_shl(e->dc, reg(tt2), reg(DR_REG_CL)));
+    put(e, INSTR_CREATE_dec(e->dc, reg(tt2)));
+    put(e, INSTR_CREATE_and(e->dc, reg(tt), reg(tt2)));
+    put(e, INSTR_CREATE_jmp(e->dc, opnd_create_instr(done)));
+    put(e, big);
+    put(e, INSTR_CREATE_test(e->dc, reg(tt), reg(tt)));
+    put(e, INSTR_CREATE_stc(e->dc));
+    put(e, done);
+    load_g(e, DR_REG_RCX, 2);
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(d), reg(tt)));   /* commit */
+    to_next_pc(e);
+    load_g(e, t, 0);
+    load_g(e, t2, 1);
+}
+
 static bool gpr_opnd(opnd_t o) { return opnd_is_reg(o) && reg_is_gpr(opnd_get_reg(o)); }
 static bool rm_opnd(opnd_t o) { return gpr_opnd(o) || opnd_is_memory_reference(o); }
 
@@ -779,6 +876,11 @@ static bool bmi_inline_ok(instr_t *in) {
                rm_opnd(instr_get_src(in, 0));
     case OP_movbe:
         return nd == 1 && ns == 1 && opnd_is_memory_reference(instr_get_src(in, 0));
+    case OP_shlx: case OP_shrx: case OP_sarx: case OP_bzhi:
+        return nd == 1 && ns == 2 && (bytes == 4 || bytes == 8) && rm_opnd(instr_get_src(in, 0)) &&
+               gpr_opnd(instr_get_src(in, 1));
+    case OP_tzcnt: case OP_lzcnt:
+        return nd == 1 && ns == 1 && (bytes == 4 || bytes == 8) && rm_opnd(instr_get_src(in, 0));
     }
     return false;
 }
@@ -788,6 +890,9 @@ static void expand_bmi_inline(emit_t *e, instr_t *in) {
     case OP_rorx: expand_rorx(e, in); break;
     case OP_andn: expand_andn(e, in); break;
     case OP_mulx: expand_mulx(e, in); break;
+    case OP_shlx: case OP_shrx: case OP_sarx: expand_shx(e, in); break;
+    case OP_bzhi: expand_bzhi(e, in); break;
+    case OP_tzcnt: case OP_lzcnt: expand_cnt(e, in); break;
     default: expand_movbe_load(e, in); break;
     }
 }
