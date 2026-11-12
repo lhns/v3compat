@@ -15,6 +15,7 @@ add_executable(avx2prog avx2prog.S)
 add_executable(flagrepro flagrepro.c)
 add_executable(fault_state fault_state.c)
 add_executable(flags_kept flags_kept.c)
+add_executable(lean_call lean_call.c)
 add_executable(bmi_inline bmi_inline.c)
 add_executable(vec_inline vec_inline.c)
 add_executable(cross_inline cross_inline.c)
@@ -277,6 +278,10 @@ v3test(flags-preserved stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:flagrep
 v3test(fault-state stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:fault_state>)
 v3test(flags-kept stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:flags_kept>)
 v3test(misc-forms stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:misc_forms>)
+# Everything but the destination survives a frame helper's call; helpers only sends the inline forms there too.
+v3test(lean-call stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lean_call>)
+v3test(lean-call-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:lean_call>)
+v3test(lean-call-native stdout-has PASS exit 0 -- $<TARGET_FILE:lean_call>)
 # rorx, andn, mulx, movbe against a C model, inline and as helpers (V3COMPAT_HELPERS_ONLY); native checks the model.
 v3test(bmi-inline stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:bmi_inline>)
 v3test(bmi-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:bmi_inline>)
