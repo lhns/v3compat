@@ -313,6 +313,19 @@ client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500. DynamoRIO's s
 runner, release and debug on four runners: the same failures apart from known flakes, once the decoder test expects
 66 `movbe` as `data16 movbe`, as it does 66 `lzcnt`.
 
+**Trace teardown under any client, fixed in the fork** (branch `fix-trace-blk-vmlists`,
+[lhns/dynamorio#8](https://github.com/lhns/dynamorio/pull/8)). javac and Java crashed in `remove_fraglist_entry`
+under any client, an empty one too, on the fork and on stock upstream: javac 8 of 8 under the client, 7 of 8 with an
+empty client. A trace keeps per-block area lists only when a client is present; `end_and_emit_trace` hid the trace from
+flushes (cleared `trace_vmlist`, `trace_tag`) before it could go nolinking, but freed those lists only afterwards, so a
+flush by another thread in that window freed their entries as stale (case 9381) under the builder. Lab-only prints
+found it (`lab-perf-trace-diag`, run 43242817702). The lists now go with `trace_vmlist`. After **[measured]**: 0 of 50
+javac crashes in libdynamorio under the client and 0 of 50 with an empty client, the Java benchmark 0 of 12, no flush
+left a trace's lists behind (run 43247919081); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306
+under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 (run 43248017594). DynamoRIO's suite,
+base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test` on debug builds,
+which fails from the build directory's name (below, "Known flakes"). Reproduce with `lab/javac.sh`.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -350,6 +363,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
 - **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
   any commit. Use release there, or another runner, for the debug suite.
+- **`client.memory_dump_test` on debug builds** fails or passes by the build directory's name: the dump's section-name
+  hash is keyed on a buffer the maps iterator reuses, so `[vvar]` can take an earlier region's name. Compare base and
+  fix built in the same directory name.
 - **One `regstress sig jit` SIGSEGV** under the client in CI, never reproduced (0 of 1,000 on several runners). If it
   recurs, keep the CPU model and the run, and rerun `lab/stress.sh sig` on that runner type.
 
@@ -389,16 +405,11 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
   performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **javac and Java crash under any client** (SIGSEGV in DynamoRIO, status 255): javac 0 of 8 runs survive with an empty
-  client on the fork and 0 of 16 on stock upstream, launcher options or not; Java's benchmark about half. The crash is
-  in `remove_fraglist_entry` while a trace in progress is torn down or extended (`reset_trace_state`,
-  `extend_unmangled_ilist`): its per-block area lists, kept only when a client is present, lose their area. What frees
-  it is being found on a debug build. `-sandbox2ro_threshold 0` and `-thread_private` avoid it (12 of 12, slower), but the
-  fix goes in the fork. Reproduce with `lab/javac.sh` (a lab part). Evidence: lab branches `lab-perf-iso` (run
-  43134016088: fork against upstream, options), `lab-perf-probe3` (run 43138513400: release backtraces), `lab-perf-dbg`
-  (debug build, run 43229626815 in progress).
-- **javac under DynamoRIO alone** fails 2 of 8 on the fork and on upstream, at PCs outside libdynamorio or with status
-  134. Separate from the above; to be fixed in the fork too.
+- **javac under DynamoRIO alone, and so under the client,** fails in about 1 run in 5 at the current pin (50 runs each:
+  client 9, empty client 6, DynamoRIO alone 11), at PCs outside libdynamorio or with status 134; upstream too.
+  `test/trace_flush.c` on lab branch `lab-perf-trace-fix` (threads in hot code in one page, another writing a byte of
+  that page that never executes) dies with SIGSEGV in every run on DynamoRIO alone and never natively: likely the same
+  bug, and its reproducer. Next to fix in the fork.
 - **Performance, ranked:** fewer `/proc/self/maps` reads on DynamoRIO's fault and `mprotect` paths (javac's kernel
   time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
   with an exactness guard, if a workload needs it; the next inline batch by what still reaches a helper since #35

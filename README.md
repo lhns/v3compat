@@ -23,7 +23,9 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
 - Every system call leaves the code cache (`-no_ignore_syscalls`, [ADR 0011](docs/adr/0011-no-ignored-syscalls.md)), so code a JIT unmaps is freed while other threads wait.
 - A `vfork` child killed with SIGKILL before it execs can hang or crash its parent (`docs/plan.md`, open items).
 - Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet.
-- Java and javac crash inside DynamoRIO under any client (upstream has the bug too); a fork fix is in progress. JVM
+- Java and javac run under the client since the fork fixed a crash in trace building that any client hit
+  ([lhns/dynamorio#8](https://github.com/lhns/dynamorio/pull/8); upstream has it). javac still fails in about 1 run in 5,
+  on DynamoRIO alone too (plan, "Open items"). JVM
   workloads are in scope; see "Open items" in the plan.
 
 **Untested or unverified:**
