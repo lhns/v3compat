@@ -1,0 +1,65 @@
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Packages
+        run: for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd && break; sleep 60; done
+      - name: Build new and base (origin/main)
+        run: |
+          cmake -S . -B build -DV3COMPAT_SEMANTIC=OFF && cmake --build build -j
+          git fetch -q origin main && git worktree add /tmp/base origin/main
+          cmake -S /tmp/base -B /tmp/base/build -DV3COMPAT_SEMANTIC=OFF && cmake --build /tmp/base/build -j
+          mkdir -p /tmp/bench/classes && "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+      - name: Run
+        timeout-minutes: 220
+        run: |
+          export PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          mkdir -p lab-out
+          bash bench/ab.sh 6 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|BENCH)'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: lab-ab, path: lab-out}
+  stress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {kind: duck, n: 240}
+          - {kind: sig, n: 390}
+          - {kind: regc, n: 102}
+          - {kind: regd, n: 102}
+          - {kind: short, n: 1500, part: a}
+          - {kind: short, n: 1500, part: b}
+          - {kind: short, n: 1500, part: c}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Packages
+        run: for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools gdb zstd && break; sleep 60; done
+      - name: Build
+        run: cmake -S . -B build && cmake --build build -j
+      - name: Run
+        timeout-minutes: 220
+        run: mkdir -p lab-out && bash lab/stress.sh ${{ matrix.kind }} ${{ matrix.n }} 2>&1 | tee lab-out/log.txt | grep -E 'RESULT|model name|hang|rc='
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: 'lab-${{ matrix.kind }}${{ matrix.part }}', path: lab-out}
