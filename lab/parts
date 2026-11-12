@@ -1,15 +1,22 @@
 # One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
 # /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-abfma1 bash lab/fma-ab.sh 4
-abfma2 bash lab/fma-ab.sh 4
-abjava1 bash lab/java-rate.sh 8
-abjava2 bash lab/java-rate.sh 8
-ab bash bench/ab.sh 6
-ctest bash -c 'chmod o+x "$HOME"; V3COMPAT_CI=1 ctest --test-dir build --output-on-failure 2>&1 | tail -40 | sed "s/^/RESULT /"'
-duck bash lab/stress.sh duck 240
-sig bash lab/stress.sh sig 390
-regc bash lab/stress.sh regc 102
-regd bash lab/stress.sh regd 102
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
+abjava01 bash lab/java-rate.sh 8
+abjava02 bash lab/java-rate.sh 8
+abjava03 bash lab/java-rate.sh 8
+abjava04 bash lab/java-rate.sh 8
+abjava05 bash lab/java-rate.sh 8
+abjava06 bash lab/java-rate.sh 8
+abjava07 bash lab/java-rate.sh 8
+abjava08 bash lab/java-rate.sh 8
+abjava09 bash lab/java-rate.sh 8
+abjava10 bash lab/java-rate.sh 8
+abjava11 bash lab/java-rate.sh 8
+abjava12 bash lab/java-rate.sh 8
+abjava13 bash lab/java-rate.sh 8
+abjava14 bash lab/java-rate.sh 8
+abjava15 bash lab/java-rate.sh 8
+abjava16 bash lab/java-rate.sh 8
+abjava17 bash lab/java-rate.sh 8
+abjava18 bash lab/java-rate.sh 8
+abjava19 bash lab/java-rate.sh 8
+abjava20 bash lab/java-rate.sh 8
