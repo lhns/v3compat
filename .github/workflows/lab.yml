@@ -1,0 +1,22 @@
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  sym:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Symbolize
+        run: |
+          D=$(ls -d ~/.cache/v3compat/dr-*[0-9a-f]/)lib64/release/libdynamorio.so.debug
+          BASE=$(readelf -lW "$D" | awk '$1=="LOAD" {print $3; exit}'); echo "base $BASE"
+          for a in 0x93799 0x9359d; do printf '%x\n' $((BASE+a)) | sed 's/^/0x/' | addr2line -f -i -e "$D"; done
+          objdump -d -l --start-address=$((BASE+0x93680)) --stop-address=$((BASE+0x937c0)) "$D" | tail -80
+          objdump -d -l --start-address=$((BASE+0x934c0)) --stop-address=$((BASE+0x935c0)) "$D" | tail -60
