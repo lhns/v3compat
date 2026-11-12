@@ -1,4 +1,6 @@
-abja bash lab/javarep.sh 15
-abjb bash lab/javarep.sh 15
-abjc bash lab/javarep.sh 15
-abjd bash lab/javarep.sh 15
+sa bash lab/stress.sh short 1500
+sb bash lab/stress.sh short 1500
+sc bash lab/stress.sh short 1500
+sd bash lab/stress.sh short 1500
+se bash lab/stress.sh short 1500
+sf bash lab/stress.sh short 1500
