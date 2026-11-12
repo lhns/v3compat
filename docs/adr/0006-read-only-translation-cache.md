@@ -17,5 +17,6 @@ Running containers cannot poison it. The first start of a new binary is slower u
 writer has to be deployed, and invalidation is by content rather than time.
 
 ## Amendment 2026-11-12
-Design: [translation-cache.md](../translation-cache.md). Entries are finished fine-grained blocks, checked against the
-bytes in memory at install; DynamoRIO's `-persist` is rejected. Still Proposed until the owner decides its phases.
+Proposed in [translation-cache.md](../translation-cache.md), for the owner to decide: entries would be finished
+fine-grained blocks. "Key entries by file hash" would become an index plus a compare against the bytes in memory at
+install. DynamoRIO's `-persist` is not the base.

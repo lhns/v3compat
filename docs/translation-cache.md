@@ -16,11 +16,14 @@
   the block is translated fresh.
 - **Who writes it:** a trusted writer, never the container that reads it. The first deployable writer is a
   training run at build time. Containers mount the cache read-only.
-- **Gain:** about half of startup on GitHub runners, not 10x **[estimate]** from a measured profile. duckdb
-  `select 42` on EPYC 7763 would drop from 1.09 s to about 0.5-0.6 s with traces on, and from 0.80 s to about 0.3-0.4 s
-  with `-disable_traces`;
-  native is 0.03 s. On those numbers the cache alone does **not** meet Phase 3's gate (warm `select 42` under 0.5 s on Ivy
-  Bridge, where a cold start is 5.1 s), unless Ivy Bridge's 5x gap to runners is something else.
+- **Gain** **[estimate]**, from a measured profile on GitHub runners. duckdb `select 42` on EPYC 7763, where native is
+  0.03 s:
+  - with traces on, from 1.09 s to about 0.45-0.5 s, about 2x;
+  - with `-disable_traces`, about 0.25-0.3 s. That is about 4x against today's default, and it requires turning
+    traces off for startup.
+
+  If Ivy Bridge scales like the runners (a cold start there is 5.1 s), a warm start there is about 1.3 s. That still
+  misses Phase 3's gate of 0.5 s, so the cache alone does not get there.
 - **Smallest useful first step:** a lab-only prototype on a fork branch, with ASLR off, verify mode on and a numeric
   stop criterion ([Phases](#phases)). Before that, the owner needs to run the startup ladder on Ivy Bridge.
 
@@ -55,13 +58,14 @@ DR alone or the empty client. The first run's 7763 numbers agree within 0.02 s.
   and mangling the IR 23%, lookup, link and dispatch 13-18%, encode and emit 11-12%, heap and locks 10-18%, decode 7-9%,
   our client 5-6% (`allow_key`, `put_opnd` and `in_table` lead), drmgr about 1%, kernel 3-4% and app code in the cache
   3-4% **[measured]**. On DR alone, lookup, link and dispatch are 20-25%.
-- **Inclusive time** (`--call-graph dwarf`, duckdb `select 42` under the client, three runners) **[measured]**:
-  `build_basic_block_fragment` 62-63%, made up of `build_bb_ilist` 33-36% (with `instrument_basic_block`, our client and
+- **Inclusive time** (`--call-graph dwarf`, duckdb `select 42` under the client, four runners) **[measured]**:
+  `build_basic_block_fragment` 62-63% with traces on and 73% with `-disable_traces` (7763; `node -e 0` 80%), made up of `build_bb_ilist` 33-36% (with `instrument_basic_block`, our client and
   drmgr, 11%), `emit_fragment_ex` 25-26% and mangling 6-7%. Linking and the fragment table inside it are only
   about 3% (`link_new_fragment`, `fragment_add`). Trace emission is 5% of samples; the rest of the trace cost shows up as
   blocks built again for traces. `node -e 0`: 52-69%.
 - **What a block cache can remove:** `build_basic_block_fragment` less its linking and table insert. That is decode, IR build
-  and mangle, encode and emit, the client, and the heap work that belongs to the IR: about 58-60% of samples. The remaining 40-45% is still paid on every hit:
+  and mangle, encode and emit, the client, and the heap work that belongs to the IR: about 60% of samples with traces on and 70% without. In seconds on the 7763 that removes about 0.66 s of 1.09 s, or 0.56 s
+  of 0.80 s. The rest is still paid on every hit:
   dispatch to a new tag, hashtable insert, linking, faults on fresh cache pages and the app itself, plus the cost of a
   hit (compare, copy, relocate) **[estimate]**.
 
@@ -93,8 +97,8 @@ paths [ADR 0010](adr/0010-no-cache-reset.md) relies on. Nothing new relocates a 
 There are two separate jobs.
 
 **The index finds candidate entries.** It needs to be cheap and does not decide correctness. The key is:
-- the module's ELF build-id, falling back to SHA-256 of the file, which the writer computes once and the reader looks up
-  by `(dev, inode, size, mtime)`;
+- the module's ELF build-id, falling back to a hash of its ELF headers and program headers (cheap, and it matches
+  across the writer's and the reader's mounts);
 - a **build identity**: hashes of `libdynamorio.so`, `libv3compat.so` (which includes the allowlist and avxemu's
   helpers) and `libdrmgr.so`;
 - the canonical cache-affecting DR and client options, as the launcher builds them;
@@ -107,14 +111,23 @@ There are two separate jobs.
   launcher passes no cache path.
 
 **Validation decides correctness.** It runs at install, for every hit:
-1. The source range lies in a file-backed mapping of that module that DR's vmareas have never seen writable, and the
-   whole range is readable and executable, as DR checks when it builds a block.
+1. The source range lies in a file-backed mapping of that module that DR's vmareas mark `VM_UNMOD_IMAGE` ("mmapped
+   in and read-only since then", `core/vmareas.c`) **[source]**, and the whole range is readable and executable, as DR
+   checks when it builds a block.
 2. The bytes in memory equal the entry's source bytes, checked with a `memcmp` of about 20-40 bytes. This is the check
    that matters. The plan notes that writes to an executable file are not denied, so a file hash alone would not be
    enough.
 3. The entry's checksum holds, against corruption.
-4. Every layout-dependent choice reproduces at this address: rip-relative and rel32 targets are within reach from where
-   the body lands, and helper targets are in reach. If any is not, the block is a miss.
+4. Every layout-dependent choice reproduces at this address. Rip-relative, rel32 and helper targets must be within
+   reach from where the body lands. Exit padding must come out the same: the fork's torn-exit fix shifts a block's start
+   by 0-3 bytes and pads inside it (`nop_pad_ilist` in `emit_fragment_common`, `core/emit.c`), and both depend on the
+   cache address modulo 16 **[source]**. Install therefore places the body at the recorded alignment, or the block is
+   a miss. Getting this wrong would break byte-identity and the torn-exit guarantee together.
+
+Install must also do what `emit_fragment_common` does after it encodes a block, in particular `vm_area_add_fragment`.
+That registration is what lets a later `munmap`, `mprotect` or write to the source flush the fragment. Verify mode
+cannot catch a missing registration. A test unmaps a library, maps different code at the same address and checks
+that the new code runs.
 
 Any failure is a miss, and the block is translated fresh. Nothing in the reader repairs or rewrites an entry.
 
@@ -186,7 +199,8 @@ that reads it; this class of attack was demonstrated against Rosetta's cache (AD
 
 - **Fork:**
   - a lookup hook in `build_basic_block_fragment` before `build_bb_ilist`;
-  - install: allocate, copy, relocate, then regenerate stubs and linkstubs from the exit list;
+  - install: allocate at the recorded alignment, copy, relocate, then regenerate stubs and linkstubs from the exit
+    list, and register the fragment with vmareas as `emit_fragment_common` does;
   - relocation records at the creation sites;
   - writer mode;
   - verify mode.
@@ -201,16 +215,20 @@ that reads it; this class of attack was demonstrated against Rosetta's cache (AD
 
 - **Reviving DR's `-persist` (coarse-grain persisted units)** is rejected.
   - *It loses time:* with no client and a cache generated once, then used without being rewritten (the file hashes
-    are unchanged), 5 interleaved reps on EPYC 9V74 and Xeon 6975P **[measured]**:
+    are unchanged), medians of 5 interleaved reps per runner (run 43280614743) **[measured]**:
 
-    | | Plain | Split only, no cache | Using the cache |
-    |---|---|---|---|
-    | duckdb `select 42` | 0.47-0.48 s | 0.83-1.04 s | 1.62-3.03 s |
-    | `node -e 0` | 0.36 s | 0.58-0.74 s | 0.80-1.52 s |
-    | hello (PIE) | 0.01 s | 0.02 s | 0.04-0.06 s |
+    | Runner | Workload | Plain | Split only, no cache | Using the cache |
+    |---|---|---|---|---|
+    | EPYC 9V74 | duckdb `select 42` | 0.47 s | 0.83 s | 3.03 s |
+    | EPYC 9V74 | `node -e 0` | 0.36 s | 0.58 s | 1.52 s |
+    | EPYC 9V74 | hello (PIE) | 0.01 s | 0.02 s | 0.06 s |
+    | Xeon 6975P | duckdb `select 42` | 0.48 s | 1.04 s | 1.62 s |
+    | Xeon 6975P | `node -e 0` | 0.36 s | 0.74 s | 0.80 s |
+    | Xeon 6975P | hello (PIE) | 0.01 s | 0.02 s | 0.04 s |
 
-    The splitting that x64 needs (below) doubles the time by itself. Whether the cache files were mapped at all was not
-    shown: strace found no `.dpc` open. Either way, using it is slower than not having one.
+    On EPYC 7763 (run 43291978957) the same three columns are 0.70 / 1.18 / 4.21 s for duckdb. The use-only runs do
+    open the duckdb and node `.dpc` files (strace, `open`) **[measured]**. The splitting that x64 needs (below) costs
+    50-110% by itself, and using the cache costs more on top.
   - *It does nothing with a client:* with any client that does not register persistence, nothing is written
     **[measured]**. Supporting it needs `DR_EMIT_PERSISTABLE` and the `dr_register_persist_*` callbacks.
   - *It does not suit our client:* a block with a meta cti whose target is not an instr (a clean call to a helper)
@@ -229,7 +247,8 @@ that reads it; this class of attack was demonstrated against Rosetta's cache (AD
     - the persistence work dates from 2006-2012 (Determina, then i#40 client support), and only maintenance commits
       followed.
 - **Caching only our client's work** (audit result, expansion decisions) is rejected. Its bound is the client's
-  share of samples, 5-7%, or 0.15 s of 0.80 s without traces. DR still decodes,
+  share: 11% inclusive (`instrument_basic_block`), or the 0.15 s step from the empty client to ours without traces, of
+  0.80 s. DR still decodes,
   mangles and encodes every block. The README already notes that memoising the allowlist check gained nothing.
 - **Caching decoded instruction lists and re-encoding at install** saves decode and the client but not mangle or
   encode, about a third of the bound, and needs the same validation. That is most of the complexity for a minority of the gain.
@@ -268,7 +287,7 @@ Each phase ends at a go/no-go for the owner.
 
 ## Decisions for the owner
 
-1. Whether to fund Phase 1 when the expected gain is about 2x on startup, not the 10x Phase 3 needs. Or whether to revise
+1. Whether to fund Phase 1 when the expected gain is about 2x on startup, or 4x with traces off, not the 10x Phase 3 needs. Or whether to revise
    Phase 3's gate first, after the Ivy Bridge ladder (Phase 0, which needs access to that host).
 2. Whether to accept a new subsystem of about 2k lines in the fork's core, carried through every rebase.
 3. Whether the cache is per node class, built on the target CPU (recommended), or per image, which needs Ivy
