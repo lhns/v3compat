@@ -3,9 +3,10 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** Phase 1. Emulation, the launcher and exec follow run on DynamoRIO built from our fork. Phase 1's whole-process
-time is unmet; see "Open items". Decisions are in the [ADRs](adr/README.md);
-this file holds the current state and the numbers behind it.
+**Status:** Phase 1 met (its compute target excludes startup); Phase 2, speed, in progress. Emulation, the launcher and
+exec follow run on DynamoRIO built from our fork. Whole-process time, startup included, is still far from native; see
+"Open items". Decisions are in the [ADRs](adr/README.md); this file holds the current state and the numbers behind it.
+How to build, test and run labs: [howto.md](howto.md).
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -44,13 +45,16 @@ needed. Instructions the CPU has are copied; the others are expanded or sent to 
 
 ### Translation rules
 
+As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x cheaper.
+
 | Instruction | Handling | Cost per op |
 |---|---|---|
 | Hot lane-wise AVX2: `vpaddq`, `vpmuludq`, `vpsrlq`, `vpsllq` | Inline, two 128-bit operations | 3 ns; 5 ns from memory **[measured]** |
 | Forms AVX1 has under another opcode | Native substitution | Native |
+| `rorx`, `andn`, `mulx`, `movbe` (load and store); `shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt` (32 and 64 bits) | Inline; flags saved around the sequence or written as the instruction defines them | 0.6-2.7 ns on a runner **[measured]** |
+| AVX2 gathers | Inline, one load per element | |
 | Other vector forms, FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
-| `lzcnt`, `tzcnt`, BMI1, BMI2, MOVBE loads | Helper through the mcontext | 320-400 ns **[measured]** |
-| MOVBE stores | Inline byte swap and store | Small **[estimate]** |
+| `bextr`, `blsi`, `blsr`, `blsmsk`, `pdep`, `pext`, 16-bit `lzcnt`/`tzcnt` | Helper through the mcontext | 320-400 ns **[measured]** |
 | `cpuid` | Translated to report the emulated CPU | Rare |
 | `xgetbv` | Native: AVX2 adds no XCR0 bits | Native |
 
@@ -76,7 +80,9 @@ The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-ca
 
 With a translator every executed instruction passes through it, so tests matter more than the design.
 
-1. **Spec.** Every form generated from XED's tables; CI fails if a form has no status. Of 578 forms, 84 are refused.
+1. **Spec.** Every form generated from XED's tables; CI fails if a form has no status. Of avxemu's 578 forms, 574 are
+   tested; the 4 refused are the F16C conversions, which Ivy Bridge has natively. `test/sem/refused.txt` lists the
+   tested forms the client still refuses: none, and `semantic-hw` fails if the list is not exact either way.
 2. **Decoder.** Differential against a real disassembler.
 3. **Semantics.** Differential against real AVX2 silicon, references recorded on AVX2 and replayed on AVX-only CPUs. The
    forms match the references apart from `mem_read` zero-fill. The reference was recorded on AMD EPYC. On Intel Xeon
@@ -331,7 +337,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | Not started |
+| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline forms (#33, #35) |
 | **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
@@ -355,7 +361,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   0 of 300 after, at most 1% (95%) **[measured]**.
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
-- **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
+- **Cache reset** (matters only if reset is turned back on; the launcher keeps it off, [ADR 0010](adr/0010-no-cache-reset.md)).
+  Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
   (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
   `test/regstress.c`.
 - **DynamoRIO static re-attach loses AVX-512 state.** `api.static_prepop` fails in its second attach on AVX-512 CPUs only
@@ -368,6 +375,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
+- **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
+  performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **javac and Java crash under any client** (SIGSEGV in DynamoRIO, status 255): javac 0 of 8 runs survive with an empty
   client on the fork and 0 of 16 on stock upstream, launcher options or not; Java's benchmark about half. The crash is
   in `remove_fraglist_entry` while a trace in progress is torn down or extended (`reset_trace_state`,
@@ -380,7 +389,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
   with an exactness guard, if a workload needs it; the next inline batch by what still reaches a helper after #35
   (duckdb varied executes 391M `rorx`, 195M `andn`, 145M `vpaddq`, 46M `movbe`, already inline, then `vpermpd`,
-  `vpshufd`, `vpermd`, `vpmovmskb` at 3-5M each). Each needs an A/B on Ivy Bridge, pending access to that host.
+  `vpshufd`, `vpermd`, `vpmovmskb` at 3-5M each). Runner numbers understate helper cost 2-4x against Ivy Bridge; an Ivy
+  Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
 
 ## License
 

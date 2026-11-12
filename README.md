@@ -17,13 +17,14 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
 
 **Limits and known problems:**
 - The shipped config runs with DynamoRIO's cache reset off (`-no_enable_reset`, [ADR 0010](docs/adr/0010-no-cache-reset.md)).
-  Measured on AVX2 runners: 0 of 230 bad duckdb runs (at most 1.3% at 95%), 0 of 377 in the signal stress and
-  0 of 296 in the register and flags stress (`test/regstress.c`). The docs give no bound for the last two; by the
-  rule of three they are about 0.8% and 1.0%. Zero failures do not prove a rate of zero. It is unclear from the docs whether
-  the 296 run was under the client or DynamoRIO alone.
+  The stress set on AVX2 runners at the current pin: duckdb 0 of 240 bad, signal stress 0 of 390, register and flags
+  stress (`test/regstress.c`) 0 of 306 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500.
+  Zero failures bound the rate, they do not prove it zero: by the rule of three, at most 1.3%, 0.8%, 1.0% and 0.07% (95%).
 - Every system call leaves the code cache (`-no_ignore_syscalls`, [ADR 0011](docs/adr/0011-no-ignored-syscalls.md)), so code a JIT unmaps is freed while other threads wait.
 - A `vfork` child killed with SIGKILL before it execs can hang or crash its parent (`docs/plan.md`, open items).
-- Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet. JVM workloads (13x to 84x) are out of scope.
+- Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet.
+- Java and javac crash inside DynamoRIO under any client (upstream has the bug too); a fork fix is in progress. JVM
+  workloads are in scope; see "Open items" in the plan.
 
 **Untested or unverified:**
 - Ivy Bridge since the last fix: the reset and stress results above come from AVX2 runners, not Ivy Bridge. The earlier
