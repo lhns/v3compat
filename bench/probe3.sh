@@ -26,32 +26,39 @@ crash)
   echo "SYM crash offsets:"; sym 0x93799 0x9359d
   objdump -d --no-show-raw-insn --start-address=$((BASE+0x93700)) --stop-address=$((BASE+0x937c0)) "$DBG" | tail -40
   objdump -d --no-show-raw-insn --start-address=$((BASE+0x93520)) --stop-address=$((BASE+0x935c0)) "$DBG" | tail -30
-  # A backtrace at DR's crash report, under gdb (the app's and DR's own SIGSEGVs pass through).
-  cat > /tmp/gdbcmds <<'G'
-set pagination off
-set breakpoint pending on
-set follow-exec-mode same
-handle SIGSEGV nostop noprint pass
-handle SIGBUS nostop noprint pass
-handle SIGILL nostop noprint pass
-handle SIGUSR1 nostop noprint pass
-handle SIGUSR2 nostop noprint pass
-handle SIGCHLD nostop noprint pass
-handle SIGQUIT nostop noprint pass
-handle SIG62 nostop noprint pass
-handle SIG63 nostop noprint pass
-handle SIG64 nostop noprint pass
-break report_dynamorio_problem
-run
-bt 30
-frame 0
-info registers
-thread apply all bt 8
+  # A backtrace at the faulting instruction: every SIGSEGV stops, and is passed on unless it is at one of the two PCs.
+  cat > /tmp/gdb.py <<'G'
+import gdb
+dbg = __import__('os').environ['DBG']
+gdb.execute("set pagination off")
+gdb.execute("set follow-exec-mode same")
+for s in ("SIGBUS", "SIGILL", "SIGUSR1", "SIGUSR2", "SIGCHLD", "SIGQUIT", "SIGPIPE"):
+    gdb.execute("handle %s nostop noprint pass" % s)
+gdb.execute("handle SIGSEGV stop noprint pass")
+gdb.execute("run")
+n = 0
+while True:
+    try:
+        pc = int(gdb.parse_and_eval("$pc"))
+    except gdb.error:
+        print("EXITED after", n, "SIGSEGVs"); break
+    if (pc & 0xfffff) in (0x9359d, 0x93799):
+        m = [l for l in gdb.execute("info proc mappings", to_string=True).splitlines() if "libdynamorio.so" in l]
+        base = int(m[0].split()[0], 16)
+        print("CAUGHT pc", hex(pc), "DRBASE", hex(base), "after", n)
+        gdb.execute("add-symbol-file %s -o %#x" % (dbg, base - 0x71000000))
+        for c in ("bt 40", "info registers rip rax rbx rcx rdx rsi rdi r12 r13 r14 r15", "x/8i $pc-16", "thread apply all bt 8"):
+            print("### " + c); gdb.execute(c)
+        break
+    n += 1
+    gdb.execute("continue")
 G
-  for i in 1 2 3; do
+  for i in 1 2 3 4; do
     echo "== gdb run $i"
-    timeout 600 gdb -q -batch -x /tmp/gdbcmds --args env V3COMPAT_NULL=1 $RUN -- $JAVAC 2>&1 | grep -vE '^\[(New|Thread|Detaching)|^warning: ' | head -150
+    DBG=$DBG timeout 1500 gdb -q -batch -x /tmp/gdb.py --args env V3COMPAT_NULL=1 $RUN -- $JAVAC 2>&1 |
+      grep -vE '^\[(New|Thread|Detaching|LWP|Inferior)|^warning: |^Program received|^process ' | head -250
   done
+  exit 0
   # Which DR options avoid it: javac under the null client and the client, 6 runs each.
   for o in "" "-sandbox2ro_threshold 0" "-thread_private" "-ro2sandbox_threshold 0 -sandbox2ro_threshold 0"; do
     for c in null client; do
