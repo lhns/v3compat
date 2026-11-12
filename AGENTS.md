@@ -29,3 +29,4 @@ How to build, test, run labs and change the DynamoRIO fork: [docs/howto.md](docs
   a helper's cost varies 3x between them. Interleave base and new in one job; report the CPU model and ok/runs.
 - **Poll GitHub lightly** (minutes, not seconds): the API rate limit is shared with other work.
 - **A Java or javac number under DynamoRIO** is only valid with its crash rate; see "Open items" in the plan.
+- **Failures that are not regressions** are listed under [Known flakes](docs/plan.md#known-flakes).
