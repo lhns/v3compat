@@ -1,0 +1,55 @@
+# Labs: push a branch named lab-* to run each line of lab/parts as its own job (docs/howto.md).
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  parts:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.p.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: |
+          echo "matrix=$(grep -vE '^\s*(#|$)' lab/parts | python3 -c 'import json,sys; print(json.dumps([{"name": l.split(None, 1)[0], "cmd": l.split(None, 1)[1].strip()} for l in sys.stdin]))')" >> "$GITHUB_OUTPUT"
+  lab:
+    needs: parts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.parts.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Packages
+        run: for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd gdb && break; sleep 60; done
+      - name: Build the branch, base (origin/main) for ab parts, the benchmarks
+        run: |
+          cmake -S . -B build && cmake --build build -j
+          case "${{ matrix.part.name }}" in ab*)
+            git fetch -q origin main && git worktree add /tmp/base origin/main
+            cmake -S /tmp/base -B /tmp/base/build && cmake --build /tmp/base/build -j ;;
+          esac
+          mkdir -p /tmp/bench/classes && "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
+          gcc -O3 -march=x86-64-v3 bench/fma.c -o /tmp/bench/fma -lm
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+      - name: Run
+        timeout-minutes: 280
+        run: |
+          export PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          mkdir -p lab-out
+          ${{ matrix.part.cmd }} 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name)'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lab-${{ matrix.part.name }}
+          path: lab-out

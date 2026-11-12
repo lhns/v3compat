@@ -3,9 +3,10 @@
 Run x86-64-v3 programs (AVX2, FMA, BMI1, BMI2, LZCNT, MOVBE) on CPUs that have AVX but not AVX2, such as
 Ivy Bridge, at close to native speed.
 
-**Status:** Phase 1. Emulation, the launcher and exec follow run on DynamoRIO built from our fork. Phase 1's whole-process
-time is unmet; see "Open items". Decisions are in the [ADRs](adr/README.md);
-this file holds the current state and the numbers behind it.
+**Status:** Phase 1 met (its compute target excludes startup); Phase 2, speed, in progress. Emulation, the launcher and
+exec follow run on DynamoRIO built from our fork. Whole-process time, startup included, is still far from native; see
+"Open items". Decisions are in the [ADRs](adr/README.md); this file holds the current state and the numbers behind it.
+How to build, test and run labs: [howto.md](howto.md).
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -44,6 +45,8 @@ needed. Instructions the CPU has are copied; the others are expanded or sent to 
 
 ### Translation rules
 
+As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x cheaper.
+
 | Instruction | Handling | Cost per op |
 |---|---|---|
 | Hot lane-wise AVX2: add, sub, compare, min, max, `vpmullw`/`vpmulld`/`vpmuludq`, `vpshufb`, shifts; `vpmovzx`/`vpmovsx`, `vpbroadcast` (register source), `vpabs` | Inline, two 128-bit halves | 2-5 ns **[measured]**; 2.2 ns for `vpcmpeqd`, `vpmovzxbq`, `vpbroadcastb`, `vpabsd` on EPYC 9V45 |
@@ -76,7 +79,9 @@ The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-ca
 
 With a translator every executed instruction passes through it, so tests matter more than the design.
 
-1. **Spec.** Every form generated from XED's tables; CI fails if a form has no status. Of 578 forms, 84 are refused.
+1. **Spec.** Every form generated from XED's tables; CI fails if a form has no status. Of avxemu's 578 forms, 574 are
+   tested; the 4 refused are the F16C conversions, which Ivy Bridge has natively. `test/sem/refused.txt` lists the
+   tested forms the client still refuses: none, and `semantic-hw` fails if the list is not exact either way.
 2. **Decoder.** Differential against a real disassembler.
 3. **Semantics.** Differential against real AVX2 silicon, references recorded on AVX2 and replayed on AVX-only CPUs. The
    forms match the references apart from `mem_read` zero-fill. The reference was recorded on AMD EPYC. On Intel Xeon
@@ -104,7 +109,7 @@ Strong evidence, not proof. Keep storage and database primaries off it.
 | Java CPU benchmark | 0.73 s | 9.51 s | 13x |
 | `java -version` | 0.024 s | 2.0 s | 84x |
 
-JVM workloads are out of scope for now. Default Go builds (`GOAMD64=v1`) need no AVX2 and run natively. `-persist` does not
+JVM workloads were out of scope then; they are in scope now ("Open items"). Default Go builds (`GOAMD64=v1`) need no AVX2 and run natively. `-persist` does not
 persist a client's blocks and made runs slower (4.5 s against 0.7 s). Density in duckdb: AVX2-only mnemonics 0.016% of
 executed instructions, BMI2 about 0.03%. SIGILL round trip in a VM on Ivy Bridge: 12.3 us, 86 us under DynamoRIO.
 
@@ -135,6 +140,34 @@ duckdb 2.0.0 whole-process wall time, cold; output hashes equal in all columns:
 
 Startup is about 5 s of the Ivy Bridge time; the compute query adds about 1.1 s.
 
+### JIT workloads and the performance baseline (2026-11-12)
+
+`bench/` on GitHub runners (EPYC 7763 and Xeon 8370C), every configuration interleaved in one job, median wall,
+digests equal native wherever a run succeeded, main before the inline PRs **[measured]**:
+
+| Workload | Native | DynamoRIO alone | Client |
+|---|---|---|---|
+| Node `bench/jit.js` | 0.93-0.98 s | 4.1-4.5 s | 5.2-6.0 s |
+| `node -e 0` / `npm --version` | 0.02 / 0.07 s | 0.46-0.51 s / not measured | 0.73-0.83 / 2.95-3.3 s |
+| Java `bench/Bench.java` | 1.15-1.21 s | 17.8-22.8 s | 85-120 s (5 of 9 runs) |
+| `java -version` | 0.02-0.03 s | 2.8-3.6 s | 3.7-4.8 s |
+| javac (compiling `Bench.java`) | 0.78-0.81 s | 78-93 s | crashes (below) |
+| duckdb compute / varied | 0.15-0.17 / 4.8-5.2 s | 0.8-0.9 / 8.4-8.9 s | 1.4-1.7 / 14.9-16.2 s |
+
+- **Two kinds of cost.** Emulation-dense code pays per helper call: Java's bit loop executed 318M `shrx`, 164M `tzcnt`
+  and 159M `lzcnt` through the mcontext helper (about 85 ns each on a runner), duckdb's mixed query 649M BMI and 515M
+  AVX2. JIT-heavy startup pays DynamoRIO: javac builds 7.9M blocks; 36-52% of its time is the kernel serving
+  `/proc/self/maps` reads (814k `read` calls, 148k `mprotect`, 22k signals) and most of the rest is libdynamorio.
+- **Any client costs 15-45% over DynamoRIO alone** on JIT startup (Node 2.63 to 3.03 s with an empty client, 3.26 s with
+  ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
+  `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
+- **Node's v3 forms come from glibc's AVX2 string routines**, not V8 (turning V8's v3 flags off changes no count).
+- **FMA** through the helper: 85-210 ns scalar, 165-465 ns packed (the call itself is about 27 ns); softfma's integer
+  path is the rest. Only `Math.fma` in Java hit it among the workloads (65M).
+- **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
+  0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
+  duckdb varied 8.32 to 6.67 s). Neither measured on Ivy Bridge.
+
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
 Statuses: 86 refused instruction, 87 the launcher refused the program, 125 launcher failure, 126 and 127 as in a shell;
@@ -164,7 +197,7 @@ upstream with no client 50 of 482, 28 silent; native 0 of 60.
 
 | On the fork with the register fix | Bad |
 |---|---|
-| Client, as shipped (reset off) | 0 of 230: at most 1.3% (95%) |
+| Client, as shipped (reset off) | 0 of 230 at the time: at most 1.3% (95%); 0 of 240 at each later pin |
 | DynamoRIO alone, default reset | 0 of 643 |
 | DynamoRIO alone, resets forced | 0 of 521 |
 | Client, resets forced, regexp query | 21 of 21; helpers only 20 of 20; no expansions 0 of 70 |
@@ -303,9 +336,22 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | Not started |
+| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
 | **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
+
+## Known flakes
+
+Failures seen that are not regressions; a PR may cite them, with the counts, instead of fixing them.
+
+- **`client.attach_test`** in DynamoRIO's own suite fails intermittently on base and fix alike: rerun it (the suite
+  workflow reruns one-sided failures 20 times).
+- **`api.static_prepop`** fails in its second attach on AVX-512 runners (static re-attach loses AVX-512 state, "Open
+  items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
+- **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
+  any commit. Use release there, or another runner, for the debug suite.
+- **One `regstress sig jit` SIGSEGV** under the client in CI, never reproduced (0 of 1,000 on several runners). If it
+  recurs, keep the CPU model and the run, and rerun `lab/stress.sh sig` on that runner type.
 
 ## Open items
 
@@ -327,8 +373,9 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
   0 of 300 after, at most 1% (95%) **[measured]**.
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
-- **Cache reset.** Flags lost in the relocation window (upstream i#400), crashes under the client with forced resets
-  (likely upstream i#4219, not tested), hangs under reset with code churn. Anything new that relocates a thread needs
+- **Cache reset** (matters only if reset is turned back on; the launcher keeps it off, [ADR 0010](adr/0010-no-cache-reset.md)).
+  Flags lost in the relocation window (upstream [i#400](https://github.com/DynamoRIO/dynamorio/issues/400)), crashes under
+  the client with forced resets (likely upstream [i#4219](https://github.com/DynamoRIO/dynamorio/issues/4219), not tested), hangs under reset with code churn. Anything new that relocates a thread needs
   `test/regstress.c`.
 - **DynamoRIO static re-attach loses AVX-512 state.** `api.static_prepop` fails in its second attach on AVX-512 CPUs only
   (glibc's EVEX `strchrnul` returns a wrong position); 0 of 10 with glibc's AVX-512 routines disabled. Base fails too (debug 20 of 20,
@@ -340,7 +387,24 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
-- **JIT-heavy programs** may regress past AVXEmu's 1.2x: Node 2.4x, Java 13x. **FMA** under correct rounding stays slow.
+- **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
+  performance list; the OCI wrapper after that. JVM workloads are in scope.
+- **javac and Java crash under any client** (SIGSEGV in DynamoRIO, status 255): javac 0 of 8 runs survive with an empty
+  client on the fork and 0 of 16 on stock upstream, launcher options or not; Java's benchmark about half. The crash is
+  in `remove_fraglist_entry` while a trace in progress is torn down or extended (`reset_trace_state`,
+  `extend_unmangled_ilist`): its per-block area lists, kept only when a client is present, lose their area. What frees
+  it is being found on a debug build. `-sandbox2ro_threshold 0` and `-thread_private` avoid it (12 of 12, slower), but the
+  fix goes in the fork. Reproduce with `lab/javac.sh` (a lab part). Evidence: lab branches `lab-perf-iso` (run
+  43134016088: fork against upstream, options), `lab-perf-probe3` (run 43138513400: release backtraces), `lab-perf-dbg`
+  (debug build, run 43229626815 in progress).
+- **javac under DynamoRIO alone** fails 2 of 8 on the fork and on upstream, at PCs outside libdynamorio or with status
+  134. Separate from the above; to be fixed in the fork too.
+- **Performance, ranked:** fewer `/proc/self/maps` reads on DynamoRIO's fault and `mprotect` paths (javac's kernel
+  time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
+  with an exactness guard, if a workload needs it; the next inline batch by what still reaches a helper since #35
+  (duckdb varied executes 391M `rorx`, 195M `andn`, 145M `vpaddq`, 46M `movbe`, already inline, then `vpermpd`,
+  `vpshufd`, `vpermd`, `vpmovmskb` at 3-5M each). Runner numbers understate helper cost 2-4x against Ivy Bridge; an Ivy
+  Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
 
 ## License
 
