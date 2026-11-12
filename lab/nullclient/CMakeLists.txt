@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+project(nullclient C)
+find_package(DynamoRIO REQUIRED)
+add_library(null SHARED null.c)
+configure_DynamoRIO_client(null)
