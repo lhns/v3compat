@@ -2,3 +2,5 @@ client bash lab/javacdiag.sh client 30
 empty bash lab/javacdiag.sh empty 30
 dr bash lab/javacdiag.sh dr 30
 drdef bash lab/javacdiag.sh dr-default 30
+java1 bash lab/javacdiag.sh client 40 java
+java2 bash lab/javacdiag.sh client 40 java
