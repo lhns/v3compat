@@ -34,3 +34,6 @@ hardware. Flags and scratch GPRs are saved and restored like `rorx`. Unprocessed
 (avxemu's `docs/vendor-differences.md`).
 
 Segments: memory operands with `fs:` or `gs:` (absolute, base, index forms) are rewritten with the application's segment base from `dr_insert_get_seg_base`, as `fs:` already was; an `fs:`/`gs:` operand with a 32-bit address (0x67) or rip-relative is refused (exit 86). The application's gs base is 0: a program that sets it (`arch_prctl(ARCH_SET_GS)`) crashes under DynamoRIO itself.
+
+## Amendment, 2026-11-12
+`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt` and `lzcnt` are inline too, chosen by executed counts in duckdb. The shifts save the flags like `rorx`; `bzhi`, `tzcnt` and `lzcnt` branch on the zero or out-of-width case and write only flags the instruction defines (the undefined AF and PF follow the sequence, as for `andn`). `bextr`, `blsi`/`blsr`/`blsmsk`, `pdep` and `pext` stay on the helper: too rare to pay.

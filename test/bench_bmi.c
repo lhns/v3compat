@@ -1,4 +1,4 @@
-// bench_bmi: time per instruction of rorx, andn, mulx and movbe (load and store), for CI to run natively,
+// bench_bmi: time per instruction of rorx, andn, mulx, movbe, shlx, shrx, sarx, bzhi, tzcnt and lzcnt, for CI to run natively,
 // under the client, and under the client with V3COMPAT_HELPERS_ONLY=1. Not a ctest: the numbers are
 // for reading. Each loop body is 64 independent copies of the instruction, so what is timed is the
 // instruction (or its expansion), not a dependency chain.
@@ -26,6 +26,12 @@ LOOP(b_andn, "andn %%rcx, %%rdx, %%r8\n")
 LOOP(b_mulx, "mulx %%rcx, %%r8, %%r9\n")
 LOOP(b_movbe_ld, "movbe (%%rdi), %%r8\n")
 LOOP(b_movbe_st, "movbe %%rcx, (%%rdi)\n")
+LOOP(b_shlx, "shlx %%rsi, %%rcx, %%r8\n")
+LOOP(b_shrx, "shrx %%rsi, %%rcx, %%r8\n")
+LOOP(b_sarx, "sarx %%rsi, %%rcx, %%r8\n")
+LOOP(b_bzhi, "bzhi %%rsi, %%rcx, %%r8\n")
+LOOP(b_tzcnt, "tzcnt %%rcx, %%r8\n")
+LOOP(b_lzcnt, "lzcnt %%rcx, %%r8\n")
 
 static double now(void) {
     struct timespec t;
@@ -58,7 +64,9 @@ int main(void) {
         const char *name;
         void (*f)(uint64_t, void *);
     } rows[] = {{"mov", b_mov}, {"rorx", b_rorx}, {"andn", b_andn},
-                {"mulx", b_mulx}, {"movbe_load", b_movbe_ld}, {"movbe_store", b_movbe_st}};
+                {"mulx", b_mulx}, {"movbe_load", b_movbe_ld}, {"movbe_store", b_movbe_st},
+                {"shlx", b_shlx}, {"shrx", b_shrx}, {"sarx", b_sarx}, {"bzhi", b_bzhi}, {"tzcnt", b_tzcnt},
+                {"lzcnt", b_lzcnt}};
     for (size_t i = 0; i < sizeof rows / sizeof rows[0]; i++)
         printf("bench %-12s %10.2f ns/op\n", rows[i].name, ns_per_op(rows[i].f, buf));
     return 0;
