@@ -65,7 +65,6 @@ To build the fork by itself: `cmake -S <fork> -B <dir> -DDEBUG=OFF -DBUILD_TESTS
 -- app` runs it with any client; an empty client is a useful control (any client changes how DynamoRIO builds
 blocks).
 
-
 The report gives the PC and `Base:`; `pc - base` plus 0x71000000 (the library's link address) is the address in
 `libdynamorio.so.debug`: `addr2line -f -i -e <debug file> <addr>`. For a backtrace, run with
 `-dumpcore_mask 0x1009` in `V3COMPAT_DR_OPTS`, wait for "Waiting for debugger" on stderr, attach `gdb -p <pid>`,

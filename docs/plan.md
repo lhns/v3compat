@@ -148,7 +148,7 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
 | Workload | Native | DynamoRIO alone | Client |
 |---|---|---|---|
 | Node `bench/jit.js` | 0.93-0.98 s | 4.1-4.5 s | 5.2-6.0 s |
-| `node -e 0` / `npm --version` | 0.02 / 0.07 s | 0.46-0.51 s / | 0.73-0.83 / 2.95-3.3 s |
+| `node -e 0` / `npm --version` | 0.02 / 0.07 s | 0.46-0.51 s / not measured | 0.73-0.83 / 2.95-3.3 s |
 | Java `bench/Bench.java` | 1.15-1.21 s | 17.8-22.8 s | 85-120 s (5 of 9 runs) |
 | `java -version` | 0.02-0.03 s | 2.8-3.6 s | 3.7-4.8 s |
 | javac (compiling `Bench.java`) | 0.78-0.81 s | 78-93 s | crashes (below) |
