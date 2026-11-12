@@ -1,0 +1,44 @@
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Packages
+        run: |
+          for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd && break; sleep 60; done
+      - name: Build new
+        run: cmake -S . -B build -DV3COMPAT_SEMANTIC=OFF && cmake --build build -j
+      - name: Build base (origin/main)
+        run: |
+          git worktree add /tmp/base origin/main
+          cmake -S /tmp/base -B /tmp/base/build -DV3COMPAT_SEMANTIC=OFF && cmake --build /tmp/base/build -j
+      - name: Bench programs
+        run: |
+          mkdir -p /tmp/bench/classes
+          "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+      - name: Run
+        timeout-minutes: 170
+        run: |
+          export PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          mkdir -p lab-out
+          bash bench/ab.sh 4 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|BENCH|DETAIL|STDERR-HEAD)'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lab-ab
+          path: lab-out
