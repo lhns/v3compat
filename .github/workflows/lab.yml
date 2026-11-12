@@ -38,6 +38,11 @@ jobs:
             git fetch -q origin main && git worktree add /tmp/base origin/main
             cmake -S /tmp/base -B /tmp/base/build && cmake --build /tmp/base/build -j ;;
           esac
+          case "${{ matrix.part.name }}" in iblab)
+            git fetch -q origin main && git worktree add /tmp/old origin/main
+            cp -r test bench lab /tmp/old/ 2>/dev/null; cmake -S /tmp/old -B /tmp/old/build >/dev/null && cmake --build /tmp/old/build -j >/dev/null
+            gcc -O2 bench/ibl.c -o /tmp/bench/ibl ;;
+          esac
           mkdir -p /tmp/bench/classes && "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
           gcc -O3 -march=x86-64-v3 bench/fma.c -o /tmp/bench/fma -lm
           img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
