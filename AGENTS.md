@@ -23,7 +23,7 @@ How to build, test, run labs and change the DynamoRIO fork: [docs/howto.md](docs
 - **drrun options after `-c client.so` go to the client**, not to DynamoRIO: `drrun <DR options> -c lib.so <client options> -- app`.
 - **`-no_enable_traces` does not disable traces**; `-disable_traces` does.
 - **`-pause_on_error` also stops on curiosities**, which are benign; a script waiting for an assert then hangs.
-  Use `-dumpcore_mask 0x1009` (internal exceptions and asserts, wait for a debugger).
+  Use `-dumpcore_mask 0x1009` (internal exceptions and asserts, wait for a debugger; untested).
 - **Never time a run with `V3COMPAT_STATS=1`**: it adds a clean call per block and per emulated instruction.
 - **Compare only within one job.** GitHub runners differ by CPU model (EPYC 7763, 9V45, 9V74, Xeon 8370C, 8573C) and
   a helper's cost varies 3x between them. Interleave base and new in one job; report the CPU model and ok/runs.

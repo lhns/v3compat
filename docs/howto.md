@@ -67,7 +67,7 @@ blocks).
 
 The report gives the PC and `Base:`; `pc - base` plus 0x71000000 (the library's link address) is the address in
 `libdynamorio.so.debug`: `addr2line -f -i -e <debug file> <addr>`. For a backtrace, run with
-`-dumpcore_mask 0x1009` in `V3COMPAT_DR_OPTS`, wait for "Waiting for debugger" on stderr, attach `gdb -p <pid>`,
+`-dumpcore_mask 0x1009` (untested) in `V3COMPAT_DR_OPTS`, wait for "Waiting for debugger" on stderr, attach `gdb -p <pid>`,
 `add-symbol-file <debug file> -o <base - 0x71000000>`, select the crashing thread and set `$rip`, `$rsp`, `$rbp` and
 the other registers from the report before `bt`. A debug build of the fork (`-DDEBUG=ON` in
 `cmake/FetchDynamoRIO.cmake`, with its own `-DV3COMPAT_DR_CACHE`) turns the release crash into the first failed assert.
