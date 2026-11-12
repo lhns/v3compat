@@ -7,7 +7,7 @@ permissions:
 jobs:
   dbg:
     runs-on: ubuntu-24.04
-    timeout-minutes: 300
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -24,7 +24,7 @@ jobs:
           cmake -S lab/nullclient -B /tmp/null-dbg-b -DDynamoRIO_DIR=${D}cmake -DDEBUG=ON && cmake --build /tmp/null-dbg-b && mkdir -p /tmp/null-dbg && cp /tmp/null-dbg-b/libnull.so /tmp/null-dbg/
           mkdir -p /tmp/bench/classes && "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
       - name: Run
-        timeout-minutes: 280
+        timeout-minutes: 200
         run: |
           export PATH="$JAVA_HOME_21_X64/bin:$PATH"
           mkdir -p lab-out; bash lab/dbg.sh 2>&1 | tee lab-out/log.txt | grep -E '^== run|Internal Error|debug check|ASSERT|pid=|no failure|rc='
