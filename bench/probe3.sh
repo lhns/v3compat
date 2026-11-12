@@ -12,16 +12,20 @@ perf buildid-cache -a "$DBG" 2>&1 | head -2; perf buildid-cache -a "$LIB" 2>&1 |
 sym() { python3 - "$DBG" "$@" <<'PY'
 import subprocess, sys
 dbg = sys.argv[1]
-out = subprocess.run(['addr2line', '-f', '-i', '-C', '-e', dbg] + [hex(int(a, 16)) for a in sys.argv[2:]], capture_output=True, text=True).stdout
+ph = subprocess.run(['readelf', '-lW', dbg], capture_output=True, text=True).stdout
+base = min(int(l.split()[2], 16) for l in ph.splitlines() if l.strip().startswith('LOAD'))
+print('link base', hex(base))
+out = subprocess.run(['addr2line', '-f', '-i', '-C', '-e', dbg] + [hex(base + int(a, 16)) for a in sys.argv[2:]], capture_output=True, text=True).stdout
 print(out)
 PY
 }
 case $PART in
 crash)
   readelf -lW "$LIB" | grep LOAD | head -3
+  BASE=$(readelf -lW "$DBG" | awk '$1=="LOAD" {print $3; exit}')
   echo "SYM crash offsets:"; sym 0x93799 0x9359d
-  objdump -d --no-show-raw-insn --start-address=0x93700 --stop-address=0x937c0 "$DBG" | tail -40
-  objdump -d --no-show-raw-insn --start-address=0x93520 --stop-address=0x935c0 "$DBG" | tail -30
+  objdump -d --no-show-raw-insn --start-address=$((BASE+0x93700)) --stop-address=$((BASE+0x937c0)) "$DBG" | tail -40
+  objdump -d --no-show-raw-insn --start-address=$((BASE+0x93520)) --stop-address=$((BASE+0x935c0)) "$DBG" | tail -30
   # A backtrace at DR's crash report, under gdb (the app's and DR's own SIGSEGVs pass through).
   cat > /tmp/gdbcmds <<'G'
 set pagination off
