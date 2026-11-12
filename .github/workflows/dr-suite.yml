@@ -10,7 +10,7 @@ permissions:
 
 env:
   BASE: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
-  FIX: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
+  FIX: da60578e58d56694968b2fb34b300f1af61608f0
 jobs:
   suite:
     runs-on: ubuntu-22.04
