@@ -484,7 +484,23 @@ __asm__(".text\n"
 extern char lean_thunk[] __attribute__((visibility("hidden")));
 
 /* rsp is the only application state that differs inside this sequence; event_restore has it from SAVE_SP. */
+#ifndef V3C_PROBE
+#define V3C_PROBE 0
+#endif
+/* Lab only: 1 DR clean call to an empty function, 2 no call, 4 lean without ymm saves. */
+static void probe_empty(uint64 d) { (void)d; }
+__asm__(".text\n.p2align 4\nlean_thunk_noy:\n pushfq\n cld\n"
+        "push %rax\n push %rcx\n push %rdx\n push %rsi\n push %rdi\n push %r8\n push %r9\n push %r10\n push %r11\n"
+        "sub $8, %rsp\n call lean_entry\n add $8, %rsp\n"
+        "pop %r11\n pop %r10\n pop %r9\n pop %r8\n pop %rdi\n pop %rsi\n pop %rdx\n pop %rcx\n pop %rax\n popfq\n ret\n");
+extern char lean_thunk_noy[] __attribute__((visibility("hidden")));
 static void insert_lean_call(emit_t *e, uint32_t desc) {
+    if (V3C_PROBE == 1) {
+        dr_insert_clean_call_ex(e->dc, e->bb, e->where, (void *)probe_empty, DR_CLEANCALL_ALWAYS_OUT_OF_LINE, 1,
+                                OPND_CREATE_INT64(desc));
+        return;
+    }
+    if (V3C_PROBE == 2) return;
     put(e, INSTR_CREATE_mov_st(e->dc, SAVE_SP, reg(DR_REG_RSP)));
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RSP), tls_opnd(offsetof(tls_t, stack), OPSZ_8)));
     put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, desc), OPSZ_4), OPND_CREATE_INT32((int)desc)));
@@ -1328,7 +1344,7 @@ static void event_thread_init(void *dc) {
     byte *s = dr_raw_mem_alloc(HSTACK_GUARD + HSTACK_SIZE, DR_MEMPROT_READ | DR_MEMPROT_WRITE, NULL);
     if (s == NULL || !dr_memory_protect(s, HSTACK_GUARD, DR_MEMPROT_NONE)) dr_abort_with_code(V3COMPAT_REFUSED);
     t->stack = (uint64)(s + HSTACK_GUARD + HSTACK_SIZE);
-    t->thunk = (uint64)lean_thunk;
+    t->thunk = V3C_PROBE == 4 ? (uint64)lean_thunk_noy : (uint64)lean_thunk;
     drmgr_set_tls_field(dc, tls_idx, t);
 }
 
