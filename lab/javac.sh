@@ -7,6 +7,7 @@ grep -m1 'model name' /proc/cpuinfo
 DR=$HOME/.cache/v3compat/dr-$(sed -n 's/^set(V3COMPAT_DR_COMMIT \([0-9a-f]*\))/\1/p' cmake/FetchDynamoRIO.cmake)/
 echo "DynamoRIO $DR"
 cmake -S lab/nullclient -B /tmp/null-b -DDynamoRIO_DIR=${DR}cmake >/dev/null && cmake --build /tmp/null-b >/dev/null || exit 1
+mkdir -p /tmp/bench/javac-out
 JAVAC="javac -J-XX:UseAVX=2 -d /tmp/bench/javac-out bench/Bench.java"
 declare -A C=([client]="$PWD/build/inst/bin/v3compat-run --"
               [empty-client]="${DR}bin64/drrun -no_enable_reset -no_ignore_syscalls -c /tmp/null-b/libnull.so --"
