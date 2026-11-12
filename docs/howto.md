@@ -115,8 +115,8 @@ Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner a
   bbs. A *flush* removes fragments for a code range (a JIT writing code, an `munmap`); they are freed once every thread
   has passed a *synch point* (a safe spot outside the cache). A *cache reset* throws away the whole cache and relocates
   every thread, which we keep off ([ADR 0010](adr/0010-no-cache-reset.md)). A *clean call* saves the whole machine state
-  to call C from the cache; our helpers use it. A *frame helper* gets its operands through raw TLS and saves no
-  application state beyond what it clobbers; an *mcontext helper* reads and writes the full saved machine context
+  to call C from the cache; mcontext helpers use it. A *frame helper* gets its operands through raw TLS and is called
+  through a thunk on its own stack that saves only what the helper may clobber ([ADR 0007](adr/0007-hot-ops-inline-in-phase-1.md)); an *mcontext helper* reads and writes the full saved machine context
   (slower, for forms that write flags or several registers). *Linking* patches a fragment's exit to jump straight to
   the next fragment; *unlinking* sends it back through DynamoRIO (done before a flush, or to get a thread's attention).
   A *nudge* is DynamoRIO's request to a thread delivered by signal; the *nudge relink* is how the thread's fragment is

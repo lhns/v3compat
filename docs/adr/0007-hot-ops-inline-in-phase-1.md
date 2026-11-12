@@ -40,3 +40,9 @@ Segments: memory operands with `fs:` or `gs:` (absolute, base, index forms) are 
 
 ## Amendment, 2026-11-12 (2)
 Vector forms by the same counts: `vpand`, `vpor`, `vpxor` and `vpandn` on ymm are substituted by `vandps`, `vorps`, `vxorps` and `vandnps` (same bits, same faults). The lane-wise add, subtract, compare, min, max, multiply-low, `vpshufb` and shift forms join the two-half inline path; `vpmovzx`/`vpmovsx`, `vpbroadcastb/w/d/q` (register source) and `vpabs` get their own two-half sequence, and narrow memory sources read exactly their width. Lane-crossing forms (`vpermd`, `vpermq`, `vpermpd`), `vpmovmskb` and `vpshufd` stay on the helper.
+
+## Amendment, 2026-11-12 (3)
+Frame helpers leave DynamoRIO's clean call. The fragment moves rsp to a per-thread helper stack and calls a thunk that saves
+only what the helper may clobber under the SysV ABI (rax, rcx, rdx, rsi, rdi, r8-r11, all 16 ymm, the flags) and clears DF.
+rsp is the only application state that differs in the fragment meanwhile, and the restore event puts it back; in the thunk,
+as in a clean callee, DynamoRIO defers signals. Mcontext helpers, `cpuid` and refusals keep the clean call.
