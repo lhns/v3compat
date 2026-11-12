@@ -27,7 +27,7 @@ jobs:
         timeout-minutes: 280
         run: |
           export PATH="$JAVA_HOME_21_X64/bin:$PATH"
-          mkdir -p lab-out; bash lab/dbg.sh 2>&1 | tee lab-out/log.txt | grep -E '^== run|ASSERT|pid=|no failure|rc='
+          mkdir -p lab-out; bash lab/dbg.sh 2>&1 | tee lab-out/log.txt | grep -E '^== run|Internal Error|debug check|ASSERT|pid=|no failure|rc='
       - uses: actions/upload-artifact@v4
         if: always()
         with:

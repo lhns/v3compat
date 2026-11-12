@@ -6,14 +6,14 @@ grep -m1 'model name' /proc/cpuinfo
 DR=$(ls -d ~/.cache/v3dbg/dr-*[0-9a-f]/); LIB=${DR}lib64/debug/libdynamorio.so; DBG=$LIB.debug
 ls -la "$LIB" "$DBG"
 JAVAC="javac -J-XX:UseAVX=2 -d /tmp/bench/javac-out bench/Bench.java"
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5 6; do
   echo "== run $i"
-  timeout 2400 ${DR}bin64/drrun -debug -c /tmp/null-dbg/libnull.so -pause_on_error -no_enable_reset -no_ignore_syscalls -- $JAVAC >/dev/null 2>/tmp/pe &
+  timeout 2400 ${DR}bin64/drrun -debug -pause_on_error -no_enable_reset -no_ignore_syscalls -c /tmp/null-dbg/libnull.so -- $JAVAC >/dev/null 2>/tmp/pe &
   w=$!
-  for t in $(seq 2400); do grep -qE 'ASSERT|Received SIG|internal crash|CURIOSITY' /tmp/pe 2>/dev/null && break; kill -0 $w 2>/dev/null || break; sleep 1; done
+  for t in $(seq 2400); do grep -qE 'Internal Error|debug check failure|ASSERT|Received SIG|internal crash' /tmp/pe 2>/dev/null && break; kill -0 $w 2>/dev/null || break; sleep 1; done
   sleep 3
-  head -c 2500 /tmp/pe
-  if ! grep -qE 'ASSERT|Received SIG|internal crash' /tmp/pe; then echo "no failure (rc of wait follows)"; wait $w; echo "rc=$?"; continue; fi
+  grep -vE '^WARNING|^<(Resetting|curiosity|Not tested|writing to)' /tmp/pe | head -c 4000
+  if ! grep -qE 'Internal Error|debug check failure|ASSERT|Received SIG|internal crash' /tmp/pe; then echo "no failure (rc of wait follows)"; wait $w; echo "rc=$?"; continue; fi
   pid=$(pgrep -f 'javac-out' | head -1)
   base=$(grep -m1 'libdynamorio.so' /proc/$pid/maps | cut -d- -f1)
   echo "pid=$pid base=0x$base"
