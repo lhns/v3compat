@@ -31,8 +31,8 @@
     STUBV(t_##mn##_a, #mn " %ymm2, %ymm1, %ymm1\n" KEEP1);                                                \
     STUBV(t_##mn##_b, #mn " %ymm2, %ymm1, %ymm2\n" KEEP2);                                                \
     STUBV(t_##mn##_s, #mn " %ymm2, %ymm2, %ymm0\n")
-PERMD(vpermd)
-PERMD(vpermps)
+PERMD(vpermd);
+PERMD(vpermps);
 
 // Immediate forms: source B.
 #define IMMS(X, mn) X(mn, 0x1b) X(mn, 0x4e) X(mn, 0x72) X(mn, 0xff) X(mn, 0x00)
