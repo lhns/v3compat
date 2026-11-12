@@ -135,6 +135,34 @@ duckdb 2.0.0 whole-process wall time, cold; output hashes equal in all columns:
 
 Startup is about 5 s of the Ivy Bridge time; the compute query adds about 1.1 s.
 
+### JIT workloads and the performance baseline (2026-11-12)
+
+`bench/` on GitHub runners (EPYC 7763 and Xeon 8370C), every configuration interleaved in one job, median wall,
+digests equal native wherever a run succeeded, main before the inline PRs **[measured]**:
+
+| Workload | Native | DynamoRIO alone | Client |
+|---|---|---|---|
+| Node `bench/jit.js` | 0.93-0.98 s | 4.1-4.5 s | 5.2-6.0 s |
+| `node -e 0` / `npm --version` | 0.02 / 0.07 s | 0.46-0.51 s / | 0.73-0.83 / 2.95-3.3 s |
+| Java `bench/Bench.java` | 1.15-1.21 s | 17.8-22.8 s | 85-120 s (5 of 9 runs) |
+| `java -version` | 0.02-0.03 s | 2.8-3.6 s | 3.7-4.8 s |
+| javac (compiling `Bench.java`) | 0.78-0.81 s | 78-93 s | crashes (below) |
+| duckdb compute / varied | 0.15-0.17 / 4.8-5.2 s | 0.8-0.9 / 8.4-8.9 s | 1.4-1.7 / 14.9-16.2 s |
+
+- **Two kinds of cost.** Emulation-dense code pays per helper call: Java's bit loop executed 318M `shrx`, 164M `tzcnt`
+  and 159M `lzcnt` through the mcontext helper (about 85 ns each on a runner), duckdb's mixed query 649M BMI and 515M
+  AVX2. JIT-heavy startup pays DynamoRIO: javac builds 7.9M blocks; 36-52% of its time is the kernel serving
+  `/proc/self/maps` reads (814k `read` calls, 148k `mprotect`, 22k signals) and most of the rest is libdynamorio.
+- **Any client costs 15-45% over DynamoRIO alone** on JIT startup (Node 2.63 to 3.03 s with an empty client, 3.26 s with
+  ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
+  `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
+- **Node's v3 forms come from glibc's AVX2 string routines**, not V8 (turning V8's v3 flags off changes no count).
+- **FMA** through the helper: 85-210 ns scalar, 165-465 ns packed (the call itself is about 27 ns); softfma's integer
+  path is the rest. Only `Math.fma` in Java hit it among the workloads (65M).
+- **Inline PRs**, one job each against main: #33 (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to 0.6-1.7
+  ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms) and #35 (vector forms: about 14 to 2.2 ns,
+  duckdb varied 8.32 to 6.67 s). Not yet measured on Ivy Bridge.
+
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
 Statuses: 86 refused instruction, 87 the launcher refused the program, 125 launcher failure, 126 and 127 as in a shell;
@@ -340,7 +368,19 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
-- **JIT-heavy programs** may regress past AVXEmu's 1.2x: Node 2.4x, Java 13x. **FMA** under correct rounding stays slow.
+- **javac and Java crash under any client** (SIGSEGV in DynamoRIO, status 255): javac 0 of 8 runs survive with an empty
+  client on the fork and 0 of 16 on stock upstream, launcher options or not; Java's benchmark about half. The crash is
+  in `remove_fraglist_entry` while a trace in progress is torn down or extended (`reset_trace_state`,
+  `extend_unmangled_ilist`): its per-block area lists, kept only when a client is present, lose their area. What frees
+  it is being found on a debug build. `-sandbox2ro_threshold 0` and `-thread_private` avoid it (12 of 12, slower), but the
+  fix goes in the fork.
+- **javac under DynamoRIO alone** fails 2 of 8 on the fork and on upstream, at PCs outside libdynamorio or with status
+  134. Separate from the above; to be fixed in the fork too.
+- **Performance, ranked:** fewer `/proc/self/maps` reads on DynamoRIO's fault and `mprotect` paths (javac's kernel
+  time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
+  with an exactness guard, if a workload needs it; the next inline batch by what still reaches a helper after #35
+  (duckdb varied executes 391M `rorx`, 195M `andn`, 145M `vpaddq`, 46M `movbe`, already inline, then `vpermpd`,
+  `vpshufd`, `vpermd`, `vpmovmskb` at 3-5M each). Each needs an A/B on Ivy Bridge, pending access to that host.
 
 ## License
 
