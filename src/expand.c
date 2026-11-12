@@ -1462,8 +1462,12 @@ static void event_thread_init(void *dc) {
 
 static void event_thread_exit(void *dc) {
     tls_t *t = (tls_t *)drmgr_get_tls_field(dc, tls_idx);
-    if (t != NULL && t->stack != 0)
-        dr_raw_mem_free((byte *)t->stack - HSTACK_SIZE - HSTACK_GUARD, HSTACK_GUARD + HSTACK_SIZE);
+    if (t == NULL || t->stack == 0) return;
+    byte *base = (byte *)t->stack - HSTACK_SIZE - HSTACK_GUARD, *sp;
+    __asm__ volatile("mov %%rsp, %0" : "=r"(sp));
+    /* A helper that exits the process (vec_call's refusals) runs this on the stack itself: leave it. */
+    if (sp >= base && sp < (byte *)t->stack) return;
+    dr_raw_mem_free(base, HSTACK_GUARD + HSTACK_SIZE);
 }
 
 bool expand_init(bool helpers_only_) {
