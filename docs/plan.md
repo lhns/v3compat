@@ -165,8 +165,8 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
 - **FMA** through the helper: 85-210 ns scalar, 165-465 ns packed (the call itself is about 27 ns); softfma's integer
   path is the rest. Only `Math.fma` in Java hit it among the workloads (65M).
 - **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
-  0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35 (vector forms: about 14 to 2.2 ns,
-  duckdb varied 8.32 to 6.67 s) is open, not on main. Neither measured on Ivy Bridge.
+  0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
+  duckdb varied 8.32 to 6.67 s). Neither measured on Ivy Bridge.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -336,7 +336,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar forms (#33, merged); vector forms (#35, open) |
+| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
 | **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
@@ -401,7 +401,7 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   134. Separate from the above; to be fixed in the fork too.
 - **Performance, ranked:** fewer `/proc/self/maps` reads on DynamoRIO's fault and `mprotect` paths (javac's kernel
   time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
-  with an exactness guard, if a workload needs it; the next inline batch by what would still reach a helper with #35 (open) in
+  with an exactness guard, if a workload needs it; the next inline batch by what still reaches a helper since #35
   (duckdb varied executes 391M `rorx`, 195M `andn`, 145M `vpaddq`, 46M `movbe`, already inline, then `vpermpd`,
   `vpshufd`, `vpermd`, `vpmovmskb` at 3-5M each). Runner numbers understate helper cost 2-4x against Ivy Bridge; an Ivy
   Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
