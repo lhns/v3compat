@@ -20,8 +20,8 @@ one 0 native duckdb-varied ./duckdb -csv -noheader -f $SQL
 one 0 native java java -XX:UseAVX=2 -cp $B/classes Bench 8 1
 for r in $(seq $REPS); do
   for c in base new; do
-    for i in 1 2 3; do ${BB[$c]} | sed "s/^/BENCH $c rep=$r /"; done | grep -E 'shlx|shrx|sarx|bzhi|tzcnt|lzcnt|rorx|mov '
-    for i in 1 2 3; do V3COMPAT_HELPERS_ONLY=1 ${RUN[$c]} -- ${BB[$c]} | sed "s/^/BENCHHELP $c rep=$r /"; done | grep -E 'shlx|bzhi|tzcnt'
+    # the new bench binary under each launcher: base runs these forms through helpers, new inline
+    for i in 1 2 3; do ${RUN[$c]} -- ${BB[new]} | sed "s/^/BENCH $c rep=$r /"; done
     one $r $c duckdb-compute ${RUN[$c]} -- ./duckdb -csv -noheader -c 'select sum(range*range) from range(30000000)'
     one $r $c duckdb-varied ${RUN[$c]} -- ./duckdb -csv -noheader -f $SQL
     one $r $c java-version ${RUN[$c]} -- java -XX:UseAVX=2 -version

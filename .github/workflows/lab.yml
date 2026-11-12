@@ -36,7 +36,7 @@ jobs:
         run: |
           export PATH="$JAVA_HOME_21_X64/bin:$PATH"
           mkdir -p lab-out
-          bash bench/ab.sh 4 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|BENCH|DETAIL|STDERR-HEAD)'
+          bash bench/ab.sh 6 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|BENCH|DETAIL|STDERR-HEAD)'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
