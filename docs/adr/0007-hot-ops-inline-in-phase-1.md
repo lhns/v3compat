@@ -40,3 +40,9 @@ Segments: memory operands with `fs:` or `gs:` (absolute, base, index forms) are 
 
 ## Amendment, 2026-11-12 (2)
 Vector forms by the same counts: `vpand`, `vpor`, `vpxor` and `vpandn` on ymm are substituted by `vandps`, `vorps`, `vxorps` and `vandnps` (same bits, same faults). The lane-wise add, subtract, compare, min, max, multiply-low, `vpshufb` and shift forms join the two-half inline path; `vpmovzx`/`vpmovsx`, `vpbroadcastb/w/d/q` (register source) and `vpabs` get their own two-half sequence, and narrow memory sources read exactly their width. Lane-crossing forms (`vpermd`, `vpermq`, `vpermpd`), `vpmovmskb` and `vpshufd` stay on the helper.
+
+## Amendment, 2026-11-12 (4)
+Chosen by what still reaches a helper (counted in the helpers; executed counts include inline forms): broadcasts to an xmm
+destination, `vpmovmskb`, `vpshufd`/`vpshufhw`/`vpshuflw`, `vpermq`/`vpermpd` and `vpermd`/`vpermps` are inline too. The
+lane-crossing ones are built from AVX1's in-lane permutes, `vperm2f128` and blends, which move bits and do no FP arithmetic;
+`vpmovmskb` joins its halves in an xmm, so no flag changes.

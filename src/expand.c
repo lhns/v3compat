@@ -207,7 +207,7 @@ static void op_1(emit_t *e, int opc, reg_id_t d, opnd_t a) {
     put(e, i);
 }
 
-/* Width-changing and one-source forms with a ymm destination, from two 128-bit halves. The source (xmm or
+/* Width-changing and one-source forms with a ymm destination, from two 128-bit halves, and broadcasts to xmm. The source (xmm or
  * memory) is read once, by one real load. Scratch registers are saved and restored as in expand_inline. */
 typedef struct { int opc; uint8_t src_bytes, hi_shift; } wide_t;   /* hi_shift: bytes to drop for the high half */
 static const wide_t wide_forms[] = {
@@ -229,8 +229,10 @@ static bool abs_form(int opc) { return opc == OP_vpabsb || opc == OP_vpabsw || o
 static bool oneop_ok(instr_t *in) {
     if (instr_num_dsts(in) != 1 || instr_num_srcs(in) != 1) return false;
     opnd_t d = instr_get_dst(in, 0), s = instr_get_src(in, 0);
-    if (!opnd_is_reg(d) || !reg_is_ymm(opnd_get_reg(d))) return false;
     int opc = instr_get_opcode(in);
+    /* AVX1 has the xmm forms of the others; a broadcast to xmm is AVX2. */
+    if (!opnd_is_reg(d) || !(reg_is_ymm(opnd_get_reg(d)) || (bcast_form(opc) && reg_is_xmm(opnd_get_reg(d)))))
+        return false;
     if (abs_form(opc)) return opnd_is_memory_reference(s) || (opnd_is_reg(s) && reg_is_ymm(opnd_get_reg(s)));
     return opnd_is_memory_reference(s) || (opnd_is_reg(s) && (reg_is_xmm(opnd_get_reg(s)) || reg_is_ymm(opnd_get_reg(s))));
 }
@@ -272,10 +274,12 @@ static void expand_oneop(emit_t *e, instr_t *in) {
         op_1(e, opc, t0x, reg(t0x));
         op_1(e, opc, t1x, reg(sx));
     }
-    put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(bc ? t1x : t0x), OPND_CREATE_INT8(1)));
+    bool ydst = reg_is_ymm(d);
+    if (ydst) put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(bc ? t1x : t0x), OPND_CREATE_INT8(1)));
     if (mem) reload_y(e, 2);
     reload_y(e, 0);
-    put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
+    /* commit; a VEX.128 write zeroes the destination's upper half */
+    put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(ydst ? t1 : t1x)));
     instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
     reload_y(e, 1);
 }
@@ -979,6 +983,128 @@ static bool bmi_inline_ok(instr_t *in) {
     return false;
 }
 
+/*
+ * Lane-crossing forms and vpmovmskb, inline from AVX1 operations. A memory source is read once, by one real
+ * load; scratch is saved and restored as in expand_inline, and the destination is written last.
+ *   vpermq/vpermpd imm: both lanes of [L,L] and [H,H] permuted within the lane by the selector's low bits
+ *     (vpermilpd), then blended by its high bits (vblendpd); the immediates are worked out here.
+ *   vpermd/vpermps: the same with the index register as vpermilps's control (bits 1:0) and vblendvps on
+ *     index bit 2, moved to the sign bit by a shift of each half.
+ *   vpshufd/vpshufhw/vpshuflw: the xmm form on each half.
+ *   vpmovmskb: each half's 16 bits through a GPR scratch, joined in an xmm by vpinsrw: no flags change.
+ */
+static bool cross_form(int opc) {
+    switch (opc) {
+    case OP_vpermd: case OP_vpermps: case OP_vpermq: case OP_vpermpd:
+    case OP_vpshufd: case OP_vpshufhw: case OP_vpshuflw: case OP_vpmovmskb: return true;
+    }
+    return false;
+}
+
+static bool ymm_or_mem(opnd_t o) {
+    return opnd_is_reg(o) ? reg_is_ymm(opnd_get_reg(o)) : opnd_is_memory_reference(o);
+}
+
+/* DR's operands: vpermd (index, source); the immediate forms (source, imm); vpmovmskb (ymm source). */
+static bool cross_ok(instr_t *in) {
+    int opc = instr_get_opcode(in);
+    if (instr_num_dsts(in) != 1 || !opnd_is_reg(instr_get_dst(in, 0))) return false;
+    reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
+    if (opc == OP_vpmovmskb)
+        return instr_num_srcs(in) == 1 && reg_is_gpr(d) && opnd_is_reg(instr_get_src(in, 0)) &&
+            reg_is_ymm(opnd_get_reg(instr_get_src(in, 0)));
+    if (!reg_is_ymm(d) || instr_num_srcs(in) != 2) return false;
+    opnd_t a = instr_get_src(in, 0), b = instr_get_src(in, 1);
+    if (opc == OP_vpermd || opc == OP_vpermps)
+        return opnd_is_reg(a) && reg_is_ymm(opnd_get_reg(a)) && ymm_or_mem(b);
+    return ymm_or_mem(a) && opnd_is_immed_int(b);
+}
+
+static void op_imm(emit_t *e, int opc, reg_id_t d, reg_id_t s, uint imm) {
+    instr_t *i = instr_build(e->dc, opc, 1, 2);
+    instr_set_dst(i, 0, reg(d));
+    instr_set_src(i, 0, reg(s));
+    instr_set_src(i, 1, OPND_CREATE_INT8((char)imm));
+    put(e, i);
+}
+
+static void expand_msk(emit_t *e, instr_t *in) {
+    reg_id_t d = reg_resize_to_opsz(opnd_get_reg(instr_get_dst(in, 0)), OPSZ_4);
+    reg_id_t s = opnd_get_reg(instr_get_src(in, 0));
+    reg_id_t g = PICK(in, DR_REG_NULL), g4 = reg_resize_to_opsz(g, OPSZ_4);
+    reg_id_t t0x = xmm_of(e->scratch[0]), t1x = xmm_of(e->scratch[1]);
+    save_y(e, 0);
+    save_y(e, 1);
+    put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(g)));
+    put(e, INSTR_CREATE_vpmovmskb(e->dc, reg(g4), reg(xmm_of(s))));
+    put(e, INSTR_CREATE_vmovd(e->dc, reg(t1x), reg(g4)));
+    put(e, INSTR_CREATE_vextractf128(e->dc, reg(t0x), reg(s), OPND_CREATE_INT8(1)));
+    put(e, INSTR_CREATE_vpmovmskb(e->dc, reg(g4), reg(t0x)));
+    put(e, INSTR_CREATE_vpinsrw(e->dc, reg(t1x), reg(t1x), reg(g4), OPND_CREATE_INT8(1)));
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(g), SAVE_G(0)));
+    reload_y(e, 0);
+    put(e, INSTR_CREATE_vmovd(e->dc, reg(d), reg(t1x)));   /* commit; a 32-bit write zero-extends */
+    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    reload_y(e, 1);
+}
+
+static void expand_cross(emit_t *e, instr_t *in) {
+    int opc = instr_get_opcode(in);
+    if (opc == OP_vpmovmskb) {
+        expand_msk(e, in);
+        return;
+    }
+    reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
+    reg_id_t t0 = e->scratch[0], t1 = e->scratch[1], t2 = e->scratch[2];
+    reg_id_t t0x = xmm_of(t0), t1x = xmm_of(t1), t2x = xmm_of(t2);
+    bool perm_d = opc == OP_vpermd || opc == OP_vpermps;
+    opnd_t s = instr_get_src(in, perm_d ? 1 : 0);
+    bool mem = opnd_is_memory_reference(s);
+    save_y(e, 0);
+    save_y(e, 1);
+    if (perm_d || mem) save_y(e, 2);
+    reg_id_t sv = mem ? (perm_d ? t0 : t2) : opnd_get_reg(s);
+    if (perm_d) {
+        /* index bit 2 to each dword's sign bit, in t2; t0 holds the high half meanwhile */
+        reg_id_t idx = opnd_get_reg(instr_get_src(in, 0));
+        op_128(e, OP_vpslld, t2x, reg(xmm_of(idx)), OPND_CREATE_INT8(29));
+        put(e, INSTR_CREATE_vextractf128(e->dc, reg(t0x), reg(idx), OPND_CREATE_INT8(1)));
+        op_128(e, OP_vpslld, t0x, reg(t0x), OPND_CREATE_INT8(29));
+        put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t2), reg(t2), reg(t0x), OPND_CREATE_INT8(1)));
+        if (mem) load_mem(e, s, sv);
+        put(e, INSTR_CREATE_vperm2f128(e->dc, reg(t1), reg(sv), reg(sv), OPND_CREATE_INT8(0x11)));
+        put(e, INSTR_CREATE_vperm2f128(e->dc, reg(t0), reg(sv), reg(sv), OPND_CREATE_INT8(0x00)));
+        put(e, INSTR_CREATE_vpermilps(e->dc, reg(t0), reg(t0), reg(idx)));
+        put(e, INSTR_CREATE_vpermilps(e->dc, reg(t1), reg(t1), reg(idx)));
+        put(e, INSTR_CREATE_vblendvps(e->dc, reg(t1), reg(t0), reg(t1), reg(t2)));
+    } else {
+        uint imm = (uint)opnd_get_immed_int(instr_get_src(in, 1)) & 0xff;
+        if (mem) load_mem(e, s, sv);
+        if (opc == OP_vpermq || opc == OP_vpermpd) {
+            uint lo = 0, hi = 0;
+            for (int i = 0; i < 4; i++) {
+                lo |= ((imm >> (2 * i)) & 1) << i;
+                hi |= ((imm >> (2 * i + 1)) & 1) << i;
+            }
+            put(e, INSTR_CREATE_vperm2f128(e->dc, reg(t0), reg(sv), reg(sv), OPND_CREATE_INT8(0x00)));
+            put(e, INSTR_CREATE_vperm2f128(e->dc, reg(t1), reg(sv), reg(sv), OPND_CREATE_INT8(0x11)));
+            op_imm(e, OP_vpermilpd, t0, t0, lo);
+            op_imm(e, OP_vpermilpd, t1, t1, lo);
+            put(e, INSTR_CREATE_vblendpd(e->dc, reg(t1), reg(t0), reg(t1), OPND_CREATE_INT8((char)hi)));
+        } else {
+            put(e, INSTR_CREATE_vextractf128(e->dc, reg(t0x), reg(sv), OPND_CREATE_INT8(1)));
+            op_imm(e, opc, t0x, t0x, imm);
+            op_imm(e, opc, t1x, xmm_of(sv), imm);
+            put(e, INSTR_CREATE_vinsertf128(e->dc, reg(t1), reg(t1), reg(t0x), OPND_CREATE_INT8(1)));
+        }
+    }
+    if (perm_d || mem) reload_y(e, 2);
+    reload_y(e, 0);
+    put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
+    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    reload_y(e, 1);
+}
+
 static void expand_bmi_inline(emit_t *e, instr_t *in) {
     switch (instr_get_opcode(in)) {
     case OP_rorx: expand_rorx(e, in); break;
@@ -1214,6 +1340,8 @@ void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
         if (inline_form(opc) && !helpers_only && vec_shape_ok(in)) expand_inline(&e, in);
         else if ((wide_form(opc) || bcast_form(opc) || abs_form(opc)) && !helpers_only && oneop_ok(in))
             expand_oneop(&e, in);
+        else if (cross_form(opc) && !helpers_only && cross_ok(in))
+            expand_cross(&e, in);
         else if (!expand_vec(&e, in, f))
             dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(e.pc),
                                  OPND_CREATE_INT32(opc));
