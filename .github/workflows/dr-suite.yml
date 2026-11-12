@@ -22,13 +22,14 @@ jobs:
         run: |
           set +e
           grep -m1 'model name' /proc/cpuinfo
-          for sha in 7e8c88b7c0e43c1d16d92f8d7a002a872c788559 da60578e58d56694968b2fb34b300f1af61608f0 a7356a63f6132924798e25b42eeb5c0bba07bcb7; do
-            s=${sha:0:7}
-            git clone -q --filter=blob:none https://github.com/lhns/dynamorio dr-$s && git -C dr-$s checkout -q $sha && git -C dr-$s submodule update -q --init --depth 1
-            cmake -S dr-$s -B b-$s -DBUILD_TESTS=ON -DAUTOMATED_TESTING=ON -DBUILD_DOCS=OFF -DDEBUG=ON -DINTERNAL=ON >/dev/null && cmake --build b-$s -j"$(nproc)" >/dev/null 2>&1 || echo "$s: build failed"
+          # The dump names sections through a string hash keyed on a reused buffer, so the build directory's
+          # name decides which section names collide: swap the directory names between base and fix.
+          build() { git clone -q --filter=blob:none https://github.com/lhns/dynamorio src-$2 && git -C src-$2 checkout -q $1 && git -C src-$2 submodule update -q --init --depth 1
+                    cmake -S src-$2 -B b-$2 -DBUILD_TESTS=ON -DAUTOMATED_TESTING=ON -DBUILD_DOCS=OFF -DDEBUG=ON -DINTERNAL=ON >/dev/null && cmake --build b-$2 -j"$(nproc)" >/dev/null 2>&1 || echo "$2: build failed"; }
+          build 7e8c88b7c0e43c1d16d92f8d7a002a872c788559 da60578
+          build da60578e58d56694968b2fb34b300f1af61608f0 7e8c88b
+          for d in da60578 7e8c88b; do
+            f=0; for i in $(seq 20); do (cd b-$d && ctest -R 'client.memory_dump_test$' --timeout 300 >/dev/null 2>&1) || f=$((f+1)); done
+            echo "RESULT memory_dump_test dir b-$d: $f of 20 failed"
           done
-          for s in 7e8c88b da60578 a7356a6; do
-            f=0; for i in $(seq 20); do (cd b-$s && ctest -R 'client.memory_dump_test$' --timeout 300 >/dev/null 2>&1) || f=$((f+1)); done
-            echo "RESULT memory_dump_test $s: $f of 20 failed"
-          done
-          (cd b-a7356a6 && ctest -R 'client.memory_dump_test$' --output-on-failure 2>&1 | grep -E '^\s*\[[0-9 ]+\]|vvar|vdso' | head -20)
+          echo "(b-da60578 holds base 7e8c88b; b-7e8c88b holds the fix da60578)"
