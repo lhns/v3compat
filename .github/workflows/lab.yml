@@ -1,0 +1,29 @@
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  stats:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools
+      - name: Build
+        run: |
+          cmake -S . -B build && cmake --build build -j
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+      - name: Executed v3 forms under PR 22 (stats counts every path; the inlined set is in expand.c)
+        run: |
+          export PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          R=build/inst/bin/v3compat-run
+          for w in "./duckdb -csv -noheader -f test/apps/duckdb-varied.sql" "./duckdb -csv -noheader -c 'select sum(range*range) from range(30000000)'" "node bench/jit.js 8 1" "java -XX:UseAVX=2 -version"; do
+            echo "== $w"; eval "V3COMPAT_STATS=1 $R -- $w" 2>&1 >/dev/null | grep -E 'v3compat: (stats|op)' | sort -k4 -nr | head -40
+          done
+          grep -n "inline_form\|case OP_" src/expand.c | head -120
