@@ -26,39 +26,32 @@ crash)
   echo "SYM crash offsets:"; sym 0x93799 0x9359d
   objdump -d --no-show-raw-insn --start-address=$((BASE+0x93700)) --stop-address=$((BASE+0x937c0)) "$DBG" | tail -40
   objdump -d --no-show-raw-insn --start-address=$((BASE+0x93520)) --stop-address=$((BASE+0x935c0)) "$DBG" | tail -30
-  # A backtrace at the faulting instruction: every SIGSEGV stops, and is passed on unless it is at one of the two PCs.
-  cat > /tmp/gdb.py <<'G'
-import gdb
-dbg = __import__('os').environ['DBG']
-gdb.execute("set pagination off")
-gdb.execute("set follow-exec-mode same")
-for s in ("SIGBUS", "SIGILL", "SIGUSR1", "SIGUSR2", "SIGCHLD", "SIGQUIT", "SIGPIPE"):
-    gdb.execute("handle %s nostop noprint pass" % s)
-gdb.execute("handle SIGSEGV stop noprint pass")
-gdb.execute("run")
-n = 0
-while True:
-    try:
-        pc = int(gdb.parse_and_eval("$pc"))
-    except gdb.error:
-        print("EXITED after", n, "SIGSEGVs"); break
-    if (pc & 0xfffff) in (0x9359d, 0x93799):
-        m = [l for l in gdb.execute("info proc mappings", to_string=True).splitlines() if "libdynamorio.so" in l]
-        base = int(m[0].split()[0], 16)
-        print("CAUGHT pc", hex(pc), "DRBASE", hex(base), "after", n)
-        gdb.execute("add-symbol-file %s -o %#x" % (dbg, base - 0x71000000))
-        for c in ("bt 40", "info registers rip rax rbx rcx rdx rsi rdi r12 r13 r14 r15", "x/8i $pc-16", "thread apply all bt 8"):
-            print("### " + c); gdb.execute(c)
-        break
-    n += 1
-    gdb.execute("continue")
-G
+  # A backtrace: DR pauses at its crash report (-pause_on_error); gdb attaches, loads DR's symbols at its base,
+  # puts the faulting registers from the report into the crashing thread and unwinds.
   for i in 1 2 3 4; do
-    echo "== gdb run $i"
-    DBG=$DBG timeout 1500 gdb -q -batch -x /tmp/gdb.py --args env V3COMPAT_NULL=1 $RUN -- $JAVAC 2>&1 |
-      grep -vE '^\[(New|Thread|Detaching|LWP|Inferior)|^warning: |^Program received|^process ' | head -250
+    echo "== attach run $i"
+    V3COMPAT_NULL=1 V3COMPAT_DR_OPTS="-pause_on_error" $RUN -- $JAVAC >/dev/null 2>/tmp/pe &
+    for t in $(seq 600); do grep -q 'Received SIGSEGV' /tmp/pe 2>/dev/null && break; kill -0 $! 2>/dev/null || break; sleep 1; done
+    sleep 2
+    if ! grep -q 'Received SIGSEGV' /tmp/pe; then echo "no crash"; wait; continue; fi
+    pid=$(grep -oE '\(([0-9]+)\)\.' /tmp/pe | head -1 | tr -dc 0-9)
+    tid=$(grep -oE 'in thread [0-9]+' /tmp/pe | head -1 | awk '{print $3}')
+    reg() { grep -oE "$1=0x[0-9a-f]+" /tmp/pe | head -1 | cut -d= -f2; }
+    pc=$(grep -oE 'Received SIGSEGV at pc 0x[0-9a-f]+' /tmp/pe | awk '{print $5}')
+    base=$(grep -m1 'libdynamorio.so' /proc/$pid/maps | cut -d- -f1)
+    echo "pid=$pid tid=$tid pc=$pc base=0x$base"; head -c 1500 /tmp/pe
+    gt=$(sudo gdb -q -batch -p $tid -ex 'info threads' 2>/dev/null | grep -m1 "LWP $tid" | grep -oE '^\*? *[0-9]+' | tr -dc 0-9)
+    sudo gdb -q -batch -p $pid \
+      -ex "add-symbol-file $DBG -o $(printf '%#x' $((0x$base - 0x71000000)))" \
+      -ex "thread find LWP $tid" -ex "info threads" \
+      -ex "python import re; t=[x for x in gdb.selected_inferior().threads() if x.ptid[1]==$tid][0]; t.switch()" \
+      -ex "set \$rip=$pc" -ex "set \$rsp=$(reg esp)" -ex "set \$rbp=$(reg ebp)" -ex "set \$rax=$(reg eax)" -ex "set \$rbx=$(reg ebx)" \
+      -ex "set \$rcx=$(reg ecx)" -ex "set \$rdx=$(reg edx)" -ex "set \$rsi=$(reg esi)" -ex "set \$rdi=$(reg edi)" \
+      -ex "set \$r12=$(reg r12)" -ex "set \$r13=$(reg r13)" -ex "set \$r14=$(reg r14)" -ex "set \$r15=$(reg r15)" \
+      -ex "bt 30" -ex "info locals" -ex "up" -ex "info locals" -ex "up" -ex "info locals" -ex "up" -ex "info locals" \
+      2>&1 | grep -vE '^\[New LWP|^warning:' | head -150
+    kill -9 $pid 2>/dev/null; wait
   done
-  exit 0
   # Which DR options avoid it: javac under the null client and the client, 6 runs each.
   for o in "" "-sandbox2ro_threshold 0" "-thread_private" "-ro2sandbox_threshold 0 -sandbox2ro_threshold 0"; do
     for c in null client; do
