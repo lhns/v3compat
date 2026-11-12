@@ -88,6 +88,11 @@ STUB(c_v_widen_sx, "vpmovsxdq (%r15), %ymm5");
 STUB(c_v_bcast_b, "vpbroadcastb (%r15), %ymm6");
 STUB(c_v_bcast_w, "vpbroadcastw (%r15), %ymm7");
 STUB(c_v_bcast_d, "vpbroadcastd (%r15), %ymm8");
+STUB(c_v_permd, "vpermd (%r15), %ymm1, %ymm9");
+STUB(c_v_permps_idx, "vpermps (%r15), %ymm10, %ymm10");
+STUB(c_v_permq, "vpermq $0x4e, (%r15), %ymm11");
+STUB(c_v_shufd, "vpshufd $0x1b, (%r15), %ymm12");
+STUB(c_v_bcast_x, "vpbroadcastb (%r15), %xmm13");
 // Unmasked FP exceptions: ymm1 and ymm2 are set up per case.
 STUB(c_fma_ps, "vfmadd231ps %ymm1, %ymm2, %ymm3");
 STUB(c_fma_ss, "vfmadd231ss %xmm1, %xmm2, %xmm3");
@@ -123,8 +128,8 @@ extern void c_inline(void), c_inline_shift(void), c_frame(void), c_frame_rip(voi
     c_andn(void), c_andn_dst(void), c_mulx(void), c_mulx_lo(void), c_mulx32_rip(void), c_movbe_ld(void),
     c_movbe_ld16(void), c_movbe_ld32(void), c_movbe_ld_dst(void), c_movbe_ld_rip(void),
     c_movbe_ld_split(void);
-extern char ins_c_shlx[], after_c_shlx[], ins_c_sarx_cnt_rax[], after_c_sarx_cnt_rax[], ins_c_bzhi[], after_c_bzhi[], ins_c_bzhi_dst[], after_c_bzhi_dst[], ins_c_tzcnt[], after_c_tzcnt[], ins_c_lzcnt[], after_c_lzcnt[], ins_c_lzcnt32_rip[], after_c_lzcnt32_rip[], ins_c_tzcnt_dst[], after_c_tzcnt_dst[], ins_c_v_cmp[], after_c_v_cmp[], ins_c_v_shift_d[], after_c_v_shift_d[], ins_c_v_logic[], after_c_v_logic[], ins_c_v_abs[], after_c_v_abs[], ins_c_v_widen[], after_c_v_widen[], ins_c_v_widen_sx[], after_c_v_widen_sx[], ins_c_v_bcast_b[], after_c_v_bcast_b[], ins_c_v_bcast_w[], after_c_v_bcast_w[], ins_c_v_bcast_d[], after_c_v_bcast_d[];
-extern void c_shlx(void), c_sarx_cnt_rax(void), c_bzhi(void), c_bzhi_dst(void), c_tzcnt(void), c_lzcnt(void), c_lzcnt32_rip(void), c_tzcnt_dst(void), c_v_cmp(void), c_v_shift_d(void), c_v_logic(void), c_v_abs(void), c_v_widen(void), c_v_widen_sx(void), c_v_bcast_b(void), c_v_bcast_w(void), c_v_bcast_d(void);
+extern char ins_c_shlx[], after_c_shlx[], ins_c_sarx_cnt_rax[], after_c_sarx_cnt_rax[], ins_c_bzhi[], after_c_bzhi[], ins_c_bzhi_dst[], after_c_bzhi_dst[], ins_c_tzcnt[], after_c_tzcnt[], ins_c_lzcnt[], after_c_lzcnt[], ins_c_lzcnt32_rip[], after_c_lzcnt32_rip[], ins_c_tzcnt_dst[], after_c_tzcnt_dst[], ins_c_v_cmp[], after_c_v_cmp[], ins_c_v_shift_d[], after_c_v_shift_d[], ins_c_v_logic[], after_c_v_logic[], ins_c_v_abs[], after_c_v_abs[], ins_c_v_widen[], after_c_v_widen[], ins_c_v_widen_sx[], after_c_v_widen_sx[], ins_c_v_bcast_b[], after_c_v_bcast_b[], ins_c_v_bcast_w[], after_c_v_bcast_w[], ins_c_v_bcast_d[], after_c_v_bcast_d[], ins_c_v_permd[], after_c_v_permd[], ins_c_v_permps_idx[], after_c_v_permps_idx[], ins_c_v_permq[], after_c_v_permq[], ins_c_v_shufd[], after_c_v_shufd[], ins_c_v_bcast_x[], after_c_v_bcast_x[];
+extern void c_shlx(void), c_sarx_cnt_rax(void), c_bzhi(void), c_bzhi_dst(void), c_tzcnt(void), c_lzcnt(void), c_lzcnt32_rip(void), c_tzcnt_dst(void), c_v_cmp(void), c_v_shift_d(void), c_v_logic(void), c_v_abs(void), c_v_widen(void), c_v_widen_sx(void), c_v_bcast_b(void), c_v_bcast_w(void), c_v_bcast_d(void), c_v_permd(void), c_v_permps_idx(void), c_v_permq(void), c_v_shufd(void), c_v_bcast_x(void);
 
 static void put_f32(int reg, float v) {
     for (int i = 0; i < 8; i++) memcpy(&ymm_init[reg][4 * i], &v, 4);
@@ -194,6 +199,11 @@ static const tcase cases[] = {
     {"v-bcast-b", c_v_bcast_b, ins_c_v_bcast_b, after_c_v_bcast_b, SIGSEGV, 0, 0, 0},
     {"v-bcast-w", c_v_bcast_w, ins_c_v_bcast_w, after_c_v_bcast_w, SIGSEGV, 0, 0, 0},
     {"v-bcast-d", c_v_bcast_d, ins_c_v_bcast_d, after_c_v_bcast_d, SIGSEGV, 0, 0, 0},
+    {"v-permd", c_v_permd, ins_c_v_permd, after_c_v_permd, SIGSEGV, 0, 0, 0},
+    {"v-permps-dst=index", c_v_permps_idx, ins_c_v_permps_idx, after_c_v_permps_idx, SIGSEGV, 0, 0, 0},
+    {"v-permq", c_v_permq, ins_c_v_permq, after_c_v_permq, SIGSEGV, 0, 0, 0},
+    {"v-shufd", c_v_shufd, ins_c_v_shufd, after_c_v_shufd, SIGSEGV, 0, 0, 0},
+    {"v-bcast-xmm", c_v_bcast_x, ins_c_v_bcast_x, after_c_v_bcast_x, SIGSEGV, 0, 0, 0},
     {"fp-invalid", c_fma_ps, ins_c_fma_ps, after_c_fma_ps, SIGFPE, FPE_FLTINV, 2, inf_times_zero},
     {"fp-invalid-scalar", c_fma_ss, ins_c_fma_ss, after_c_fma_ss, SIGFPE, FPE_FLTINV, 2, inf_times_zero},
     {"fp-overflow", c_fma_ps, ins_c_fma_ps, after_c_fma_ps, SIGFPE, FPE_FLTOVF, 2, overflow},

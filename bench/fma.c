@@ -44,7 +44,7 @@ LOOP(m_fma_ps_x, R8("vfmadd231ps", "xmm"))
 LOOP(m_fma_pd_x, R8("vfmadd231pd", "xmm"))
 LOOP(m_fma_ps_y, R8("vfmadd231ps", "ymm"))
 LOOP(m_fma_pd_y, R8("vfmadd231pd", "ymm"))
-LOOP(m_vpermd_y, R8("vpermd", "ymm"))   // a frame helper with no FP: the call's own cost
+LOOP(m_vpsllvq_y, R8("vpsllvq", "ymm"))   // a frame helper with no FP: the call's own cost
 
 static double ns_per_op(void (*f)(uint64_t)) {
     uint64_t n = 16;
@@ -104,7 +104,7 @@ int main(int argc, char **argv) {
     int scale = argc > 1 ? atoi(argv[1]) : 1;
     if (argc <= 2 || strcmp(argv[2], "kernels") != 0) {
         static const struct { const char *name; void (*f)(uint64_t); } rows[] = {
-            {"vaddpd_ymm", m_vaddpd_y}, {"vpermd_ymm", m_vpermd_y}, {"vfmadd231ss", m_fma_ss},
+            {"vaddpd_ymm", m_vaddpd_y}, {"vpsllvq_ymm", m_vpsllvq_y}, {"vfmadd231ss", m_fma_ss},
             {"vfmadd231sd", m_fma_sd}, {"vfmadd231ps_xmm", m_fma_ps_x}, {"vfmadd231pd_xmm", m_fma_pd_x},
             {"vfmadd231ps_ymm", m_fma_ps_y}, {"vfmadd231pd_ymm", m_fma_pd_y}};
         for (size_t i = 0; i < sizeof rows / sizeof rows[0]; i++)
