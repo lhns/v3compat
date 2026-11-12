@@ -67,10 +67,12 @@ blocks).
 
 The report gives the PC and `Base:`; `pc - base` plus 0x71000000 (the library's link address) is the address in
 `libdynamorio.so.debug`: `addr2line -f -i -e <debug file> <addr>`. For a backtrace, run with
-`-dumpcore_mask 0x1009` (untested) in `V3COMPAT_DR_OPTS`, wait for "Waiting for debugger" on stderr, attach `gdb -p <pid>`,
-`add-symbol-file <debug file> -o <base - 0x71000000>`, select the crashing thread and set `$rip`, `$rsp`, `$rbp` and
-the other registers from the report before `bt`. A debug build of the fork (`-DDEBUG=ON` in
-`cmake/FetchDynamoRIO.cmake`, with its own `-DV3COMPAT_DR_CACHE`) turns the release crash into the first failed assert.
+`-pause_on_error` in `V3COMPAT_DR_OPTS` on the release build, wait for "Received SIGSEGV" on stderr, attach
+`gdb -p <pid>`, `add-symbol-file <debug file> -o <base - 0x71000000>`, select the crashing thread and set `$rip`,
+`$rsp`, `$rbp` and the other registers from the report before `bt` (`lab-perf-probe3`, run 43138513400, got the
+javac backtraces this way). On a debug build `-pause_on_error` also stops on benign curiosities, and catching only
+asserts with `-dumpcore_mask 0x1009` never paused in our runs. What found the javac crash's cause was a lab-only fork
+branch printing with `print_file(STDERR, ...)` at the suspected points (`lab-perf-trace-diag`).
 
 ## Change the fork
 
