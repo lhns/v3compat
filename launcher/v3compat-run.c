@@ -186,6 +186,7 @@ __attribute__((used)) void run(long *sp) {
         p = scpy(p, "-client_lib \""); p = scpy(p, client); p = scpy(p, ";0;");
         s = envget(envp, "V3COMPAT_STATS=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-stats ");
         s = envget(envp, "V3COMPAT_HELPERS_ONLY="); if (s && s[0] == '1' && !s[1]) p = scpy(p, "-helpers-only ");
+        s = envget(envp, "V3COMPAT_NULL=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-null ");   /* LAB ONLY */
         s = envget(envp, "V3COMPAT_AUDIT=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-audit ");
         p = scpy(p, "\"");
         *p = 0;

@@ -17,11 +17,33 @@ static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, 
 /* Executed count per DR opcode of the classes the CPU lacks. */
 static uint64 op_counts[OP_LAST];
 static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELAXED); }
+/* LAB ONLY: blocks translated, for traces, and re-translated for a fault or signal. */
+static uint64 ev_bb, ev_trace, ev_xl, ev_rebuilt;
+/* LAB ONLY: tags seen by a bb event (open addressing; full table stops counting). */
+enum { SEEN_N = 1 << 23 };
+static uint64 *seen;
+static void *seen_lock;
+static void note_tag(void *tag) {
+    if (seen == NULL) return;
+    uint64 t = (uint64)tag, h = (t * 0x9E3779B97F4A7C15ull) >> 41;
+    dr_mutex_lock(seen_lock);
+    for (int i = 0; i < 64; i++, h = (h + 1) & (SEEN_N - 1)) {
+        if (seen[h] == t) { ev_rebuilt++; break; }
+        if (seen[h] == 0) { seen[h] = t; break; }
+    }
+    dr_mutex_unlock(seen_lock);
+}
+static dr_emit_flags_t event_null(void *dc, void *tag, instrlist_t *bb, bool for_trace, bool translating) {
+    (void)dc; (void)tag; (void)bb; (void)for_trace; (void)translating;
+    return DR_EMIT_DEFAULT;
+}
 
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
                                      bool translating) {
     /* Runs when translating too: DR maps PCs through the list, so it must come out the same. */
     (void)tag; (void)for_trace; (void)translating;
+    __atomic_add_fetch(translating ? &ev_xl : for_trace ? &ev_trace : &ev_bb, 1, __ATOMIC_RELAXED);
+    if (stats_on && !for_trace && !translating) note_tag(tag);
     int n[C_N] = {0};
     instr_t *next;
     for (instr_t *in = instrlist_first_app(bb); in != NULL; in = next) {
@@ -76,6 +98,11 @@ static void event_exit(void) {
         dr_fprintf(STDERR, "v3compat: stats pid=%d", (int)dr_get_process_id());
         for (int i = 0; i < C_N; i++) dr_fprintf(STDERR, " %s=%llu", cls_name[i], (unsigned long long)counts[i]);
         dr_fprintf(STDERR, "\n");
+        dr_stats_t st = {sizeof st};
+        dr_get_stats(&st);
+        dr_fprintf(STDERR, "v3compat: drstats pid=%d bbs_built=%llu ev_bb=%llu ev_trace=%llu ev_translate=%llu threads=%llu\n",
+                   (int)dr_get_process_id(), (unsigned long long)st.basic_block_count, (unsigned long long)ev_bb,
+                   (unsigned long long)ev_trace, (unsigned long long)ev_xl, (unsigned long long)st.num_threads_created);
         for (int op = 0; op < OP_LAST; op++)
             if (op_counts[op] != 0)
                 dr_fprintf(STDERR, "v3compat: op %s %llu\n", decode_opcode_name(op),
@@ -92,11 +119,17 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
     /* The launcher turns V3COMPAT_STATS=1 and V3COMPAT_HELPERS_ONLY=1 into these options. */
     bool helpers_only = false;
     for (int i = 1; i < argc; i++) {
+        if (starts(argv[i], "-null")) { drmgr_register_bb_app2app_event(event_null, NULL); return; }   /* LAB ONLY */
         if (starts(argv[i], "-stats")) stats_on = true;
         if (starts(argv[i], "-helpers-only")) helpers_only = true;
         if (starts(argv[i], "-audit")) audit_on = true;
     }
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
+    if (stats_on) {
+        seen = dr_global_alloc(SEEN_N * sizeof(uint64));
+        __builtin_memset(seen, 0, SEEN_N * sizeof(uint64));
+        seen_lock = dr_mutex_create();
+    }
     drmgr_register_bb_app2app_event(event_app2app, NULL);
     drmgr_register_signal_event(event_signal);
     exec_policy_init();

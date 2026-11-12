@@ -1,0 +1,50 @@
+name: lab
+on:
+  push:
+    branches: ['lab-*']
+permissions:
+  contents: read
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [crash, sym, opts, pr22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Packages
+        run: |
+          for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd linux-tools-common "linux-tools-$(uname -r)" && break; sleep 60; done
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+      - name: Build
+        run: |
+          cmake -S . -B build && cmake --build build -j
+          mkdir -p /tmp/bench/classes
+          gcc -O3 -march=x86-64-v3 bench/fma.c -o /tmp/bench/fma -lm
+          "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+      - name: PR 22 rebased, its build and ctest
+        if: matrix.part == 'pr22'
+        run: |
+          git fetch -q origin lab-perf-pr22-rebased && git worktree add /tmp/pr22 FETCH_HEAD
+          cmake -S /tmp/pr22 -B /tmp/pr22/build -DV3COMPAT_SEMANTIC=ON && cmake --build /tmp/pr22/build -j
+          chmod o+x "$HOME"; V3COMPAT_CI=1 ctest --test-dir /tmp/pr22/build --output-on-failure 2>&1 | tail -30
+      - name: Run
+        timeout-minutes: 300
+        run: |
+          export PATH="$JAVA_HOME_21_X64/bin:$PATH"
+          mkdir -p lab-out
+          bash bench/probe.sh ${{ matrix.part }} 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|OPS|STATS-RC|DRSYM|STAT|STDERR-HEAD)'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lab-${{ matrix.part }}
+          path: lab-out
+          if-no-files-found: ignore
