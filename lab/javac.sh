@@ -14,6 +14,8 @@ for c in client empty-client dr-alone; do
   bad=0; where=""
   for i in $(seq "$N"); do
     timeout 1200 ${C[$c]} $JAVAC >/dev/null 2>/tmp/e; rc=$?
+    sed 's/flusher=[0-9]* target=[0-9]*/F T/' /tmp/e | grep -h V3DIAG | sort | uniq -c | sed "s/^/DIAG $c run $i rc=$rc /"
+    grep -h 'V3DIAG' /tmp/e | head -3 | sed "s/^/DIAGRAW $c run $i /"
     [ $rc = 0 ] && continue
     bad=$((bad+1)); pc=$(grep -oE 'crash at PC 0x[0-9a-f]+' /tmp/e | head -1 | awk '{print $4}'); base=$(grep -oE '^Base: 0x[0-9a-f]+' /tmp/e | head -1 | awk '{print $2}')
     if [ -n "$pc" ] && [ -n "$base" ]; then where="$where $(printf '%#x' $((pc - base)))"; else where="$where rc=$rc"; fi
