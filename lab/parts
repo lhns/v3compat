@@ -8,5 +8,4 @@ regd bash lab/stress.sh regd 102
 shorta bash lab/stress.sh short 1500
 shortb bash lab/stress.sh short 1500
 shortc bash lab/stress.sh short 1500
-# The javac crash under any client (plan, Open items): uncomment on a lab branch.
-# javac bash lab/javac.sh 8
+ct bash lab/ctest.sh
