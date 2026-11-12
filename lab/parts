@@ -1,6 +1,16 @@
-client bash lab/javacdiag.sh client 30
-empty bash lab/javacdiag.sh empty 30
-dr bash lab/javacdiag.sh dr 30
-drdef bash lab/javacdiag.sh dr-default 30
-java1 bash lab/javacdiag.sh client 40 java
-java2 bash lab/javacdiag.sh client 40 java
+javac-client bash lab/javacdiag.sh client 30
+javac-empty bash lab/javacdiag.sh empty 30
+javac-dr bash lab/javacdiag.sh dr 30
+javac-dr-default bash lab/javacdiag.sh dr-default 30
+java-client1 bash lab/javacdiag.sh client 40 java
+java-client2 bash lab/javacdiag.sh client 40 java
+java-client3 bash lab/javacdiag.sh client 40 java
+java-client4 bash lab/javacdiag.sh client 40 java
+java-empty1 bash lab/javacdiag.sh empty 40 java
+java-dr1 bash lab/javacdiag.sh dr 40 java
+java-empty2 bash lab/javacdiag.sh empty 40 java
+java-dr2 bash lab/javacdiag.sh dr 40 java
+java-empty3 bash lab/javacdiag.sh empty 40 java
+java-dr3 bash lab/javacdiag.sh dr 40 java
+java-drdef1 bash lab/javacdiag.sh dr-default 40 java
+java-drdef2 bash lab/javacdiag.sh dr-default 40 java
