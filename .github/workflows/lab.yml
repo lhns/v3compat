@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [crash, sym, opts, pr22]
+        part: [crash, maps]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -20,7 +20,7 @@ jobs:
           key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
       - name: Packages
         run: |
-          for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd linux-tools-common "linux-tools-$(uname -r)" && break; sleep 60; done
+          for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd gdb linux-tools-common "linux-tools-$(uname -r)" && break; sleep 60; done
           sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
       - name: Build
         run: |
@@ -41,7 +41,7 @@ jobs:
         run: |
           export PATH="$JAVA_HOME_21_X64/bin:$PATH"
           mkdir -p lab-out
-          bash bench/probe.sh ${{ matrix.part }} 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|OPS|STATS-RC|DRSYM|STAT|STDERR-HEAD)'
+          bash bench/probe3.sh ${{ matrix.part }} 2>&1 | tee lab-out/log.txt | grep -E '^(RESULT|model name|SYM)'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
