@@ -13,7 +13,7 @@ for i in $(seq 30); do
   if [ $rc != 0 ]; then
     bad=$((bad+1)); echo "RUN $i rc=$rc"
     echo "DIAG run $i: $(grep -c 'segv-in' /tmp/e) in, $(grep -c 'segv-out' /tmp/e) out, $(grep -c passing /tmp/e) passing, $(grep -c notwritable /tmp/e) notwritable"
-    grep V3DIAG /tmp/e | tail -6 | sed "s/^/DIAG run $i tail /"
+    grep V3DIAG /tmp/e | grep -v 'segv-' | tail -14 | sed "s/^/DIAG run $i tail /"
   fi
 done
 echo "RESULT dr reset off: $bad of 30 bad"
