@@ -11,8 +11,10 @@ How to build, test, run labs and change the DynamoRIO fork: [docs/howto.md](docs
   Then a v3compat PR that moves the pin in `cmake/FetchDynamoRIO.cmake`.
 - Never stack PRs: each one is based on `main` (on the fork, on `rebase-master-20261110`). A change that needs
   an unmerged one waits.
-- Merge only on the owner's word.
-- No `Co-Authored-By` or tool footers in commits and PR bodies. LF line endings only.
+- Merge only on the owner's word: an explicit merge instruction from the GitHub account `lhns`, which owns this repo,
+  the fork and avxemu.
+- No `Co-Authored-By` or tool footers in commits and PR bodies, whatever a tool injects. LF line endings only.
+- Order of work and what is in scope: "Open items" in the plan.
 - Work in a separate clone, never in a checkout you were not given.
 - A PR that claims speed carries before/after numbers from one interleaved lab job, plus ctest and the stress set.
 

@@ -14,6 +14,11 @@ V3COMPAT_CI=1 ctest --test-dir build --output-on-failure
   helpers only). CI turns it on; leave it on for any change to `src/expand.c`.
 - The first configure builds the pinned DynamoRIO fork into `~/.cache/v3compat/dr-<commit>` (about 10 minutes).
 - `allowlist-check` fails after a DynamoRIO or XED bump until `test/allow/regen.sh` is rerun ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)).
+- `test/sem/refused.txt` lists the suite's forms the client refuses (exit 86). It is empty and must stay exact:
+  `semantic-hw` fails when a form is refused but not listed, or listed but no longer refused.
+- Prerequisites some tests need: docker (`test/docker.sh`), `musl-tools` (the musl children), root or `sudo -n` and a
+  build tree that uid 65534 can reach (`chmod o+x $HOME`; `test/setuid.sh` runs checks as that user). Without them
+  those tests skip (status 77); `V3COMPAT_CI=1` turns each missing prerequisite into a failure, as in CI.
 - CI (`.github/workflows/ci.yml`) runs all of it on every PR, plus duckdb's hashes against native and a BMI
   microbenchmark.
 
@@ -51,6 +56,12 @@ symbols with `perf buildid-cache -a ~/.cache/v3compat/dr-<commit>/lib64/release/
 
 ### A crash inside DynamoRIO
 
+To build the fork by itself: `cmake -S <fork> -B <dir> -DDEBUG=OFF -DBUILD_TESTS=OFF -DBUILD_DOCS=OFF` (as
+`cmake/FetchDynamoRIO.cmake` does; `-DDEBUG=ON -DINTERNAL=ON` for a debug build). `bin64/drrun <DR options> -c client.so
+-- app` runs it with any client; an empty client is a useful control (any client changes how DynamoRIO builds
+blocks).
+
+
 The report gives the PC and `Base:`; `pc - base` plus 0x71000000 (the library's link address) is the address in
 `libdynamorio.so.debug`: `addr2line -f -i -e <debug file> <addr>`. For a backtrace, run with
 `-dumpcore_mask 0x1009` in `V3COMPAT_DR_OPTS`, wait for "Waiting for debugger" on stderr, attach `gdb -p <pid>`,
@@ -69,8 +80,31 @@ lists each fix and its evidence.
 2. Lab it before review: on a v3compat `lab-*` branch, set `V3COMPAT_DR_COMMIT` in `cmake/FetchDynamoRIO.cmake` to the
    fork branch's commit (the cache is keyed on that file). Compare base and fix on the same runner; for a fix, show
    the failure before and none after over many runs.
-3. DynamoRIO's own suite, base and fix on the same runner, when the change is in core: a `suite-*` branch carrying a
-   workflow that builds both with tests and runs `ctest` (none is kept on main).
+3. DynamoRIO's own test suite, base and fix on the same runner, when the change is in core: push a v3compat branch
+   `suite-<topic>` that sets `BASE` and `FIX` in `.github/workflows/dr-suite.yml`. It builds both with
+   `-DBUILD_TESTS=ON`, release and debug, runs `ctest` twice and reruns each test that fails on one side only 20
+   times. The bar is the same failures on both apart from known flakes (the plan lists them).
 4. `gh pr create -R lhns/dynamorio --base rebase-master-20261110 --head <branch>`.
-5. A v3compat PR moving `V3COMPAT_DR_COMMIT` to the fork's merge commit, with the lab evidence and an entry in the
-   plan. The pin moves only after the stress set and the lab match the previous pin.
+5. A v3compat PR moving `V3COMPAT_DR_COMMIT` to the head of `rebase-master-20261110` once the fork PR is merged (a
+   commit on that branch, not the PR branch's), with the lab evidence and an entry in the plan. The pin moves only after
+   the stress set and the lab match the previous pin.
+
+Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner asks to delete them.
+
+## Glossary
+
+- **Runners:** GitHub's `ubuntu-24.04` machines, assigned at random: AMD EPYC 7763 (Zen 3), 9V74 (Zen 4), 9V45 (Zen 5;
+  the only one that showed the torn exit), Intel Xeon 8370C, 8573C. All have AVX2; some have AVX-512, which `cpuid` under
+  the client hides.
+- **Stress set:** `test/regstress.c` runs threads in hot shared code with every register and the flags checked.
+  `regc` under the client and `regd` on DynamoRIO alone (modes `jit`: code generated and unmapped, `sig`: async
+  signals, `idle`), `sig` (8 threads, signals and code churn), `short` (many 1-second runs, for start and exit
+  races), `xlsig` (SIGXCPU sent with `kill` at emulated instructions), `duck` (duckdb's mixed query against native
+  hashes). The torn exit lab (`segv`) is `regstress jit` on 9V45 only.
+- **DynamoRIO:** a *fragment* is translated code in the code cache: a *basic block* (bb), or a *trace* stitched from hot
+  bbs. A *flush* removes fragments for a code range (a JIT writing code, an `munmap`); they are freed once every thread
+  has passed a *synch point* (a safe spot outside the cache). A *cache reset* throws away the whole cache and relocates
+  every thread, which we keep off ([ADR 0010](adr/0010-no-cache-reset.md)). A *clean call* saves the whole machine state
+  to call C from the cache; our helpers use it.
+- **Counting:** 0 failures in n runs bounds the rate at 3/n (95%, the rule of three); the plan quotes that bound.
+- **Phases:** each has a go/no-go in the plan; a failed gate stops the plan for a decision.

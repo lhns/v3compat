@@ -1,0 +1,61 @@
+name: dr-suite
+# DynamoRIO's own test suite, base and fix of the fork built on the same runner (docs/howto.md). Push a suite-*
+# branch that sets BASE and FIX below; the summary lists tests that fail on one side only, each rerun 20 times.
+on:
+  push:
+    branches: ['suite-*']
+
+permissions:
+  contents: read
+
+env:
+  BASE: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
+  FIX: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
+jobs:
+  suite:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [release, debug]
+        rep: [a, b]
+    steps:
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install cmake zlib1g-dev libsnappy-dev liblz4-dev \
+            g++-multilib libunwind-dev libelf-dev
+          echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope
+      - name: Base and fix on the same machine
+        run: |
+          set +e
+          out="$RUNNER_TEMP/out"; mkdir -p "$out"
+          { grep -m1 'model name' /proc/cpuinfo; grep -o -m1 avx512f /proc/cpuinfo; } | tee "$out/cpu.txt"
+          flags="-DBUILD_TESTS=ON -DAUTOMATED_TESTING=ON -DRUN_SUDO_TESTS=ON -DBUILD_DOCS=OFF"
+          if [ "${{ matrix.build }}" = debug ]; then flags="$flags -DDEBUG=ON -DINTERNAL=ON"; else flags="$flags -DDEBUG=OFF"; fi
+          extract() { sed -n 's/^[0-9]*://p' Testing/Temporary/LastTestsFailed.log 2>/dev/null | sort > "$1"; }
+          for sha in $BASE $FIX; do
+            s=${sha:0:7}
+            git clone -q --filter=blob:none https://github.com/lhns/dynamorio dr-$s && git -C dr-$s checkout -q $sha && git -C dr-$s submodule update -q --init --depth 1
+            cmake -S dr-$s -B b-$s $flags >/dev/null && cmake --build b-$s -j"$(nproc)" >/dev/null 2>&1 || echo "$s: build failed" | tee -a "$out/summary.txt"
+            cd b-$s
+            ctest -j"$(nproc)" --timeout 300 >/dev/null 2>&1; extract "$out/$s-first.txt"; cp Testing/Temporary/LastTest.log "$out/$s-LastTest.log"
+            ctest -j"$(nproc)" --timeout 300 --rerun-failed >/dev/null 2>&1; extract "$out/$s-rerun.txt"
+            echo "$s: $(ctest -N | tail -1); first-pass failures $(wc -l < "$out/$s-first.txt"), after rerun $(wc -l < "$out/$s-rerun.txt")" | tee -a "$out/summary.txt"
+            cd ..
+          done
+          { comm -3 "$out/${BASE:0:7}-first.txt" "$out/${FIX:0:7}-first.txt"; comm -3 "$out/${BASE:0:7}-rerun.txt" "$out/${FIX:0:7}-rerun.txt"; } | tr -d '	' | sort -u > "$out/candidates.txt"
+          for k in $(cat "$out/candidates.txt"); do
+            kre=$(printf '%s' "$k" | sed 's/[][\\.|$^*+?(){}]/\\&/g')
+            for s in ${BASE:0:7} ${FIX:0:7}; do
+              f=0; for i in $(seq 20); do (cd b-$s && ctest -R "^$kre\$" --timeout 300 >/dev/null 2>&1) || f=$((f+1)); done
+              echo "repeat $s $k: $f of 20 failed" | tee -a "$out/summary.txt"
+            done
+          done
+          { echo "## ${{ matrix.build }}-${{ matrix.rep }}"; echo '```'; cat "$out/cpu.txt" "$out/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: suite-${{ matrix.build }}-${{ matrix.rep }}
+          path: ${{ runner.temp }}/out
