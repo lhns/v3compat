@@ -1441,8 +1441,7 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
             instr_t at;
             instr_init(dc, &at);
             byte *nx = decode(dc, end, &at);
-            dr_fprintf(STDERR, "V3R restore start=%p pc=%p op=%s y=%s,%s,%s g=%d%d%d%d%d%d fl=%d tid=%d
-",
+            dr_fprintf(STDERR, "V3R restore start=%p pc=%p op=%s y=%s,%s,%s g=%d%d%d%d%d%d fl=%d tid=%d\n",
                        info->fragment_info.cache_start_pc, end,
                        nx != NULL && instr_valid(&at) ? decode_opcode_name(instr_get_opcode(&at)) : "?",
                        y_live[0] ? get_register_name(y_live[0]) : "-", y_live[1] ? get_register_name(y_live[1]) : "-",
