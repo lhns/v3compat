@@ -414,10 +414,11 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
   with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
   43305470603. Not explained yet.
-- **Performance, ranked:** fewer `/proc/self/maps` reads on DynamoRIO's fault and `mprotect` paths (javac's kernel
-  time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
-  with an exactness guard, if a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node
-  and javac (counted in the helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers understate helper cost 2-4x against Ivy Bridge; an Ivy
+- **Performance, ranked:** fewer `/proc/self/maps` reads (javac's kernel time): 58% come from DynamoRIO changing its own
+  generated code's protection, 42% from its new-module check on each new code area (run 43291238409); a lean helper call
+  instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic with an exactness guard, if
+  a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
+  helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers understate helper cost 2-4x against Ivy
   Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
 
 ## License
