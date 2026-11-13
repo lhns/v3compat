@@ -1,4 +1,4 @@
-# arrays with frequent safepoints: translations stored at build (client and empty client) against recreated.
+# arrays with frequent safepoints: which client restores put state back, and where.
 arr1 bash lab/arrays.sh 10
 arr2 bash lab/arrays.sh 10
 arr3 bash lab/arrays.sh 10
@@ -7,9 +7,3 @@ arr5 bash lab/arrays.sh 10
 arr6 bash lab/arrays.sh 10
 arr7 bash lab/arrays.sh 10
 arr8 bash lab/arrays.sh 10
-arr9 bash lab/arrays.sh 10
-arr10 bash lab/arrays.sh 10
-arr11 bash lab/arrays.sh 10
-arr12 bash lab/arrays.sh 10
-arr13 bash lab/arrays.sh 10
-arr14 bash lab/arrays.sh 10
