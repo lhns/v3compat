@@ -15,6 +15,10 @@ V3COMPAT_CI=1 ctest --test-dir build --output-on-failure
 - The first configure builds the pinned DynamoRIO fork into `~/.cache/v3compat/dr-<commit>` (about 10 minutes);
   `-DV3COMPAT_DR_ROOT=<install>` uses an existing build instead. avxemu's helpers (and, with the semantic suite, its test
   cases) are fetched by CMake at the commit pinned in `CMakeLists.txt` (`AVXEMU_COMMIT`).
+- The translation cache is test and lab only: `V3COMPAT_CACHE=DIR` reads `DIR/<program>.pcache`, with
+  `V3COMPAT_CACHE_WRITE=1` a training run writes it, `V3COMPAT_CACHE_VERIFY=1` translates every hit fresh as well and
+  exits 86 on a difference (`2` only reports), `V3COMPAT_CACHE_STATS=1` prints hit counts (`2` also the key).
+  Never time a verify run.
 - `V3COMPAT_HELPERS_ONLY=1` sends every emulated form to its helper, except `movbe` stores, which are always inline.
 - `allowlist-check` fails after a DynamoRIO or XED bump until `test/allow/regen.sh` is rerun ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)).
 - `test/sem/refused.txt` lists the suite's forms the client refuses (exit 86). It is empty and must stay exact:
@@ -46,6 +50,8 @@ What is there:
 | `bench/jit.js`, `bench/Bench.java` | JIT workloads that print per-round times (warmup apart from steady state) and a checksum |
 | `bench/fma.c` | ns/op of each FMA form (vpsllvq as the helper-call control) and dgemm/sgemm/Horner kernels with checksums |
 | `lab/stress.sh KIND RUNS` | The stress set (`duck`, `sig`, `regc`, `regd`, `short`) and process-level labs: `exit` (a process ending while a thread waits in `vfork`), `cap` (thread creation failing or churning at exit), `bigclient` (1,000 threads at exit), `xl` (signals sent with `kill` at emulated instructions), `segv` (the torn exit, 9V45 only); `lab/loop.sh` classifies each run |
+| `lab/pcache.sh MODE` | The translation cache ([design](translation-cache.md)): `time N` cold against warm per workload, `twolayout`, `stress KIND N` in verify mode, `ctest` plain, training and verify, `srab N` the cost of `-stable_reach`, `diag`, `xlsig N` |
+| `test/pcache_tool.py` | Reads a cache file: `check`, `diff A B` (two training runs must write the same entries), `corrupt FILE MODE OUT` |
 | `lab/javac.sh RUNS` | The javac crash: javac under the client, an empty client (`lab/nullclient`) and DynamoRIO alone, with each crash's offset |
 
 The stress set every PR that touches translation or the fork reports, in the plan's terms: duckdb 0 of 240, signal

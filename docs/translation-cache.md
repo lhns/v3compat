@@ -1,8 +1,8 @@
 # Translation cache across runs: design
 
-**Status:** a design for the owner to decide on. Nothing is built. It works out
-[ADR 0006](adr/0006-read-only-translation-cache.md), which stays Proposed until the owner decides. Tags as in the
-[plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
+**Status:** Phases 1 and 2 are built on fork branches, lab and test only ([Phase 2](#phase-2-what-was-built)). Nothing is
+deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md), which stays Proposed until Phase 3. Tags as in
+the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
 
 ## Summary
 
@@ -264,6 +264,98 @@ that reads it; this class of attack was demonstrated against Rosetta's cache (AD
   that a lazy cache keeps. It is a later option once lazy install is measured. It must not become coarse units under
   another name, and must only add fragments, never relocate threads.
 
+## Phase 2: what was built
+
+Fork branch `pcache-phase2` (`core/pcache.c`), v3compat branch `pcache-phase2`. Entries hit with ASLR on and DR's
+default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and labs only.
+
+- **Nothing absolute is stored.** An entry is found by the module's build-id and the block's offset in it. Every address
+  in it is a value record: an offset from the block's own module, from DR or from a private module, or an IBL or
+  clean-call routine named by its type. Install resolves each one in the reading process.
+- **Layout-dependent choices are predicates on the values.** Each value stores whether it is in rel32 reach of vmcode
+  and whether it fits 32 bits signed and unsigned, which is what DR's encodings depend on. The reader's must be equal,
+  or the block is a miss. A rip-relative app reference kept as rip-relative must still reach.
+- **`-stable_reach`.** With the default `-vm_max_offset`, DR puts vmcode at a random offset of up to 256 MB, and whether
+  an address in a non-PIE executable (duckdb, node) is in rip-relative reach changed from run to run: half of all
+  layouts missed almost every block **[measured]**. With `-stable_reach`, which the launcher passes with the cache, DR
+  keeps a rip-relative reference only if it reaches from every placement the offset allows; otherwise it uses the
+  absolute form, which is always valid. The encoding is then a function of the options. Rejected: pinning
+  `-vm_max_offset 0` (gives up the code cache's random placement), moving `-vm_base` (only moves the edge), two
+  encodings per entry (twice the size), re-mangling at install (redoes the work). Every other reach decision in the
+  fork either fails closed (a clean call's rel32 target must still reach at install; its absolute form is not cached)
+  or is outside cached blocks (generated code, syscalls, native exec).
+- **Departure: absolute values are found by decoding the emitted block,** not where DR creates them, because the
+  client's clean-call arguments are opaque to DR. An immediate (also the two 32-bit halves DR splits a 64-bit value
+  into) is relocated only if it equals an address the block's own bytes name: an instruction's address or end, a
+  rip-relative or branch target, inside the module. Any other immediate that points into mapped memory, or a derived
+  address outside the module, makes the block uncacheable. Two training runs at different layouts must write
+  identical entries; CI checks it.
+- **File format:** version, header and whole-file checksums (XXH64, checked at open), the full key stored and compared
+  byte for byte (DR and private-module build-ids, the client's TLS slots, the options, CPUID and XCR0), a sorted index,
+  a checksum per entry checked at lookup, every record bounds-checked, a size cap (`-pcache_max_size`). Anything
+  malformed is a miss; nothing is repaired. Checksums guard against corruption, not a malicious writer (Phase 3).
+- **Verify mode** also compares every exit's target, as built before emit rewrites it.
+- **Tests:** `pcache-fail-closed` (ctest): truncated, empty, garbage, flipped and wrong-version files, a wrong key, a
+  corrupt entry, length, index, record kind, value class and predicate (with the outer checksums fixed up again, so
+  the inner check is what rejects them), another build of a library, a library patched in place with its build-id
+  kept, a library unloaded and another loaded where it was, and a library at another base both ways round. Each gives
+  the native output and no hits; the same setup undamaged hits. CI's `cache-verify` job trains over ctest and runs
+  it, a regstress subset and duckdb's hashes in verify mode, with hit-rate floors and the two-layout check.
+  `test/pcache_tool.py` reads, checks, diffs and damages files; `lab/pcache.sh` runs the labs.
+
+**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted, on fork a438f5b before its rebase onto the
+memquery change; the final commit has CI and the two-layout check; ASLR on, default DR options, `-stable_reach` with
+the cache; every run `rc=0` and every duckdb and node digest equal to native) **[measured]**:
+
+| Workload | Cold to warm, traces on | Less | With `-disable_traces` | Less |
+|---|---|---|---|---|
+| duckdb `select 42` | 0.73-0.91 to 0.45-0.54 s | 38-42% | 0.54-0.68 to 0.25-0.30 s | 53-56% |
+| duckdb compute | 1.03-1.29 to 0.72-0.90 s | 30-32% | 0.83-1.05 to 0.51-0.68 s | 36-39% |
+| `node -e 0` | 0.57-0.70 to 0.35-0.43 s | 35-40% | 0.42-0.53 to 0.20-0.25 s | 47-53% |
+| `java -version` | 1.42-1.99 to 1.01-1.62 s | 19-30% | 1.14-1.62 to 0.80-1.14 s | 28-34% |
+| Node `jit.js` | 3.70-4.75 to 3.30-4.12 s | 11-13% | 3.04-3.93 to 2.62-3.27 s | 14-19% |
+
+Medians of 6 interleaved reps on each of four jobs: EPYC 9V74 (two), Xeon 8573C, Xeon 6975P. Phase 1's stop criterion,
+40% on `select 42` with traces on, is met on two of the four (38-42%); the prototype measured 38-43% with ASLR off.
+
+- **Hits** (warm, traces on): `select 42` 76,946 of 77,071 blocks, compute 83,957 of 84,098, `node -e 0` 56,755 of 61,366,
+  `java -version` 69,799 of 125,936 (the rest is the JVM's generated code), `jit.js` 124,944 of 150,993. No miss came
+  from a layout predicate. Cache files: duckdb 14-15 MB, node 10-22 MB, java 14 MB.
+- **`-stable_reach` alone**, no cache, interleaved A/B over 8 reps on three jobs: duckdb over 300M rows +0.0 to +0.2%
+  (paired medians), duckdb's varied workload +0.2% (9V74) and +0.5% and +1.9% (two 7763s); startup within 0.01 s. A
+  disp32 absolute operand for targets below 2 GB would save the scratch register where it costs; not built.
+- **`-stable_reach` with PIE code** (run 43408296003): 10 reads each of regstress (vmcode at -vm_base plus the random
+  offset) and misc_forms (vmcode placed near the app), each at another placement: 0 predicate misses, the same hits
+  every time (37,790 and 2,519).
+- **Writer:** the counters of blocks it could not make position-independent (an immediate pointing into DR, vmcode or a
+  module without being derived from the block) are the same before and after the rebase: 0-3 for duckdb, 505 for node
+  and 758 for `jit.js`, all of them in its own module. 12-41 blocks per workload fail to rebuild from their entry at
+  install (a miss); the cause is not found.
+- **Two layouts:** two training runs of each workload wrote identical entries (77,109 of 77,109 for `select 42`, 69,766
+  of 69,766 for Java).
+- **Verify mode, ASLR on:** 0 mismatches over every workload and both option sets; ctest plain, training and verify
+  273 of 274 each (`setuid` fails in all three in the lab, which lacks CI's `chmod o+x $HOME`); the stress set duckdb 0 of
+  240, signal 0 of 390, reg/flags 0 of 306, the short loop 1 of 4,500 (SIGSEGV, and 1 of the 150 no-cache runs on the same
+  Xeon 8370C: the known `regstress sig jit` flake).
+- **Signal tests under load.** The ctest signal tests (regstress, vfork-sig), `-j4` among themselves, 120 passes per
+  arm on four jobs (run 43465664481), failures without the cache / training / verify mode / warm:
+  `regstress-xlsig` 12 / 19 / 21 / 31; the regstress binary dying of SIGSEGV early (`regstress`, `regstress-control`)
+  3 / 1 / 2 / 9; the vfork-sig tests 13 / 1 / 4 / 10. Every class fails without the cache too, and no run had a verify
+  mismatch. Warm is clearly worse for `regstress-xlsig` and possibly for the SIGSEGV; training and verify are not
+  distinguishable from no cache at this count; the mechanism is not shown. `regstress-xlsig`'s message is DynamoRIO's
+  own: a signal sent to a thread in its first instructions kills `lab/xlrace.c` under DynamoRIO alone and the client
+  in 300 of 300 runs, natively 0 of 300 (run 43418236984). Run serially, as CI does, the cache arms were near clean:
+  the stress set above and `regstress-xlsig` 1 of 200 (0 of 100 without). CI's `cache-verify` job runs ctest serially
+  and reruns a test once when it fails with "default action in native thread". Whether DynamoRIO's signals at thread
+  start must be fixed before Phase 3 is the owner's decision.
+
+**Phase 3 go/no-go:** go, in the owner's judgement of the gain, with the signal-at-thread-start races above fixed
+first or accepted. Entries are position-independent and
+fail closed, verify mode is clean with ASLR on, and the startup gain matches Phase 1. Phase 3 still has to decide the
+writer, the launcher option and the read-only mount, key on the client's build rather than its path (a different
+install path never hits today), and take integrity from fs-verity or a signed manifest: the checksums here only guard
+against corruption, and a file truncated while mapped would still fault.
+
 ## Phases
 
 Each phase ends at a go/no-go for the owner.
@@ -279,7 +371,7 @@ Each phase ends at a go/no-go for the owner.
    - **Stop criterion:** stop if warm `select 42` is not at least 40% below cold on runners with traces on, or if verify
      mode finds a mismatch that cannot be fixed by the key or the preconditions.
 2. **Relocation and format.** Relocation records with ASLR on, the cache file format with checksums, the full key,
-   the fail-closed tests and verify mode in CI.
+   the fail-closed tests and verify mode in CI. Built: [Phase 2](#phase-2-what-was-built).
 3. **Deployment.** The training-run writer as a build tool, the launcher option, the read-only mount from the runtime
    wrapper, and integrity through fs-verity or a signed manifest. ADR 0006 is revised to Accepted, or superseded,
    with what was learned.
