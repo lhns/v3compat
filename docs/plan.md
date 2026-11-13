@@ -365,6 +365,16 @@ unchanged, at the stub's level; javac's `read` calls 50-54k to about 200. Stress
 0 of 390, reg/flags 0 of 306 under the client and 0 of 306 alone, short 0 of 4,500), DynamoRIO's suite the same failures
 on base and fix once built in the same directory (runs 43400012869, 43408308171).
 
+**A new trace freed under the thread that emitted it, fixed in the fork** (branch `fix-trace-emit-stale`,
+[lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)). `end_and_emit_trace()` returned its trace after removing
+the shared trace head, which can walk the pending-deletion list and sign this thread off a flush of the new trace; the trace
+could be freed, and dispatch entered it, since its was-I-flushed check only runs when the thread is behind. The thread then
+ran into the freed exit stubs (a DynamoRIO crash at a pc in its own heap, status 255, or a JVM abort). A lab-only ledger of
+freed fragments found it (run 43397328455). It now looks the trace up again. `trace_flush` with
+`-lazy_deletion_max_pending 1` on DynamoRIO alone, on top of the IBL fix (run 43404515993) **[measured]**: 120 of 120 bad
+before, 0 of 120 after; Java under the client 14 of 16 and 0 of 16, javac 11 of 12 and 0 of 12. With both fixes against
+`14836b0`, interleaved, defaults (run 43437004196): status 255 in 9 of 1,872 runs before and 0 of 1,872 after.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
