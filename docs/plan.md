@@ -160,7 +160,7 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   AVX2. JIT-heavy startup pays DynamoRIO: javac builds 7.9M blocks; 36-52% of its time is the kernel serving
   `/proc/self/maps` reads (814k `read` calls, 148k `mprotect`, 22k signals) and most of the rest is libdynamorio.
   Most of those reads were DynamoRIO toggling its own generated code's protection, fixed in the fork (below, "Gencode
-  protection"): javac's reads fell to about 50k.
+  protection"): javac's reads fell to about 50k, and to about 200 with the new-module check fixed (below).
 - **Any client costs 15-45% over DynamoRIO alone** on JIT startup (Node 2.63 to 3.03 s with an empty client, 3.26 s with
   ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
   `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
@@ -340,7 +340,7 @@ found it (`lab-perf-trace-diag`, run 43242817702). The lists now go with `trace_
 javac crashes in libdynamorio under the client and 0 of 50 with an empty client, the Java benchmark 0 of 12, no flush
 left a trace's lists behind (run 43247919081); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306
 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 (run 43248017594). DynamoRIO's suite,
-base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test` on debug builds,
+base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test`,
 which fails from the build directory's name (below, "Known flakes"). Reproduce with `lab/javac.sh`.
 
 **Gencode protection without reading `/proc/self/maps`, fixed in the fork** (branch `gencode-prot-no-maps`, merged as `14836b0`,
