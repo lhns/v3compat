@@ -79,3 +79,26 @@ jobs:
         run: |
           cmake --build build --target package-tarball
           tar tzf build/v3compat-*-linux-x86_64.tar.gz
+
+  # The translation cache (docs/translation-cache.md): verify mode over ctest, a stress subset and duckdb's hashes,
+  # ASLR on. Its own job, so it runs beside build-test.
+  cache-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools zstd
+      - name: Build
+        run: cmake -S . -B build && cmake --build build -j
+      - name: duckdb
+        run: |
+          img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'
+          docker pull -q "$img"; c=$(docker create "$img"); docker cp "$c:/duckdb" ./duckdb; docker rm "$c"
+      - name: Verify mode, hit rates, two layouts
+        env:
+          V3COMPAT_CI: "1"
+        run: chmod o+x "$HOME" && bash test/pcache_ci.sh build ./duckdb
