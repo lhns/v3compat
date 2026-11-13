@@ -365,6 +365,25 @@ unchanged, at the stub's level; javac's `read` calls 50-54k to about 200. Stress
 0 of 390, reg/flags 0 of 306 under the client and 0 of 306 alone, short 0 of 4,500), DynamoRIO's suite the same failures
 on base and fix once built in the same directory (runs 43400012869, 43408308171).
 
+**The IBL's deletion race, fixed in the fork** (branch `fix-ibl-tag`, [lhns/dynamorio#11](https://github.com/lhns/dynamorio/pull/11)).
+A thread retiring a shared IBL entry points its start pc at `target_delete` and then overwrites its tag with `FAKE_TAG`; a
+thread that had matched the tag but read the redirected pc reread the tag there, could get `FAKE_TAG`, and dispatch built
+a block at -1 and forged a SIGSEGV. The hit path now keeps the matched tag in a TLS slot for `target_delete`.
+`test/trace_flush.c` (now a ctest), base `14836b0` against the fix, interleaved (run 43396958829, EPYC 9V74 and 9V45)
+**[measured]**: DynamoRIO alone 86 of 120 bad before, 0 of 120 after; under the client 49 of 120, 0 of 120. Stress set
+unchanged (duckdb 0 of 240, signal 0 of 390, reg/flags 0 of 306 under the client and 0 of 306 alone, short 0 of 4,500),
+speed unchanged; DynamoRIO's suite the same failures on base and fix (run 43396992185). Measured before the rebase onto `0bd5cd8`.
+
+**A new trace freed under the thread that emitted it, fixed in the fork** (branch `fix-trace-emit-stale`,
+[lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)). `end_and_emit_trace()` returned its trace after removing
+the shared trace head, which can walk the pending-deletion list and sign this thread off a flush of the new trace; the trace
+could be freed, and dispatch entered it, since its was-I-flushed check only runs when the thread is behind. The thread then
+ran into the freed exit stubs (a DynamoRIO crash at a pc in its own heap, status 255, or a JVM abort). A lab-only ledger of
+freed fragments found it (run 43397328455). It now looks the trace up again. `trace_flush` with
+`-lazy_deletion_max_pending 1` on DynamoRIO alone, on top of the IBL fix (run 43404515993) **[measured]**: 120 of 120 bad
+before, 0 of 120 after; Java under the client 14 of 16 and 0 of 16, javac 11 of 12 and 0 of 12. With both fixes against
+`0bd5cd8`, interleaved, defaults (run 43437004196): status 255 in 9 of 1,872 runs before and 0 of 1,872 after.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -444,11 +463,10 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
   performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **javac under DynamoRIO alone, and so under the client,** fails in about 1 run in 5 at the current pin (50 runs each:
-  client 9, empty client 6, DynamoRIO alone 11), at PCs outside libdynamorio or with status 134; upstream too.
-  `test/trace_flush.c` on lab branch `lab-perf-trace-fix` (threads in hot code in one page, another writing a byte of
-  that page that never executes) dies with SIGSEGV in every run on DynamoRIO alone and never natively: likely the same
-  bug, and its reproducer. Next to fix in the fork.
+- **javac under DynamoRIO alone, and so under the client,** failed in about 1 run in 5 at `14836b0`. Two fork bugs: the
+  IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
+  [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
+  still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
 - **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
   with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
   43305470603. Not explained yet.
