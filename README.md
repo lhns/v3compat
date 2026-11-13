@@ -49,6 +49,9 @@ build/inst/bin/v3compat-run [--] prog args...
 - `V3COMPAT_NATIVE=1` runs `prog` without DynamoRIO. Without it the program always runs under DynamoRIO, even
   on a CPU that has AVX2.
 - `V3COMPAT_DR_OPTS="..."` adds DynamoRIO options; defaults live in `launcher/v3compat-run.c`.
+- `V3COMPAT_UNPROTECTED_GENCODE=1` passes `-protect_mask 0`: DynamoRIO stops toggling its generated code (indirect-branch
+  lookup, context switch) writable around each change, which costs JIT startup 1-15%. The code then stays writable, so a
+  stray write by the program corrupts DynamoRIO instead of faulting. Off by default.
 - `V3COMPAT_STATS=1` prints, at exit to stderr, how many instructions of each class (AVX2, FMA, BMI, LZCNT, TZCNT,
   MOVBE) and of each emulated opcode were executed. It slows the program: never time a run with it.
 - Startup is DynamoRIO translating the program's static init (duckdb `select 42`: about 20 times native). Measured on
