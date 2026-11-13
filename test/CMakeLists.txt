@@ -217,6 +217,11 @@ v3test(regstress-xlsig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress
 add_executable(killed killed.c)
 v3test(killed stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:killed>)
 v3test(killed-native stdout-has PASS exit 0 -- $<TARGET_FILE:killed>)
+# Flushes of a page with hot traces in it: the fork's trace and IBL deletion fixes.
+add_executable(trace_flush trace_flush.c)
+target_compile_options(trace_flush PRIVATE -O1)
+target_link_options(trace_flush PRIVATE -pthread)
+v3test(trace-flush stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:trace_flush> 10)
 # Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
 add_executable(jitgrowth jitgrowth.c)
 target_link_options(jitgrowth PRIVATE -pthread)
