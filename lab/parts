@@ -4,5 +4,7 @@
 pct1 bash lab/pcache.sh time 8
 pct2 bash lab/pcache.sh time 8
 pct3 bash lab/pcache.sh time 8
-pcs bash lab/pcache.sh stress 60
+pcsreg bash lab/pcache.sh stress reg 30
+pcssig bash lab/pcache.sh stress sig 60
+pcsduck bash lab/pcache.sh stress duck 10
 pcc bash lab/pcache.sh ctest
