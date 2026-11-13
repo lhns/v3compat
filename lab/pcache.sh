@@ -106,8 +106,7 @@ ctestrace)
     case $a in plain) e="V3COMPAT_CACHE=" ;; train) rm -rf /tmp/ctr/t; mkdir -p /tmp/ctr/t; chmod 1777 /tmp/ctr/t; e="V3COMPAT_CACHE=/tmp/ctr/t V3COMPAT_CACHE_WRITE=1" ;;
       warm) e="V3COMPAT_CACHE=/tmp/ctr/c" ;; verify) e="V3COMPAT_CACHE=/tmp/ctr/c V3COMPAT_CACHE_VERIFY=1" ;; esac
     env $e ctest --test-dir build -j4 --output-on-failure > lab-out/ct-$a-$i.txt 2>&1
-    f=$(grep -F "***Failed" lab-out/ct-$a-$i.txt | grep -v "setuid" | sed -E 's/.*Test +#[0-9]+: (\S+) .*//' | tr '
-' ' ')
+    f=$(grep -F "***Failed" lab-out/ct-$a-$i.txt | grep -v "setuid" | sed -E 's/.*Test +#[0-9]+: ([^ ]+) .*/\1/' | tr '\n' ' ')
     k=$(grep -c "native thread" lab-out/ct-$a-$i.txt)
     echo "RESULT ctestrace $a pass $i failed [$f] native-thread-lines $k"
   done; done ;;
