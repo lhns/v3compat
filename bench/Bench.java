@@ -95,6 +95,7 @@ public class Bench {
                                         Bench::collections, Bench::bigint, Bench::streams);
         long t00 = System.nanoTime();
         for (int k = 0; k < ks.size(); k++) {
+            if (args.length > 2 && !names[k].equals(args[2])) continue;
             StringBuilder out = new StringBuilder("round " + names[k]), vals = new StringBuilder("value " + names[k]);
             for (int r = 0; r < rounds; r++) {
                 long t0 = System.nanoTime();

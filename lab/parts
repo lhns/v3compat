@@ -1,5 +1,15 @@
-# The stale-trace fix (fork fix-trace-emit-stale) on top of the IBL fix, against the IBL fix alone.
-emit1 bash lab/emit.sh 30
-emit2 bash lab/emit.sh 30
-emit3 bash lab/emit.sh 30
-emit4 bash lab/emit.sh 30
+# Bench's arrays kernel alone: which emulation path gives the wrong value (client only, mostly EPYC 7763).
+arr1 bash lab/arrays.sh 12
+arr2 bash lab/arrays.sh 12
+arr3 bash lab/arrays.sh 12
+arr4 bash lab/arrays.sh 12
+arr5 bash lab/arrays.sh 12
+arr6 bash lab/arrays.sh 12
+arr7 bash lab/arrays.sh 12
+arr8 bash lab/arrays.sh 12
+arr9 bash lab/arrays.sh 12
+arr10 bash lab/arrays.sh 12
+arr11 bash lab/arrays.sh 12
+arr12 bash lab/arrays.sh 12
+arr13 bash lab/arrays.sh 12
+arr14 bash lab/arrays.sh 12
