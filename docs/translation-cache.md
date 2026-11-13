@@ -329,12 +329,19 @@ Medians of 6 interleaved reps on each of four jobs: EPYC 9V74 (two), Xeon 8573C,
   273 of 274 each (`setuid` fails in all three in the lab, which lacks CI's `chmod o+x $HOME`); the stress set duckdb 0 of
   240, signal 0 of 390, reg/flags 0 of 306, the short loop 1 of 4,500 (SIGSEGV, and 1 of the 150 no-cache runs on the same
   Xeon 8370C: the known `regstress sig jit` flake).
-- **`regstress-xlsig`** failed twice with a cache (1 of 200 cached runs against 0 of 100 without, run 43405034104, and
-  once in an earlier verify ctest): "default action in native thread". It is not the cache. A signal sent to a thread
-  in its first instructions kills the process under DynamoRIO alone and under the client in 300 of 300 runs, natively
-  0 of 300 (`lab/xlrace.c`, run 43418236984); a warm start only makes regstress's first signal land sooner.
+- **Signal tests fail more often with a warm cache.** The ctest signal tests (regstress, vfork-sig), `-j4` among
+  themselves, 120 passes per arm on four jobs (run 43465664481): `regstress-xlsig` failed in 12 without the cache, 19
+  training, 21 in verify mode and 31 warm; the regstress binary died of SIGSEGV early (`regstress`, `regstress-control`)
+  in 3, 1, 2 and 9; the vfork-sig tests in 13, 1, 4 and 10. Every class also fails without the cache. The rate follows
+  startup speed (warm, the fastest, is worst; verify mode, which runs the same installed code slower, is not), which
+  points at timing, not at wrong code. `regstress-xlsig`'s message is DynamoRIO's: a signal sent to a thread in its first
+  instructions kills the process under DynamoRIO alone and the client in 300 of 300 runs, natively 0 of 300
+  (`lab/xlrace.c`, run 43418236984). CI's `cache-verify` job reruns a test once when it fails that way; it did in each of
+  its first runs. Fixing DynamoRIO's handling of signals at thread start is an open item ([plan](plan.md)); whether it
+  must come before Phase 3 is the owner's decision.
 
-**Phase 3 go/no-go:** go, in the owner's judgement of the gain. Entries are position-independent and
+**Phase 3 go/no-go:** go, in the owner's judgement of the gain, with the signal-at-thread-start races above fixed
+first or accepted. Entries are position-independent and
 fail closed, verify mode is clean with ASLR on, and the startup gain matches Phase 1. Phase 3 still has to decide the
 writer, the launcher option and the read-only mount, key on the client's build rather than its path (a different
 install path never hits today), and take integrity from fs-verity or a signed manifest: the checksums here only guard
