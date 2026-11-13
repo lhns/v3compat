@@ -32,11 +32,15 @@ jobs:
       - name: Packages
         run: for i in 1 2 3 4 5 6; do sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools time zstd gdb && break; sleep 60; done
       - name: Build the branch, base (origin/main) for ab parts, the benchmarks
+        # One command per line: bash -e ignores a failure left of `&&`, and DynamoRIO builds at configure time.
         run: |
-          cmake -S . -B build && cmake --build build -j
+          cmake -S . -B build
+          cmake --build build -j
           case "${{ matrix.part.name }}" in ab*)
-            git fetch -q origin main && git worktree add /tmp/base origin/main
-            cmake -S /tmp/base -B /tmp/base/build && cmake --build /tmp/base/build -j ;;
+            git fetch -q origin main
+            git worktree add /tmp/base origin/main
+            cmake -S /tmp/base -B /tmp/base/build
+            cmake --build /tmp/base/build -j ;;
           esac
           mkdir -p /tmp/bench/classes && "$JAVA_HOME_21_X64/bin/javac" -d /tmp/bench/classes bench/Bench.java
           gcc -O3 -march=x86-64-v3 bench/fma.c -o /tmp/bench/fma -lm
