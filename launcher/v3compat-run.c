@@ -183,6 +183,17 @@ __attribute__((used)) void run(long *sp) {
         if (user && slen(user) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", ""); /* before it is copied */
         p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset -no_ignore_syscalls ");
         if (user && *user) { p = scpy(p, user); *p++ = ' '; }
+        /* Lab-only translation cache (docs/translation-cache.md, Phase 1): a directory, written by a training run. */
+        s = envget(envp, "V3COMPAT_CACHE=");
+        if (s && *s) {
+            const char *w = envget(envp, "V3COMPAT_CACHE_WRITE="), *v = envget(envp, "V3COMPAT_CACHE_VERIFY="),
+                       *st = envget(envp, "V3COMPAT_CACHE_STATS=");
+            if (slen(s) >= 1024) die(125, "V3COMPAT_CACHE is too long", "", "");
+            p = scpy(p, "-pcache_dir \""); p = scpy(p, s); p = scpy(p, "\" -pcache_mode ");
+            p = scpy(p, w && w[0] == '1' && !w[1] ? "2 " : "1 ");
+            if (v && (v[0] == '1' || v[0] == '2') && !v[1]) { p = scpy(p, "-pcache_verify "); *p++ = v[0]; *p++ = ' '; }
+            if (st && st[0] == '1' && !st[1]) p = scpy(p, "-pcache_stats 1 ");
+        }
         p = scpy(p, "-client_lib \""); p = scpy(p, client); p = scpy(p, ";0;");
         s = envget(envp, "V3COMPAT_STATS=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-stats ");
         s = envget(envp, "V3COMPAT_HELPERS_ONLY="); if (s && s[0] == '1' && !s[1]) p = scpy(p, "-helpers-only ");
