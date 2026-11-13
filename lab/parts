@@ -1,9 +1,9 @@
 # translated pc of synchronous faults; Java with frequent safepoints and javac.
-xl1 bash lab/xl.sh 6
-xl2 bash lab/xl.sh 6
-xl3 bash lab/xl.sh 6
-xl4 bash lab/xl.sh 6
-xl5 bash lab/xl.sh 6
-xl6 bash lab/xl.sh 6
-xl7 bash lab/xl.sh 6
-xl8 bash lab/xl.sh 6
+xl1 bash lab/xl.sh 12
+xl2 bash lab/xl.sh 12
+xl3 bash lab/xl.sh 12
+xl4 bash lab/xl.sh 12
+xl5 bash lab/xl.sh 12
+xl6 bash lab/xl.sh 12
+xl7 bash lab/xl.sh 12
+xl8 bash lab/xl.sh 12
