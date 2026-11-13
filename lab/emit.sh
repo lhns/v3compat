@@ -12,7 +12,7 @@ declare -A DR=([base]=$HOME/.cache/v3compat/dr-$BASEC/ [fix]=$HOME/.cache/v3comp
 declare -A CL=([base]=/tmp/bt/build/inst/bin/v3compat-run [fix]=build/inst/bin/v3compat-run)
 T=$PWD/build/test/trace_flush
 declare -A bad; for k in base fix; do for m in lazy1 default; do bad[$k-$m]=0; done; done
-mkdir -p lab-out/fail
+mkdir -p lab-out/fail /tmp/bench/javac-out
 for i in $(seq $1); do for v in base fix; do for m in lazy1 default; do
   O="-no_enable_reset -no_ignore_syscalls"; [ $m = lazy1 ] && O="$O -lazy_deletion_max_pending 1"
   timeout 120 ${DR[$v]}bin64/drrun $O -- $T 2 >/tmp/o 2>/tmp/e; rc=$?
