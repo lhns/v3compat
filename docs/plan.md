@@ -424,6 +424,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **`client.memory_dump_test`** (debug and release) fails or passes by the build directory's name: the dump's section-name
   hash is keyed on a buffer the maps iterator reuses, so `[vvar]` can take an earlier region's name. Compare base and
   fix built in the same directory name.
+- **"default action in native thread"** fails `regstress-xlsig` (and once, in CI's cache job, possibly
+  `regstress-control`) when a signal reaches a thread in its first instructions; under the cache's timing more often.
+  DynamoRIO's own bug (Open items); CI's `cache-verify` job reruns such a test once.
 - **One `regstress sig jit` SIGSEGV** under the client in CI, never reproduced (0 of 1,000 on several runners). If it
   recurs, keep the CPU model and the run, and rerun `lab/stress.sh sig` on that runner type.
 

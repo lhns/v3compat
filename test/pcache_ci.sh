@@ -10,12 +10,26 @@ fail() { echo "FAIL: $*"; bad=1; }
 # setuid's checks run as another user, which must be able to write and read the cache
 mkdir -p $C/ct && chmod 1777 $C $C/ct
 
+# ctest_arm NAME VAR=value...: ctest under the cache. A failure that is DynamoRIO's signal at thread start
+# (docs/plan.md, Open items) is rerun once; any other failure, or the same test failing again, fails the job.
+ctest_arm() {
+  local name=$1; shift
+  env "$@" ctest --test-dir $B -j4 --output-on-failure > $C/$name.txt 2>&1 && return 0
+  local failed known
+  failed=$(grep -cF "***Failed" $C/$name.txt); known=$(grep -c "default action in native thread" $C/$name.txt)
+  grep -F -A8 "***Failed" $C/$name.txt | head -40
+  if [ "$failed" -gt 0 ] && [ "$known" -ge "$failed" ]; then
+    echo "$name: $failed failed with the signal at thread start, rerun once"
+    env "$@" ctest --test-dir $B --rerun-failed --output-on-failure > $C/$name-rerun.txt 2>&1 && return 0
+    tail -30 $C/$name-rerun.txt
+  fi
+  fail "ctest $name"
+}
 echo "== ctest, training, then verify mode"
-V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_WRITE=1 ctest --test-dir $B -j4 --output-on-failure > $C/train.txt 2>&1 ||
-  { fail "ctest under training"; grep -F -A12 "***Failed" $C/train.txt | head -60; }
+ctest_arm train V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_WRITE=1
 ls $C/ct | wc -l
-V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_VERIFY=1 ctest --test-dir $B -j4 --output-on-failure > $C/verify.txt 2>&1 ||
-  { fail "ctest in verify mode"; grep -E "\(Failed\)|\*\*\*|VERIFY MISMATCH" $C/verify.txt | head -40; }
+ctest_arm verify V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_VERIFY=1
+grep -h "VERIFY MISMATCH" $C/verify*.txt | head -10
 grep -E "tests passed" $C/verify.txt
 
 # floor DIR PERCENT NAME cmd...: a warm run hits at least PERCENT of its lookups, verify mode clean
