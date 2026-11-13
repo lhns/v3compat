@@ -61,6 +61,22 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
  * the program would die of a signal, so this is where they are refused. A decoded form's SIGILL (ud2)
  * is the program's own. */
 static dr_signal_action_t event_signal(void *drcontext, dr_siginfo_t *info) {
+    {   /* LAB ONLY: what translation changed between the raw and the application state at a signal */
+        static int n;
+        if (info->raw_mcontext_valid && info->mcontext != NULL && n < 400) {
+            dr_mcontext_t *a = info->mcontext, *r = info->raw_mcontext;
+            int diff = 0;
+            for (int i = 0; i < 16; i++)
+                if (__builtin_memcmp(&a->simd[i], &r->simd[i], 32) != 0) diff |= 1 << i;
+            int gd = (a->xax != r->xax) | (a->xbx != r->xbx) << 1 | (a->xcx != r->xcx) << 2 | (a->xdx != r->xdx) << 3 |
+                (a->xsi != r->xsi) << 4 | (a->xdi != r->xdi) << 5 | (a->xbp != r->xbp) << 6 | (a->xsp != r->xsp) << 7 |
+                (a->r8 != r->r8) << 8 | (a->r9 != r->r9) << 9 | (a->r10 != r->r10) << 10 | (a->r11 != r->r11) << 11 |
+                (a->r12 != r->r12) << 12 | (a->r13 != r->r13) << 13 | (a->r14 != r->r14) << 14 | (a->r15 != r->r15) << 15;
+            n++;
+            dr_fprintf(STDERR, "V3S sig=%d raw=%p app=%p ymmdiff=%x gprdiff=%x flagsdiff=%d tid=%d\n", info->sig, r->pc, a->pc,
+                       diff, gd, a->xflags != r->xflags, (int)dr_get_thread_id(drcontext));
+        }
+    }
     if (info->sig != SIGILL_NUM || info->mcontext == NULL) return DR_SIGNAL_DELIVER;
     instr_t in;
     instr_init(drcontext, &in);

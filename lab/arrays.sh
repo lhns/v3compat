@@ -21,7 +21,7 @@ run() { case $1 in client) build/inst/bin/v3compat-run -- $J Bench 8 1 arrays;;
 declare -A bad wrong; for c in $C; do bad[$c]=0; wrong[$c]=0; done
 for i in $(seq $1); do for c in $C; do
   timeout 900 bash -c "$(declare -f run); J='$J'; DR='$DR'; run $c" >/tmp/o 2>/tmp/e; rc=$?
-  grep -m40 '^V3R' /tmp/e | sed "s/^/$c $i /" >> lab-out/v3r.txt; echo "V3RCOUNT $c $i $(grep -c '^V3R' /tmp/e)"
+  grep '^V3S' /tmp/e | grep -v 'ymmdiff=0 gprdiff=0 flagsdiff=0' | head -40 | sed "s/^/$c $i /" >> lab-out/v3s.txt; echo "V3RCOUNT $c $i $(grep -c '^V3S' /tmp/e) $(grep '^V3S' /tmp/e | grep -vc 'ymmdiff=0 gprdiff=0 flagsdiff=0')"
   if [ $rc != 0 ]; then bad[$c]=$((bad[$c]+1)); echo "FAIL $c $i rc=$rc $(grep -m1 -E 'crash at PC|SIG' /tmp/e)"
   elif ! diff -q <(grep -E '^(value|parts)' /tmp/o) /tmp/native >/dev/null; then wrong[$c]=$((wrong[$c]+1)); diff <(grep -E '^(value|parts)' /tmp/o) /tmp/native | grep '^<' | sed "s/^/WRONG $c $i /"; fi
 done; done
