@@ -97,6 +97,17 @@ srab)
       one srab-$a varied V3COMPAT_DR_OPTS="$o"
     done
   done ;;
+sigrace)
+  # The signal tests alone, -j4 among themselves, N passes per arm interleaved: plain, training, warm, verify.
+  rm -rf /tmp/sgr; mkdir -p /tmp/sgr/c && chmod 1777 /tmp/sgr /tmp/sgr/c
+  V3COMPAT_CACHE=/tmp/sgr/c V3COMPAT_CACHE_WRITE=1 ctest --test-dir build -R 'regstress|vfork-sig' -j4 > /dev/null 2>&1
+  for i in $(seq $2); do for a in plain train warm verify; do
+    case $a in plain) e="V3COMPAT_CACHE=" ;; train) rm -rf /tmp/sgr/t; mkdir -p /tmp/sgr/t; e="V3COMPAT_CACHE=/tmp/sgr/t V3COMPAT_CACHE_WRITE=1" ;;
+      warm) e="V3COMPAT_CACHE=/tmp/sgr/c" ;; verify) e="V3COMPAT_CACHE=/tmp/sgr/c V3COMPAT_CACHE_VERIFY=1" ;; esac
+    env $e ctest --test-dir build -R 'regstress|vfork-sig' -j4 --output-on-failure > lab-out/sg-$a-$i.txt 2>&1
+    grep -F "***Failed" lab-out/sg-$a-$i.txt | sed -E "s/.*Test +#[0-9]+: ([^ ]+) .*/RESULT sigrace $a \1/"
+    echo "RESULT sigrace $a pass"
+  done; done ;;
 ctestrace)
   # Whether the cache changes how often a ctest fails with DynamoRIO's signal at thread start: plain, training, warm
   # and verify interleaved, each a whole ctest -j4 as in CI's cache job, N passes.
