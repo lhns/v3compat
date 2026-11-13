@@ -68,8 +68,8 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 
 | Work | Repo |
 |---|---|
-| DynamoRIO client, launcher, expansions, `cpuid`, tests | `v3compat` |
-| Emulation helpers and their fixes; the semantic suite | [lhns/avxemu](https://github.com/lhns/avxemu) |
+| DynamoRIO client, launcher, expansions, `cpuid`; tests of what the client does around an instruction (fault state, flags, scratch, segments, refusals, exec) | `v3compat` |
+| Emulation helpers and their fixes; the semantic suite: every emulated form's result against silicon, which `semantic-hw` runs under the client | [lhns/avxemu](https://github.com/lhns/avxemu) |
 | DynamoRIO fork | [lhns/dynamorio](https://github.com/lhns/dynamorio) |
 | OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
