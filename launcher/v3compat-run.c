@@ -6,7 +6,9 @@
  *   V3COMPAT_DR_OPTS   extra DynamoRIO options
  *   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals at exit
  *   V3COMPAT_HELPERS_ONLY=1   no inline expansions, to compare them with the helpers
- *   V3COMPAT_AUDIT=1   print forms off the audited list at translation; run the native ones anyway */
+ *   V3COMPAT_AUDIT=1   print forms off the audited list at translation; run the native ones anyway
+ *   V3COMPAT_CACHE=DIR translation cache, for tests and labs only (docs/translation-cache.md); with
+ *                      V3COMPAT_CACHE_WRITE=1 a training run, V3COMPAT_CACHE_VERIFY=1|2, V3COMPAT_CACHE_STATS=1|2 */
 #include "../src/exec_check.h"
 
 #define MAX_CONFIG_VALUE 2048 /* DynamoRIO's limit for the option string */
@@ -183,6 +185,19 @@ __attribute__((used)) void run(long *sp) {
         if (user && slen(user) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", ""); /* before it is copied */
         p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset -no_ignore_syscalls ");
         if (user && *user) { p = scpy(p, user); *p++ = ' '; }
+        /* Not a user option yet (Phase 3): a directory, written by a training run. */
+        s = envget(envp, "V3COMPAT_CACHE=");
+        if (s && *s) {
+            const char *w = envget(envp, "V3COMPAT_CACHE_WRITE="), *v = envget(envp, "V3COMPAT_CACHE_VERIFY="),
+                       *st = envget(envp, "V3COMPAT_CACHE_STATS=");
+            if (slen(s) >= 1024) die(125, "V3COMPAT_CACHE is too long", "", "");
+            p = scpy(p, "-pcache_dir \""); p = scpy(p, s); p = scpy(p, "\" -pcache_mode ");
+            p = scpy(p, w && w[0] == '1' && !w[1] ? "2 " : "1 ");
+            /* the same rip-relative choices in every run, whatever vmcode's random offset */
+            p = scpy(p, "-stable_reach ");
+            if (v && (v[0] == '1' || v[0] == '2') && !v[1]) { p = scpy(p, "-pcache_verify "); *p++ = v[0]; *p++ = ' '; }
+            if (st && (st[0] == '1' || st[0] == '2') && !st[1]) { p = scpy(p, "-pcache_stats "); *p++ = st[0]; *p++ = ' '; }
+        }
         p = scpy(p, "-client_lib \""); p = scpy(p, client); p = scpy(p, ";0;");
         s = envget(envp, "V3COMPAT_STATS=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-stats ");
         s = envget(envp, "V3COMPAT_HELPERS_ONLY="); if (s && s[0] == '1' && !s[1]) p = scpy(p, "-helpers-only ");
