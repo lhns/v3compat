@@ -24,6 +24,9 @@ typedef struct {
     uint64 stack;     /* top of this thread's helper stack */
     uint64 thunk;     /* lean_thunk, called through here so the code cache needs no reach to it */
     uint64 desc;      /* the frame helper's descriptor (vec_call) */
+    uint64 pad[4];
+    ymm256 vacc;      /* LAB ONLY: OR of (emulated ^ native) over every verified inline op */
+    ymm256 vref;      /* LAB ONLY: the native result of the op being emulated */
 } tls_t;
 #define TLS_SLOTS (sizeof(tls_t) / sizeof(void *))
 
@@ -31,6 +34,7 @@ static reg_id_t tls_seg;
 static uint tls_offs;
 static int tls_idx;
 static bool helpers_only;
+bool lab_verify;   /* LAB ONLY: set by the client's -verify */
 
 static opnd_t tls_opnd(size_t off, opnd_size_t sz) {
     return opnd_create_far_base_disp(tls_seg, DR_REG_NULL, DR_REG_NULL, 0, (int)(tls_offs + off), sz);
@@ -177,6 +181,16 @@ static void expand_inline(emit_t *e, instr_t *in) {
     reg_id_t t0 = e->scratch[0], t1 = e->scratch[1], t2 = e->scratch[2];
     reg_id_t t0x = xmm_of(t0), t1x = xmm_of(t1), t2x = xmm_of(t2);
 
+    if (lab_verify && !shift && !uses_seg(b) && !(mem && needs_abs(b))) {   /* LAB ONLY: the CPU's own result */
+        instr_t *nat = instr_build(e->dc, opc, 1, 2);
+        instr_set_dst(nat, 0, reg(t2));
+        instr_set_src(nat, 0, reg(a));
+        instr_set_src(nat, 1, b);
+        save_y(e, 2);
+        put(e, nat);
+        put(e, INSTR_CREATE_vmovdqu(e->dc, tls_opnd(offsetof(tls_t, vref), OPSZ_32), reg(t2)));
+        reload_y(e, 2);
+    }
     save_y(e, 0);
     save_y(e, 1);
     if (mem) {
@@ -201,6 +215,13 @@ static void expand_inline(emit_t *e, instr_t *in) {
     put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
     instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
     reload_y(e, 1);
+    if (lab_verify && !shift && !uses_seg(b) && !(mem && needs_abs(b))) {
+        save_y(e, 2);
+        put(e, INSTR_CREATE_vxorps(e->dc, reg(t2), reg(d), tls_opnd(offsetof(tls_t, vref), OPSZ_32)));
+        put(e, INSTR_CREATE_vorps(e->dc, reg(t2), reg(t2), tls_opnd(offsetof(tls_t, vacc), OPSZ_32)));
+        put(e, INSTR_CREATE_vmovdqu(e->dc, tls_opnd(offsetof(tls_t, vacc), OPSZ_32), reg(t2)));
+        reload_y(e, 2);
+    }
 }
 
 /* One-source op on an xmm: dst = op(src). */
@@ -1463,6 +1484,11 @@ static void event_thread_init(void *dc) {
 
 static void event_thread_exit(void *dc) {
     tls_t *t = (tls_t *)drmgr_get_tls_field(dc, tls_idx);
+    if (lab_verify && t != NULL) {
+        uint64 any = 0;
+        for (int i = 0; i < 32; i++) any |= t->vacc.b[i];
+        if (any) dr_fprintf(STDERR, "V3VERIFY mismatch tid=%d\n", (int)dr_get_thread_id(dc));
+    }
     if (t == NULL || t->stack == 0) return;
     byte *base = (byte *)t->stack - HSTACK_SIZE - HSTACK_GUARD, *sp;
     __asm__ volatile("mov %%rsp, %0" : "=r"(sp));

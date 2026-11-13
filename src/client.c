@@ -117,6 +117,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         if (starts(argv[i], "-stats")) stats_on = true;
         if (starts(argv[i], "-helpers-only")) helpers_only = true;
         if (starts(argv[i], "-audit")) audit_on = true;
+        if (starts(argv[i], "-verify")) { extern bool lab_verify; lab_verify = true; }
         if (starts(argv[i], "-native=")) dr_snprintf(native_list, sizeof native_list, ",%s,", argv[i] + 8);
         if (starts(argv[i], "-emu-only=")) dr_snprintf(emu_only, sizeof emu_only, ",%s,", argv[i] + 10);
         if (starts(argv[i], "-emu-except=")) dr_snprintf(emu_except, sizeof emu_except, ",%s,", argv[i] + 12);
