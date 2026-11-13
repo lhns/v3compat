@@ -160,7 +160,7 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   AVX2. JIT-heavy startup pays DynamoRIO: javac builds 7.9M blocks; 36-52% of its time is the kernel serving
   `/proc/self/maps` reads (814k `read` calls, 148k `mprotect`, 22k signals) and most of the rest is libdynamorio.
   Most of those reads were DynamoRIO toggling its own generated code's protection, fixed in the fork (below, "Gencode
-  protection"): javac's reads fell to about 50k.
+  protection"): javac's reads fell to about 50k, and to about 200 with the new-module check fixed (below).
 - **Any client costs 15-45% over DynamoRIO alone** on JIT startup (Node 2.63 to 3.03 s with an empty client, 3.26 s with
   ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
   `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
@@ -340,7 +340,7 @@ found it (`lab-perf-trace-diag`, run 43242817702). The lists now go with `trace_
 javac crashes in libdynamorio under the client and 0 of 50 with an empty client, the Java benchmark 0 of 12, no flush
 left a trace's lists behind (run 43247919081); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306
 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 (run 43248017594). DynamoRIO's suite,
-base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test` on debug builds,
+base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test`,
 which fails from the build directory's name (below, "Known flakes"). Reproduce with `lab/javac.sh`.
 
 **Gencode protection without reading `/proc/self/maps`, fixed in the fork** (branch `gencode-prot-no-maps`, merged as `14836b0`,
@@ -353,6 +353,17 @@ on DynamoRIO alone) **[measured]**: `java -version` 2.37 to 1.50 s under the cli
 66.6 s and 57.6 to 43.8 s, Node 3.84 to 3.78 s, duckdb unchanged; javac's `read` calls 730-773k to 52-56k. The
 `mprotect` calls stay. Stress set unchanged (duckdb 0 of 240, signal 0 of 390, reg/flags 0 of 306 under the client and 0
 of 306 alone, short 0 of 4,500), ctest 272 of 272, DynamoRIO's suite the same failures on base and fix (run 43333761161).
+
+**The new-module check without reading `/proc/self/maps`, fixed in the fork** (branch `memquery-procmap`, merged as `0bd5cd8`,
+[lhns/dynamorio#13](https://github.com/lhns/dynamorio/pull/13)). After #9 nearly all remaining maps reads were
+`memquery_from_os()` for the i#1760 check on each new code area outside a module. Linux 6.11+ answers it with the
+`PROCMAP_QUERY` ioctl; free addresses, `[vsyscall]` and older kernels still walk the file. Both paths answered every
+query in one lab-only build: 0 mismatches in 245k (run 43400000808). Base `14836b0` against the fix and a stub without the
+check, interleaved, 20 reps (javac 6), all succeeded **[measured]**: `java -version` 1.37 to 1.18 s under the client on EPYC 9V45
+and 2.68 to 2.25 s on 7763, javac 51.5 to 49.8 s and 93.7 to 91.1 s, Node 3.24 to 2.80 s and 5.49 to 5.03 s, duckdb
+unchanged, at the stub's level; javac's `read` calls 50-54k to about 200. Stress set unchanged (duckdb 0 of 240, signal
+0 of 390, reg/flags 0 of 306 under the client and 0 of 306 alone, short 0 of 4,500), DynamoRIO's suite the same failures
+on base and fix once built in the same directory (runs 43400012869, 43408308171).
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
@@ -391,7 +402,7 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
 - **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
   any commit. Use release there, or another runner, for the debug suite.
-- **`client.memory_dump_test` on debug builds** fails or passes by the build directory's name: the dump's section-name
+- **`client.memory_dump_test`** (debug and release) fails or passes by the build directory's name: the dump's section-name
   hash is keyed on a buffer the maps iterator reuses, so `[vvar]` can take an earlier region's name. Compare base and
   fix built in the same directory name.
 - **One `regstress sig jit` SIGSEGV** under the client in CI, never reproduced (0 of 1,000 on several runners). If it
@@ -441,9 +452,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
   with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
   43305470603. Not explained yet.
-- **Performance, ranked:** the rest of the `/proc/self/maps` reads, DynamoRIO's new-module check (i#1760) on each new code
-  area, and its gencode `mprotect` toggling (`-protect_mask 0`): on top of #9 each is worth 1-15% on JIT startup (lab
-  `lab-perf-lever-ab`, run 43334850670), owner's decision; FMA through hardware arithmetic with an exactness guard, if
+- **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
+  but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
   helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers
   understate helper cost 2-4x against Ivy Bridge; an Ivy
