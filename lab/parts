@@ -1,12 +1,25 @@
-# One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
-# /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-ab bash bench/ab.sh 6
-duck bash lab/stress.sh duck 240
-sig bash lab/stress.sh sig 390
-regc bash lab/stress.sh regc 102
-regd bash lab/stress.sh regd 102
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
-# The javac crash under any client (plan, Open items): uncomment on a lab branch.
-# javac bash lab/javac.sh 8
+# Done bar: main's pin against the IBL and stale-trace fixes (509c12d), interleaved, four configurations.
+abjavac1 bash lab/donebar.sh javac 12
+abjavac2 bash lab/donebar.sh javac 12
+abjavac3 bash lab/donebar.sh javac 12
+abjavac4 bash lab/donebar.sh javac 12
+abjavac5 bash lab/donebar.sh javac 12
+abjavac6 bash lab/donebar.sh javac 12
+abjavac7 bash lab/donebar.sh javac 12
+abjavac8 bash lab/donebar.sh javac 12
+abjavac9 bash lab/donebar.sh javac 12
+abjavac10 bash lab/donebar.sh javac 12
+abjavac11 bash lab/donebar.sh javac 12
+abjavac12 bash lab/donebar.sh javac 12
+abjavac13 bash lab/donebar.sh javac 12
+abjavac14 bash lab/donebar.sh javac 12
+abjavac15 bash lab/donebar.sh javac 12
+abjavac16 bash lab/donebar.sh javac 12
+abjava1 bash lab/donebar.sh java 36
+abjava2 bash lab/donebar.sh java 36
+abjava3 bash lab/donebar.sh java 36
+abjava4 bash lab/donebar.sh java 36
+abjava5 bash lab/donebar.sh java 36
+abjava6 bash lab/donebar.sh java 36
+abjava7 bash lab/donebar.sh java 36
+abjava8 bash lab/donebar.sh java 36

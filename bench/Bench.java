@@ -95,13 +95,16 @@ public class Bench {
                                         Bench::collections, Bench::bigint, Bench::streams);
         long t00 = System.nanoTime();
         for (int k = 0; k < ks.size(); k++) {
-            StringBuilder out = new StringBuilder("round " + names[k]);
+            StringBuilder out = new StringBuilder("round " + names[k]), vals = new StringBuilder("value " + names[k]);
             for (int r = 0; r < rounds; r++) {
                 long t0 = System.nanoTime();
-                mix(ks.get(k).getAsLong());
+                long v = ks.get(k).getAsLong();
+                mix(v);
                 out.append(String.format(" %.1f", (System.nanoTime() - t0) / 1e6));
+                vals.append(String.format(" %x", v));
             }
             System.out.println(out + " ms");
+            System.out.println(vals);
         }
         System.out.printf("total %d ms%n", (System.nanoTime() - t00) / 1_000_000);
         System.out.printf("checksum %08x%n", check);
