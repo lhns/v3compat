@@ -11,8 +11,8 @@ fail() { echo "FAIL: $*"; bad=1; }
 mkdir -p $C/ct && chmod 1777 $C $C/ct
 
 echo "== ctest, training, then verify mode"
-V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_WRITE=1 ctest --test-dir $B -j4 > $C/train.txt 2>&1 ||
-  { fail "ctest under training"; grep -E "\(Failed\)|\*\*\*" $C/train.txt; }
+V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_WRITE=1 ctest --test-dir $B -j4 --output-on-failure > $C/train.txt 2>&1 ||
+  { fail "ctest under training"; grep -F -A12 "***Failed" $C/train.txt | head -60; }
 ls $C/ct | wc -l
 V3COMPAT_CACHE=$C/ct V3COMPAT_CACHE_VERIFY=1 ctest --test-dir $B -j4 --output-on-failure > $C/verify.txt 2>&1 ||
   { fail "ctest in verify mode"; grep -E "\(Failed\)|\*\*\*|VERIFY MISMATCH" $C/verify.txt | head -40; }
