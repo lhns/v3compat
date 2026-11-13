@@ -1,12 +1,9 @@
-# One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
-# /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-ab bash bench/ab.sh 6
-duck bash lab/stress.sh duck 240
-sig bash lab/stress.sh sig 390
-regc bash lab/stress.sh regc 102
-regd bash lab/stress.sh regd 102
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
-# The javac crash under any client (plan, Open items): uncomment on a lab branch.
-# javac bash lab/javac.sh 8
+# translated pc of synchronous faults; Java with frequent safepoints and javac.
+xl1 bash lab/xl.sh 6
+xl2 bash lab/xl.sh 6
+xl3 bash lab/xl.sh 6
+xl4 bash lab/xl.sh 6
+xl5 bash lab/xl.sh 6
+xl6 bash lab/xl.sh 6
+xl7 bash lab/xl.sh 6
+xl8 bash lab/xl.sh 6

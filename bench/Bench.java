@@ -93,15 +93,23 @@ public class Bench {
         String[] names = {"objects", "arrays", "bits", "strings", "collections", "bigint", "streams"};
         List<LongSupplier> ks = List.of(Bench::objects, Bench::arrays, Bench::bits, Bench::strings,
                                         Bench::collections, Bench::bigint, Bench::streams);
+        if (args.length > 3 && args[3].equals("sp")) {   /* lab: frequent safepoints (stack walks of every thread) */
+            Thread sp = new Thread(() -> { while (true) { Thread.getAllStackTraces(); try { Thread.sleep(1); } catch (InterruptedException x) { return; } } });
+            sp.setDaemon(true); sp.start();
+        }
         long t00 = System.nanoTime();
         for (int k = 0; k < ks.size(); k++) {
-            StringBuilder out = new StringBuilder("round " + names[k]);
+            if (args.length > 2 && !args[2].equals("all") && !names[k].equals(args[2])) continue;
+            StringBuilder out = new StringBuilder("round " + names[k]), vals = new StringBuilder("value " + names[k]);
             for (int r = 0; r < rounds; r++) {
                 long t0 = System.nanoTime();
-                mix(ks.get(k).getAsLong());
+                long v = ks.get(k).getAsLong();
+                mix(v);
                 out.append(String.format(" %.1f", (System.nanoTime() - t0) / 1e6));
+                vals.append(String.format(" %x", v));
             }
             System.out.println(out + " ms");
+            System.out.println(vals);
         }
         System.out.printf("total %d ms%n", (System.nanoTime() - t00) / 1_000_000);
         System.out.printf("checksum %08x%n", check);
