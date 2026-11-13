@@ -73,8 +73,8 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 | DynamoRIO fork | [lhns/dynamorio](https://github.com/lhns/dynamorio) |
 | OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
-The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-cache.md), proposed); its design and the
-owner's open decisions: [translation-cache.md](translation-cache.md).
+The translation cache is built for tests and labs through Phase 2 and not deployed ([ADR 0006](adr/0006-read-only-translation-cache.md),
+proposed); its design, what Phase 2 built and the owner's open decisions: [translation-cache.md](translation-cache.md).
 
 ## Testing
 
