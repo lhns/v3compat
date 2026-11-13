@@ -4,6 +4,8 @@
  * program's own. Exit 125 launcher failure, 127 not found, 126 not executable, 87 refused (exec_check.h).
  *   V3COMPAT_NATIVE=1  skip DynamoRIO and every check
  *   V3COMPAT_DR_OPTS   extra DynamoRIO options
+ *   V3COMPAT_UNPROTECTED_GENCODE=1   -protect_mask 0: faster JIT startup, but DynamoRIO's generated code stays
+ *                      writable, so a stray app write corrupts it instead of faulting
  *   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals at exit
  *   V3COMPAT_HELPERS_ONLY=1   no inline expansions, to compare them with the helpers
  *   V3COMPAT_AUDIT=1   print forms off the audited list at translation; run the native ones anyway */
@@ -182,6 +184,7 @@ __attribute__((used)) void run(long *sp) {
         char *p = opts;
         if (user && slen(user) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", ""); /* before it is copied */
         p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset -no_ignore_syscalls ");
+        s = envget(envp, "V3COMPAT_UNPROTECTED_GENCODE="); if (s && s[0] == '1' && !s[1]) p = scpy(p, "-protect_mask 0 ");
         if (user && *user) { p = scpy(p, user); *p++ = ' '; }
         p = scpy(p, "-client_lib \""); p = scpy(p, client); p = scpy(p, ";0;");
         s = envget(envp, "V3COMPAT_STATS=");  if (s && s[0] == '1' && !s[1]) p = scpy(p, "-stats ");

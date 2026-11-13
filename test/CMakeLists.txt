@@ -58,6 +58,9 @@ v3test(sigterm signal 15 -- ${RUN} -- $<TARGET_FILE:exitcode> term)
 v3test(maps-has-dynamorio stdout-has dynamorio-mapped exit 0 -- ${RUN} $<TARGET_FILE:proc> maps)
 v3test(exec-child-has-dynamorio stdout-has dynamorio-mapped exit 0 -- ${RUN} $<TARGET_FILE:proc> exec)
 v3test(native-bypass stdout-has dynamorio-absent exit 1 -- env V3COMPAT_NATIVE=1 ${RUN} $<TARGET_FILE:proc> maps)
+# V3COMPAT_UNPROTECTED_GENCODE=1 reaches DynamoRIO as -protect_mask 0: its generated code is no longer mapped r-x.
+v3test(gencode-protected stdout-has gencode-readonly exit 0 -- ${RUN} $<TARGET_FILE:proc> gencode)
+v3test(gencode-unprotected stdout-has gencode-writable exit 0 -- env V3COMPAT_UNPROTECTED_GENCODE=1 ${RUN} $<TARGET_FILE:proc> gencode)
 
 # --- Exec: the client must follow every way into a new program, in every libc shape. ---
 set(B ${CMAKE_CURRENT_BINARY_DIR})
