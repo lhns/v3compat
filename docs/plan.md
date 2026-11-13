@@ -466,8 +466,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **A signal to a thread in its first instructions** kills the process under DynamoRIO, with or without the client:
   "Cannot correctly handle received signal ... default action in native thread", 300 of 300 runs, natively 0 of 300
-  (`lab/xlrace.c`, run 43418236984) **[measured]**. It is what fails `regstress-xlsig` when its first signal lands early,
-  more often with a warm translation cache. Not fixed.
+  (`lab/xlrace.c`, run 43418236984) **[measured]**. It is what fails `regstress-xlsig` when its first signal lands early.
+  A warm translation cache makes it and the other early-signal failures (regstress SIGSEGV, vfork-sig) 2-3x as frequent
+  ([translation-cache.md](translation-cache.md), Phase 2). Not fixed.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
   performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **javac under DynamoRIO alone, and so under the client,** failed in about 1 run in 5 at `14836b0`. Two fork bugs: the
