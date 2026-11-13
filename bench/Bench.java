@@ -93,6 +93,10 @@ public class Bench {
         String[] names = {"objects", "arrays", "bits", "strings", "collections", "bigint", "streams"};
         List<LongSupplier> ks = List.of(Bench::objects, Bench::arrays, Bench::bits, Bench::strings,
                                         Bench::collections, Bench::bigint, Bench::streams);
+        if (args.length > 3 && args[3].equals("sp")) {   /* lab: frequent safepoints (stack walks of every thread) */
+            Thread sp = new Thread(() -> { while (true) { Thread.getAllStackTraces(); try { Thread.sleep(1); } catch (InterruptedException x) { return; } } });
+            sp.setDaemon(true); sp.start();
+        }
         long t00 = System.nanoTime();
         for (int k = 0; k < ks.size(); k++) {
             if (args.length > 2 && !names[k].equals(args[2])) continue;
