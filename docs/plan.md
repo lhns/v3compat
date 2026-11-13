@@ -408,7 +408,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
 | **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
-| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache ([design](translation-cache.md)) |
+| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.45-0.54 s on runners, 38-42% below cold ([design](translation-cache.md)) |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
 ## Known flakes
@@ -461,6 +461,10 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
+- **A signal to a thread in its first instructions** kills the process under DynamoRIO, with or without the client:
+  "Cannot correctly handle received signal ... default action in native thread", 300 of 300 runs, natively 0 of 300
+  (`lab/xlrace.c`, run 43418236984) **[measured]**. It is what fails `regstress-xlsig` when its first signal lands early,
+  more often with a warm translation cache. Not fixed.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
   performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **javac under DynamoRIO alone, and so under the client,** failed in about 1 run in 5 at `14836b0`. Two fork bugs: the

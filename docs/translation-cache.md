@@ -303,9 +303,42 @@ default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and la
   it, a regstress subset and duckdb's hashes in verify mode, with hit-rate floors and the two-layout check.
   `test/pcache_tool.py` reads, checks, diffs and damages files; `lab/pcache.sh` runs the labs.
 
-PHASE2_NUMBERS
+**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted; ASLR on, default DR options, `-stable_reach`
+with the cache; every run `rc=0` and every duckdb and node digest equal to native) **[measured]**:
 
-**Phase 3 go/no-go:** PHASE3_GO
+| Workload | Cold to warm, traces on | Less | With `-disable_traces` | Less |
+|---|---|---|---|---|
+| duckdb `select 42` | 0.73-0.91 to 0.45-0.54 s | 38-42% | 0.54-0.68 to 0.25-0.30 s | 53-56% |
+| duckdb compute | 1.03-1.29 to 0.72-0.90 s | 30-32% | 0.83-1.05 to 0.51-0.68 s | 36-39% |
+| `node -e 0` | 0.57-0.70 to 0.35-0.43 s | 35-40% | 0.42-0.53 to 0.20-0.25 s | 47-53% |
+| `java -version` | 1.42-1.99 to 1.01-1.62 s | 19-30% | 1.14-1.62 to 0.80-1.14 s | 28-34% |
+| Node `jit.js` | 3.70-4.75 to 3.30-4.12 s | 11-13% | 3.04-3.93 to 2.62-3.27 s | 14-19% |
+
+Medians of 6 interleaved reps on each of four jobs: EPYC 9V74 (two), Xeon 8573C, Xeon 6975P. Phase 1's stop criterion,
+40% on `select 42` with traces on, is met on two of the four (38-42%); the prototype measured 38-43% with ASLR off.
+
+- **Hits** (warm, traces on): `select 42` 76,946 of 77,071 blocks, compute 83,957 of 84,098, `node -e 0` 56,755 of 61,366,
+  `java -version` 69,799 of 125,936 (the rest is the JVM's generated code), `jit.js` 124,944 of 150,993. No miss came
+  from a layout predicate. Cache files: duckdb 14-15 MB, node 10-22 MB, java 14 MB.
+- **`-stable_reach` alone**, no cache, interleaved A/B over 8 reps on three jobs: duckdb over 300M rows +0.0 to +0.2%
+  (paired medians), duckdb's varied workload +0.2% (9V74) and +0.5% and +1.9% (two 7763s); startup within 0.01 s. A
+  disp32 absolute operand for targets below 2 GB would save the scratch register where it costs; not built.
+- **Two layouts:** two training runs of each workload wrote identical entries (77,109 of 77,109 for `select 42`, 69,766
+  of 69,766 for Java).
+- **Verify mode, ASLR on:** 0 mismatches over every workload and both option sets; ctest plain, training and verify
+  273 of 274 each (`setuid` fails in all three in the lab, which lacks CI's `chmod o+x $HOME`); the stress set duckdb 0 of
+  240, signal 0 of 390, reg/flags 0 of 306, the short loop 1 of 4,500 (SIGSEGV, and 1 of the 150 no-cache runs on the same
+  Xeon 8370C: the known `regstress sig jit` flake).
+- **`regstress-xlsig`** failed twice with a cache (1 of 200 cached runs against 0 of 100 without, run 43405034104, and
+  once in an earlier verify ctest): "default action in native thread". It is not the cache. A signal sent to a thread
+  in its first instructions kills the process under DynamoRIO alone and under the client in 300 of 300 runs, natively
+  0 of 300 (`lab/xlrace.c`, run 43418236984); a warm start only makes regstress's first signal land sooner.
+
+**Phase 3 go/no-go:** go, in the owner's judgement of the gain. Entries are position-independent and
+fail closed, verify mode is clean with ASLR on, and the startup gain matches Phase 1. Phase 3 still has to decide the
+writer, the launcher option and the read-only mount, key on the client's build rather than its path (a different
+install path never hits today), and take integrity from fs-verity or a signed manifest: the checksums here only guard
+against corruption, and a file truncated while mapped would still fault.
 
 ## Phases
 
