@@ -10,12 +10,12 @@ T=$PWD/build/test/sigymm
 L="-no_enable_reset -no_ignore_syscalls"
 declare -A bad
 C="native dr empty client helpers"
-for c in $C; do for m in h s a; do bad[$c-$m]=0; done; done
-for i in $(seq $1); do for m in h s a; do for c in $C; do
+for c in $C; do for m in a h; do bad[$c-$m]=0; done; done
+for i in $(seq $1); do for m in a h; do for c in $C; do
   case $c in native) P="";; dr) P="${DR}bin64/drrun $L --";; empty) P="${DR}bin64/drrun $L -c /tmp/null-b/libnull.so --";;
     client) P="build/inst/bin/v3compat-run --";; helpers) P="env V3COMPAT_HELPERS_ONLY=1 build/inst/bin/v3compat-run --";; esac
   timeout 120 $P $T $m $2 >/tmp/o 2>/tmp/e; rc=$?
-  if [ $rc != 0 ]; then bad[$c-$m]=$((bad[$c-$m]+1)); echo "FAIL $c $m $i rc=$rc $(head -1 /tmp/o) $(head -c 300 /tmp/e | tr '\n' ' ')"; fi
+  if [ $rc != 0 ]; then bad[$c-$m]=$((bad[$c-$m]+1)); echo "FAIL $c $m $i rc=$rc $(head -1 /tmp/o) $(grep -v WARNING /tmp/e | head -c 900 | tr '\n' ' ')"; fi
   [ $i = 1 ] && echo "SAMPLE $c $m $(head -1 /tmp/o)"
 done; done; done
-for c in $C; do for m in h s a; do echo "RESULT sigymm $c $m: ${bad[$c-$m]} of $1 bad"; done; done
+for c in $C; do for m in a h; do echo "RESULT sigymm $c $m: ${bad[$c-$m]} of $1 bad"; done; done

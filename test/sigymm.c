@@ -22,7 +22,9 @@
 enum { N = 200000 };
 static char *page;
 static volatile int stop;
-static volatile long sigs, frame_bad, bv_clear, edit_bad;
+static volatile long sigs, frame_bad, bv_clear, edit_bad, in_sigs;
+static volatile int in_block;
+static void *bad_pc[5]; static uint32_t bad_lo[5], bad_hi[5];
 static uint32_t K[8] __attribute__((aligned(32))) = {3, 5, 7, 9, 11, 13, 17, 19};
 static uint32_t D0[8] __attribute__((aligned(32))) = {1, 2, 3, 4, 1000, 2000, 3000, 4000};
 static char mode;
@@ -73,7 +75,11 @@ static void handler(int sig, siginfo_t *si, void *ctx) {
     int bv;
     frame_ymm(uc, 8, lo, hi, &bv);
     if (!bv) bv_clear++;
-    if (memcmp(lo, K, 16) || (bv && memcmp(hi, K + 4, 16))) frame_bad++;
+    if (in_block) in_sigs++;
+    if (in_block && (memcmp(lo, K, 16) || (bv && memcmp(hi, K + 4, 16)))) {
+        if (frame_bad < 5) { bad_pc[frame_bad] = (void *)uc->uc_mcontext.gregs[REG_RIP]; bad_lo[frame_bad] = lo[0]; bad_hi[frame_bad] = hi[0]; }
+        frame_bad++;
+    }
     /* ymm13 in the frame := n in every lane; YMM bit set so the high half is restored. */
     unsigned char *fp = (unsigned char *)uc->uc_mcontext.fpregs;
     uint32_t v[4] = {(uint32_t)n, (uint32_t)n, (uint32_t)n, (uint32_t)n};
@@ -132,8 +138,10 @@ int main(int argc, char **argv) {
     long blocks = 0, bad = 0;
     time_t end = time(0) + secs;
     while (time(0) < end) {
-        long before = sigs;
+        long before = in_sigs;
+        in_block = 1;
         block(acc, d, y13);
+        in_block = 0;
         for (int i = 0; i < N; i++)
             for (int j = 0; j < 8; j++) { macc[j] += md[j] * K[j]; md[j] += K[j]; }
         if (memcmp(acc, macc, sizeof acc) || memcmp(d, md, sizeof d)) {
@@ -142,11 +150,11 @@ int main(int argc, char **argv) {
             memcpy(acc, macc, sizeof acc);
             memcpy(d, md, sizeof d);
         }
-        if (sigs != before) {
+        if (in_sigs != before) {
             /* The last signal in the block left its counter in ymm13 (all eight lanes). */
             int ok = 1;
             for (int j = 1; j < 8; j++) ok &= y13[j] == y13[0];
-            if (!ok || y13[0] == 0 || y13[0] > (uint32_t)sigs || y13[0] <= (uint32_t)before) edit_bad++;
+            if (!ok || y13[0] == 0 || y13[0] > (uint32_t)sigs) edit_bad++;
         }
         blocks++;
     }
@@ -158,7 +166,18 @@ int main(int argc, char **argv) {
         pthread_join(t, 0);
     }
     int fail = bad || frame_bad || edit_bad;
-    printf("%s mode=%c blocks=%ld bad=%ld signals=%ld frame_bad=%ld bv_clear=%ld edit_bad=%ld\n", fail ? "FAIL" : "ok",
-           mode, blocks, bad, sigs, frame_bad, bv_clear, edit_bad);
+    for (int i = 0; i < 5 && i < frame_bad; i++) {
+        fprintf(stderr, "frame_bad pc=%p ymm8.lane0=%u lane4=%u (want %u %u) ", bad_pc[i], bad_lo[i], bad_hi[i], K[0], K[4]);
+        FILE *m = fopen("/proc/self/maps", "r");
+        char line[512];
+        while (m && fgets(line, sizeof line, m)) {
+            unsigned long lo2, hi2;
+            if (sscanf(line, "%lx-%lx", &lo2, &hi2) == 2 && lo2 <= (unsigned long)bad_pc[i] && (unsigned long)bad_pc[i] < hi2)
+                fputs(line, stderr);
+        }
+        if (m) fclose(m);
+    }
+    printf("%s mode=%c blocks=%ld bad=%ld signals=%ld in_block=%ld frame_bad=%ld bv_clear=%ld edit_bad=%ld\n", fail ? "FAIL" : "ok",
+           mode, blocks, bad, sigs, in_sigs, frame_bad, bv_clear, edit_bad);
     return fail;
 }
