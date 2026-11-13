@@ -1,4 +1,4 @@
-# Bench's arrays kernel alone: which emulation path gives the wrong value (client only, mostly EPYC 7763).
+# arrays alone, helpers only: ints or the FMA accumulator, and with superword or FMA off.
 arr1 bash lab/arrays.sh 12
 arr2 bash lab/arrays.sh 12
 arr3 bash lab/arrays.sh 12
@@ -13,3 +13,5 @@ arr11 bash lab/arrays.sh 12
 arr12 bash lab/arrays.sh 12
 arr13 bash lab/arrays.sh 12
 arr14 bash lab/arrays.sh 12
+arr15 bash lab/arrays.sh 12
+arr16 bash lab/arrays.sh 12

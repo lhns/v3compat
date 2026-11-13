@@ -29,14 +29,17 @@ public class Bench {
     static final int[] ia = new int[4096], ib = new int[4096];
     static final double[] da = new double[4096], db = new double[4096];
     static long arrays() {
-        long s = 0;
+        long s = 0, si = 0; double d0 = 0, dbv = 0; int dbad = 0, dbr = -1;
         for (int i = 0; i < ia.length; i++) { ia[i] = i * 7; ib[i] = i ^ 0x55; da[i] = i * 0.25; db[i] = 1.0 / (i + 1); }
         for (int r = 0; r < 2000 * scale; r++) {
             for (int i = 0; i < ia.length; i++) ia[i] = ia[i] * 3 + (ib[i] >> 2);
             double d = 0;
             for (int i = 0; i < da.length; i++) d = Math.fma(da[i], db[i], d);
             s += ia[r & 4095] + Double.doubleToLongBits(d);
+            si += ia[r & 4095];
+            if (r == 0) d0 = d; else if (Double.doubleToLongBits(d) != Double.doubleToLongBits(d0)) { if (dbad++ == 0) { dbr = r; dbv = d; } }
         }
+        System.out.println(String.format("parts ints %x dbad %d at %d d0 %s d %s", si, dbad, dbr, Double.toHexString(d0), Double.toHexString(dbv)));
         return s;
     }
 
