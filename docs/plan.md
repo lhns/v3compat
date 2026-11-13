@@ -158,6 +158,8 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   and 159M `lzcnt` through the mcontext helper (about 85 ns each on a runner), duckdb's mixed query 649M BMI and 515M
   AVX2. JIT-heavy startup pays DynamoRIO: javac builds 7.9M blocks; 36-52% of its time is the kernel serving
   `/proc/self/maps` reads (814k `read` calls, 148k `mprotect`, 22k signals) and most of the rest is libdynamorio.
+  Most of those reads were DynamoRIO toggling its own generated code's protection, fixed in the fork (below, "Gencode
+  protection"): javac's reads fell to about 50k.
 - **Any client costs 15-45% over DynamoRIO alone** on JIT startup (Node 2.63 to 3.03 s with an empty client, 3.26 s with
   ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
   `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
@@ -327,6 +329,17 @@ under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 (run
 base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test` on debug builds,
 which fails from the build directory's name (below, "Known flakes"). Reproduce with `lab/javac.sh`.
 
+**Gencode protection without reading `/proc/self/maps`, fixed in the fork** (branch `gencode-prot-no-maps`, merged as `14836b0`,
+[lhns/dynamorio#9](https://github.com/lhns/dynamorio/pull/9)). `protect_generated_code()` asked `get_memory_info()` for
+the bits to keep on every toggle, and DynamoRIO's own reservation is always answered from `/proc/self/maps`; flushes
+toggle twice per special-IBL relink. That was 91-93% of the maps reads for `java -version` and javac (lab-only counting
+branch `lab-perf-maps-callers`, run 43279669317). The bits are known (r-x; r-- for the `-satisfy_w_xor_x` view) and are
+now passed. Base and fix interleaved on one Xeon 6975P-C (run 43333748319, 6 runs each, all succeeded but one base javac
+on DynamoRIO alone) **[measured]**: `java -version` 2.37 to 1.50 s under the client and 1.95 to 1.11 s alone, javac 81.8 to
+66.6 s and 57.6 to 43.8 s, Node 3.84 to 3.78 s, duckdb unchanged; javac's `read` calls 730-773k to 52-56k. The
+`mprotect` calls stay. Stress set unchanged (duckdb 0 of 240, signal 0 of 390, reg/flags 0 of 306 under the client and 0
+of 306 alone, short 0 of 4,500), ctest 272 of 272, DynamoRIO's suite the same failures on base and fix (run 43333761161).
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -414,8 +427,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
   with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
   43305470603. Not explained yet.
-- **Performance, ranked:** fewer `/proc/self/maps` reads (javac's kernel time): 58% come from DynamoRIO changing its own
-  generated code's protection, 42% from its new-module check on each new code area (run 43291238409); a lean helper call
+- **Performance, ranked:** the rest of the `/proc/self/maps` reads, DynamoRIO's new-module check (i#1760) on each new code
+  area, and its gencode `mprotect` toggling (`-protect_mask 0`): on top of #9 each is worth 1-15% on JIT startup (lab
+  `lab-perf-lever-ab`, run 43334850670), owner's decision; a lean helper call
   instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
   helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers understate helper cost 2-4x against Ivy
