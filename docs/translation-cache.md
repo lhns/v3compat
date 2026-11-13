@@ -1,8 +1,8 @@
 # Translation cache across runs: design
 
-**Status:** a design for the owner to decide on. Nothing is built. It works out
-[ADR 0006](adr/0006-read-only-translation-cache.md), which stays Proposed until the owner decides. Tags as in the
-[plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
+**Status:** Phases 1 and 2 are built on fork branches, lab and test only ([Phase 2](#phase-2-what-was-built)). Nothing is
+deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md), which stays Proposed until Phase 3. Tags as in
+the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
 
 ## Summary
 
@@ -264,6 +264,49 @@ that reads it; this class of attack was demonstrated against Rosetta's cache (AD
   that a lazy cache keeps. It is a later option once lazy install is measured. It must not become coarse units under
   another name, and must only add fragments, never relocate threads.
 
+## Phase 2: what was built
+
+Fork branch `pcache-phase2` (`core/pcache.c`), v3compat branch `pcache-phase2`. Entries hit with ASLR on and DR's
+default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and labs only.
+
+- **Nothing absolute is stored.** An entry is found by the module's build-id and the block's offset in it. Every address
+  in it is a value record: an offset from the block's own module, from DR or from a private module, or an IBL or
+  clean-call routine named by its type. Install resolves each one in the reading process.
+- **Layout-dependent choices are predicates on the values.** Each value stores whether it is in rel32 reach of vmcode
+  and whether it fits 32 bits signed and unsigned, which is what DR's encodings depend on. The reader's must be equal,
+  or the block is a miss. A rip-relative app reference kept as rip-relative must still reach.
+- **`-stable_reach`.** With the default `-vm_max_offset`, DR puts vmcode at a random offset of up to 256 MB, and whether
+  an address in a non-PIE executable (duckdb, node) is in rip-relative reach changed from run to run: half of all
+  layouts missed almost every block **[measured]**. With `-stable_reach`, which the launcher passes with the cache, DR
+  keeps a rip-relative reference only if it reaches from every placement the offset allows; otherwise it uses the
+  absolute form, which is always valid. The encoding is then a function of the options. Rejected: pinning
+  `-vm_max_offset 0` (gives up the code cache's random placement), moving `-vm_base` (only moves the edge), two
+  encodings per entry (twice the size), re-mangling at install (redoes the work). Every other reach decision in the
+  fork either fails closed (a clean call's rel32 target must still reach at install; its absolute form is not cached)
+  or is outside cached blocks (generated code, syscalls, native exec).
+- **Departure: absolute values are found by decoding the emitted block,** not where DR creates them, because the
+  client's clean-call arguments are opaque to DR. An immediate (also the two 32-bit halves DR splits a 64-bit value
+  into) is relocated only if it equals an address the block's own bytes name: an instruction's address or end, a
+  rip-relative or branch target, inside the module. Any other immediate that points into mapped memory, or a derived
+  address outside the module, makes the block uncacheable. Two training runs at different layouts must write
+  identical entries; CI checks it.
+- **File format:** version, header and whole-file checksums (XXH64, checked at open), the full key stored and compared
+  byte for byte (DR and private-module build-ids, the client's TLS slots, the options, CPUID and XCR0), a sorted index,
+  a checksum per entry checked at lookup, every record bounds-checked, a size cap (`-pcache_max_size`). Anything
+  malformed is a miss; nothing is repaired. Checksums guard against corruption, not a malicious writer (Phase 3).
+- **Verify mode** also compares every exit's target, as built before emit rewrites it.
+- **Tests:** `pcache-fail-closed` (ctest): truncated, empty, garbage, flipped and wrong-version files, a wrong key, a
+  corrupt entry, length, index, record kind, value class and predicate (with the outer checksums fixed up again, so
+  the inner check is what rejects them), another build of a library, a library patched in place with its build-id
+  kept, a library unloaded and another loaded where it was, and a library at another base both ways round. Each gives
+  the native output and no hits; the same setup undamaged hits. CI's `cache-verify` job trains over ctest and runs
+  it, a regstress subset and duckdb's hashes in verify mode, with hit-rate floors and the two-layout check.
+  `test/pcache_tool.py` reads, checks, diffs and damages files; `lab/pcache.sh` runs the labs.
+
+PHASE2_NUMBERS
+
+**Phase 3 go/no-go:** PHASE3_GO
+
 ## Phases
 
 Each phase ends at a go/no-go for the owner.
@@ -279,7 +322,7 @@ Each phase ends at a go/no-go for the owner.
    - **Stop criterion:** stop if warm `select 42` is not at least 40% below cold on runners with traces on, or if verify
      mode finds a mismatch that cannot be fixed by the key or the preconditions.
 2. **Relocation and format.** Relocation records with ASLR on, the cache file format with checksums, the full key,
-   the fail-closed tests and verify mode in CI.
+   the fail-closed tests and verify mode in CI. Built: [Phase 2](#phase-2-what-was-built).
 3. **Deployment.** The training-run writer as a build tool, the launcher option, the read-only mount from the runtime
    wrapper, and integrity through fs-verity or a signed manifest. ADR 0006 is revised to Accepted, or superseded,
    with what was learned.
