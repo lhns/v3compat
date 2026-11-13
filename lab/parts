@@ -1,12 +1,3 @@
-# One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
-# /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-ab bash bench/ab.sh 6
-duck bash lab/stress.sh duck 240
-sig bash lab/stress.sh sig 390
-regc bash lab/stress.sh regc 102
-regd bash lab/stress.sh regd 102
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
-# The javac crash under any client (plan, Open items): uncomment on a lab branch.
-# javac bash lab/javac.sh 8
+# regstress sig jit hangs in cache-verify on the new base (fork 483d479): no cache, warm, verify, interleaved.
+sj1 bash -c '. lab/loop.sh; R=build/inst/bin/v3compat-run; RS=build/test/regstress; mkdir -p /tmp/c; for k in jit sig "idle jit"; do V3COMPAT_CACHE=/tmp/c V3COMPAT_CACHE_WRITE=1 $R -- $RS 8 10 $k >/dev/null; done; for b in 1 2 3 4; do loop sj-plain 5 60 $R -- $RS 8 10 sig jit; V3COMPAT_CACHE=/tmp/c loop sj-warm 5 60 $R -- $RS 8 10 sig jit; V3COMPAT_CACHE=/tmp/c V3COMPAT_CACHE_VERIFY=1 loop sj-verify 5 60 $R -- $RS 8 10 sig jit; done 2>&1 | grep -E "RESULT|hang|rc="; ls lab-out'
+sj2 bash -c '. lab/loop.sh; R=build/inst/bin/v3compat-run; RS=build/test/regstress; mkdir -p /tmp/c; for k in jit sig "idle jit"; do V3COMPAT_CACHE=/tmp/c V3COMPAT_CACHE_WRITE=1 $R -- $RS 8 10 $k >/dev/null; done; for b in 1 2 3 4; do loop sj-plain 5 60 $R -- $RS 8 10 sig jit; V3COMPAT_CACHE=/tmp/c loop sj-warm 5 60 $R -- $RS 8 10 sig jit; V3COMPAT_CACHE=/tmp/c V3COMPAT_CACHE_VERIFY=1 loop sj-verify 5 60 $R -- $RS 8 10 sig jit; done 2>&1 | grep -E "RESULT|hang|rc="; ls lab-out'
