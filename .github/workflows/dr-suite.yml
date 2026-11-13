@@ -10,7 +10,7 @@ permissions:
 
 env:
   BASE: 14836b0e1dfbc5b5d2f089102d83a38f3d38ed94
-  FIX: 8de178bfe83d3b841a969e5136e24d8f075dbff4
+  FIX: 876631ddbb16b80183318731e9839e870bc2077c
 jobs:
   suite:
     runs-on: ${{ matrix.os }}
