@@ -6,6 +6,7 @@ set -u
 WL=$1; N=$2; shift 2
 grep -m1 'model name' /proc/cpuinfo
 DR=$HOME/.cache/v3compat/dr-$(sed -n 's/^set(V3COMPAT_DR_COMMIT \([0-9a-f]*\))/\1/p' cmake/FetchDynamoRIO.cmake)/
+[ -x ${DR}bin64/drrun ] || { echo "RESULT no DynamoRIO build"; exit 1; }
 cmake -S lab/nullclient -B /tmp/null-b -DDynamoRIO_DIR=${DR}cmake >/dev/null && cmake --build /tmp/null-b >/dev/null || exit 1
 L="-no_enable_reset -no_ignore_syscalls"
 cmd() { case $1 in client) echo "build/inst/bin/v3compat-run --";;
