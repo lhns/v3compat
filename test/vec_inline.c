@@ -85,6 +85,14 @@ SHS(SHC)
     STUBV(t_##mn##_h, PRE_HI #mn " %" src "14, %ymm15\n" POST_HI);                                        \
     STUBV(t_##mn##_hm, PRE_HI #mn " (%rsi), %ymm15\n" POST_HI);                                           \
     STUBV(t_##mn##_a, #mn " %" src "2, %ymm2\n" KEEP2)
+// The xmm-destination broadcasts: the destination's upper half starts all ones and must come back zero.
+#define ONES(n) "vpcmpeqd %xmm" #n ", %xmm" #n ", %xmm" #n "\nvinsertf128 $1, %xmm" #n ", %ymm" #n ", %ymm" #n "\n"
+#define UNXD(mn)                                                                                          \
+    STUBV(t_##mn##_xr, ONES(0) #mn " %xmm2, %xmm0\n");                                                    \
+    STUBV(t_##mn##_xm, ONES(0) #mn " (%rsi), %xmm0\n");                                                   \
+    STUBV(t_##mn##_xh, PRE_HI ONES(15) #mn " %xmm14, %xmm15\n" POST_HI);                                  \
+    STUBV(t_##mn##_xhm, PRE_HI ONES(15) #mn " (%rsi), %xmm15\n" POST_HI);                                 \
+    STUBV(t_##mn##_xa, #mn " %xmm2, %xmm2\n" KEEP2)
 #define UN(mn) UNX(mn, "xmm")
 #define UNY(mn) UNX(mn, "ymm")
 #define WIDENS(X) X(vpmovzxbw) X(vpmovzxbd) X(vpmovzxbq) X(vpmovzxwd) X(vpmovzxwq) X(vpmovzxdq)                \
@@ -93,6 +101,7 @@ SHS(SHC)
 #define ABSS(X) X(vpabsb) X(vpabsw) X(vpabsd)
 WIDENS(UN)
 BCASTS(UN)
+BCASTS(UNXD)
 ABSS(UNY)
 
 typedef void (*fn)(const void *, const void *, void *);
@@ -106,6 +115,8 @@ BINS(DECL_BIN)
 SHS(DECL_SH)
 WIDENS(DECL_UN)
 BCASTS(DECL_UN)
+#define DECL_UNXD(mn) extern void t_##mn##_xr(), t_##mn##_xm(), t_##mn##_xh(), t_##mn##_xhm(), t_##mn##_xa();
+BCASTS(DECL_UNXD)
 ABSS(DECL_UN)
 
 static uint64_t rng = 0x9E3779B97F4A7C15ull;
@@ -213,7 +224,7 @@ static void model_abs(uint8_t *out, const uint8_t *b, int e) {
     }
 }
 
-// kind 0 widen, 1 broadcast, 2 abs. `bytes` is what a memory source may read.
+// kind 0 widen, 1 broadcast, 2 abs, 3 broadcast to xmm. `bytes` is what a memory source may read.
 static void oneop(const char *name, fn t_r, fn t_m, int kind, int e, int d, int sign, int bytes, int iter) {
     cur = name;
     uint8_t in[160] __attribute__((aligned(32))), b[32] __attribute__((aligned(32))), want[32];
@@ -225,6 +236,10 @@ static void oneop(const char *name, fn t_r, fn t_m, int kind, int e, int d, int 
     memcpy(in + 128, b, 32);
     if (kind == 0) model_widen(want, b, e, d, sign);
     else if (kind == 1) model_bcast(want, b, e);
+    else if (kind == 3) {
+        model_bcast(want, b, e);
+        memset(want + 16, 0, 16);
+    }
     else model_abs(want, b, e);
     t_r(in, b, &o);
     if (memcmp(o.y[0], want, 32)) bad(name, "reg", o.y[0], want);
@@ -277,6 +292,8 @@ int main(void) {
         W(vpmovsxwd, 2, 4, 1, 16) W(vpmovsxwq, 2, 8, 1, 8) W(vpmovsxdq, 4, 8, 1, 16)
 #define B(mn, e) ONE(mn, 1, e, 0, 0, e)
         B(vpbroadcastb, 1) B(vpbroadcastw, 2) B(vpbroadcastd, 4) B(vpbroadcastq, 8)
+#define BX(mn, e)                                                                                             oneop(#mn "/xmm", (fn)t_##mn##_xr, (fn)t_##mn##_xm, 3, e, 0, 0, e, iter);                                  oneop(#mn "/xmm ymm13-15", (fn)t_##mn##_xh, (fn)t_##mn##_xhm, 3, e, 0, 0, e, iter);                        oneop(#mn "/xmm dst=src", (fn)t_##mn##_xa, (fn)t_##mn##_xa, 3, e, 0, 0, e, iter);
+        BX(vpbroadcastb, 1) BX(vpbroadcastw, 2) BX(vpbroadcastd, 4) BX(vpbroadcastq, 8)
 #define A(mn, e) ONE(mn, 2, e, 0, 0, 32)
         A(vpabsb, 1) A(vpabsw, 2) A(vpabsd, 4)
         if (failures > 20) break;

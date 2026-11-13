@@ -48,6 +48,11 @@ LOOPV(b_vpmovzxbq, "vpmovzxbq %%xmm1, %%ymm0\n")
 LOOPV(b_vpbroadcastb, "vpbroadcastb %%xmm1, %%ymm0\n")
 LOOPV(b_vpabsd, "vpabsd %%ymm1, %%ymm0\n")
 LOOPV(b_vpermd, "vpermd %%ymm1, %%ymm2, %%ymm0\n")
+LOOPV(b_vpbroadcastb_x, "vpbroadcastb %%xmm1, %%xmm0\n")
+LOOPV(b_vpshufd, "vpshufd $0x1b, %%ymm1, %%ymm0\n")
+LOOPV(b_vpermq, "vpermq $0x4e, %%ymm1, %%ymm0\n")
+LOOPV(b_vpsllvq, "vpsllvq %%ymm1, %%ymm2, %%ymm0\n")   // stays a frame helper: the call's cost
+LOOP(b_vpmovmskb, "vpmovmskb %%ymm1, %%r8d\n")
 
 static double now(void) {
     struct timespec t;
@@ -84,8 +89,9 @@ int main(void) {
                 {"shlx", b_shlx}, {"shrx", b_shrx}, {"sarx", b_sarx}, {"bzhi", b_bzhi}, {"tzcnt", b_tzcnt},
                 {"lzcnt", b_lzcnt}, {"vpand", b_vpand}, {"vpcmpeqd", b_vpcmpeqd}, {"vpaddq", b_vpaddq},
                 {"vpmovzxbq", b_vpmovzxbq}, {"vpbroadcastb", b_vpbroadcastb}, {"vpabsd", b_vpabsd},
-                {"vpermd", b_vpermd}};
+                {"vpermd", b_vpermd}, {"vpbroadcastb_x", b_vpbroadcastb_x}, {"vpshufd", b_vpshufd},
+                {"vpermq", b_vpermq}, {"vpmovmskb", b_vpmovmskb}, {"vpsllvq", b_vpsllvq}};
     for (size_t i = 0; i < sizeof rows / sizeof rows[0]; i++)
-        printf("bench %-12s %10.2f ns/op\n", rows[i].name, ns_per_op(rows[i].f, buf));
+        printf("bench %-14s %10.2f ns/op\n", rows[i].name, ns_per_op(rows[i].f, buf));
     return 0;
 }

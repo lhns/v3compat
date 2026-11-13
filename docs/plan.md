@@ -49,9 +49,9 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 
 | Instruction | Handling | Cost per op |
 |---|---|---|
-| Hot lane-wise AVX2: add, sub, compare, min, max, `vpmullw`/`vpmulld`/`vpmuludq`, `vpshufb`, shifts; `vpmovzx`/`vpmovsx`, `vpbroadcast` (register source), `vpabs` | Inline, two 128-bit halves | 2-5 ns **[measured]**; 2.2 ns for `vpcmpeqd`, `vpmovzxbq`, `vpbroadcastb`, `vpabsd` on EPYC 9V45 |
+| Hot lane-wise AVX2: add, sub, compare, min, max, `vpmullw`/`vpmulld`/`vpmuludq`, `vpshufb`, shifts; `vpmovzx`/`vpmovsx`, `vpbroadcast` (register source; also to xmm), `vpabs`; `vpermd`/`vpermps`, `vpermq`/`vpermpd`, `vpshufd`/`vpshufhw`/`vpshuflw`, `vpmovmskb` | Inline, two 128-bit halves | 2-5 ns **[measured]**; 2.2 ns for `vpcmpeqd`, `vpmovzxbq`, `vpbroadcastb`, `vpabsd` on EPYC 9V45 |
 | Forms AVX1 has under another opcode, including ymm `vpand`/`vpor`/`vpxor`/`vpandn` | Native substitution | Native (`vpand` 0.06 ns **[measured]**) |
-| Other vector forms (`vperm*`, `vpmovmskb`, `vpshufd`, ...), FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
+| Other vector forms (`vpsllv*`, `vpunpck*`, `vpack*`, ...), FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
 | `rorx`, `andn`, `mulx`, `shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`, MOVBE loads and stores | Inline | 0.6-1.7 ns **[measured]** for the shifts, `bzhi`, `tzcnt`, `lzcnt` (Xeon 8573C; 80-85 ns as helpers) |
 | `bextr`, `blsi`/`blsr`/`blsmsk`, `pdep`, `pext` | Helper through the mcontext | 320-400 ns **[measured]** |
 | `cpuid` | Translated to report the emulated CPU | Rare |
@@ -166,7 +166,8 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   path is the rest. Only `Math.fma` in Java hit it among the workloads (65M).
 - **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
   0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
-  duckdb varied 8.32 to 6.67 s). Neither measured on Ivy Bridge.
+  duckdb varied 8.32 to 6.67 s). #40 (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
+  duckdb varied 10.63 to 10.09 s on EPYC 7763). None measured on Ivy Bridge.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -410,11 +411,13 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   `test/trace_flush.c` on lab branch `lab-perf-trace-fix` (threads in hot code in one page, another writing a byte of
   that page that never executes) dies with SIGSEGV in every run on DynamoRIO alone and never natively: likely the same
   bug, and its reproducer. Next to fix in the fork.
+- **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
+  with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
+  43305470603. Not explained yet.
 - **Performance, ranked:** fewer `/proc/self/maps` reads on DynamoRIO's fault and `mprotect` paths (javac's kernel
   time); a lean helper call instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic
-  with an exactness guard, if a workload needs it; the next inline batch by what still reaches a helper since #35
-  (duckdb varied executes 391M `rorx`, 195M `andn`, 145M `vpaddq`, 46M `movbe`, already inline, then `vpermpd`,
-  `vpshufd`, `vpermd`, `vpmovmskb` at 3-5M each). Runner numbers understate helper cost 2-4x against Ivy Bridge; an Ivy
+  with an exactness guard, if a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node
+  and javac (counted in the helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers understate helper cost 2-4x against Ivy Bridge; an Ivy
   Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
 
 ## License
