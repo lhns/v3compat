@@ -9,17 +9,18 @@ permissions:
   contents: read
 
 env:
-  BASE: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
-  FIX: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
+  BASE: 14836b0e1dfbc5b5d2f089102d83a38f3d38ed94
+  FIX: 8de178bfe83d3b841a969e5136e24d8f075dbff4
 jobs:
   suite:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
         build: [release, debug]
-        rep: [a, b]
+        rep: [a]
+        os: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - name: Packages
         run: |
@@ -31,7 +32,7 @@ jobs:
         run: |
           set +e
           out="$RUNNER_TEMP/out"; mkdir -p "$out"
-          { grep -m1 'model name' /proc/cpuinfo; grep -o -m1 avx512f /proc/cpuinfo; } | tee "$out/cpu.txt"
+          { grep -m1 'model name' /proc/cpuinfo; grep -o -m1 avx512f /proc/cpuinfo; uname -r; } | tee "$out/cpu.txt"
           flags="-DBUILD_TESTS=ON -DAUTOMATED_TESTING=ON -DRUN_SUDO_TESTS=ON -DBUILD_DOCS=OFF"
           if [ "${{ matrix.build }}" = debug ]; then flags="$flags -DDEBUG=ON -DINTERNAL=ON"; else flags="$flags -DDEBUG=OFF"; fi
           extract() { sed -n 's/^[0-9]*://p' Testing/Temporary/LastTestsFailed.log 2>/dev/null | sort > "$1"; }
@@ -53,9 +54,9 @@ jobs:
               echo "repeat $s $k: $f of 20 failed" | tee -a "$out/summary.txt"
             done
           done
-          { echo "## ${{ matrix.build }}-${{ matrix.rep }}"; echo '```'; cat "$out/cpu.txt" "$out/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "## ${{ matrix.build }}-${{ matrix.rep }}-${{ matrix.os }}"; echo '```'; cat "$out/cpu.txt" "$out/summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: suite-${{ matrix.build }}-${{ matrix.rep }}
+          name: suite-${{ matrix.build }}-${{ matrix.rep }}-${{ matrix.os }}
           path: ${{ runner.temp }}/out
