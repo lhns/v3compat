@@ -1,4 +1,7 @@
-# regstress sig jit wall time at main's old pin, each fix alone, and both.
+# regstress sig jit: main's old pin, main, the re-lookup fix, and the fix with counters.
 bis1 bash lab/bisect.sh 6
 bis2 bash lab/bisect.sh 6
 bis3 bash lab/bisect.sh 6
+bis4 bash lab/bisect.sh 6
+bis5 bash lab/bisect.sh 6
+bis6 bash lab/bisect.sh 6
