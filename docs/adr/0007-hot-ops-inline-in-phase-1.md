@@ -46,3 +46,9 @@ Chosen by what still reaches a helper (counted in the helpers; executed counts i
 destination, `vpmovmskb`, `vpshufd`/`vpshufhw`/`vpshuflw`, `vpermq`/`vpermpd` and `vpermd`/`vpermps` are inline too. The
 lane-crossing ones are built from AVX1's in-lane permutes, `vperm2f128` and blends, which move bits and do no FP arithmetic;
 `vpmovmskb` joins its halves in an xmm, so no flag changes.
+
+## Amendment, 2026-11-12 (4)
+Frame helpers leave DynamoRIO's clean call. The fragment moves rsp to a per-thread helper stack and calls a thunk that saves
+only what the helper may clobber under the SysV ABI (rax, rcx, rdx, rsi, rdi, r8-r11, all 16 ymm, the flags) and clears DF.
+rsp is the only application state that differs in the fragment meanwhile, and the restore event puts it back; in the thunk,
+as in a clean callee, DynamoRIO defers signals. Mcontext helpers, `cpuid` and refusals keep the clean call.

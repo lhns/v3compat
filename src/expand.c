@@ -18,9 +18,12 @@ typedef struct {
     ymm256 save[3];
     ymm256 a, b, c, out;
     uint64 pending;   /* unmasked FP flags a call left; outside both ranges event_restore reads */
-    uint64 gsave[5];
+    uint64 gsave[6];  /* gsave[5]: the application's rsp while a frame helper runs on `stack` */
     uint64 fl;        /* the application's flags as lahf and seto leave ax, while a sequence has clobbered them */
     uint64 self;
+    uint64 stack;     /* top of this thread's helper stack */
+    uint64 thunk;     /* lean_thunk, called through here so the code cache needs no reach to it */
+    uint64 desc;      /* the frame helper's descriptor (vec_call) */
 } tls_t;
 #define TLS_SLOTS (sizeof(tls_t) / sizeof(void *))
 
@@ -34,6 +37,7 @@ static opnd_t tls_opnd(size_t off, opnd_size_t sz) {
 }
 #define SAVE_Y(i) tls_opnd(offsetof(tls_t, save) + (i) * sizeof(ymm256), OPSZ_32)
 #define SAVE_G(i) tls_opnd(offsetof(tls_t, gsave) + (i) * sizeof(uint64), OPSZ_8)
+#define SAVE_SP SAVE_G(5)
 #define FRAME(f) tls_opnd(offsetof(tls_t, f), OPSZ_32)
 #define FRAME_X(f) tls_opnd(offsetof(tls_t, f), OPSZ_16)
 
@@ -383,7 +387,7 @@ static const form_t *find(const form_t *t, size_t n, int opc) {
 }
 #define FIND(t, opc) find((t), sizeof(t) / sizeof((t)[0]), (opc))
 
-/* vec_call descriptor: op | type<<8 | imm<<16 | flags<<24 */
+/* vec_call descriptor, 32 bits: op | type<<8 | imm<<16 | flags<<24 */
 enum {
     D_MXCSR = 1,    /* FP form: run with the application's masks, OR the raised flags back */
     D_NARROW = 2,   /* VEX.128: stale upper lanes must not compute or raise flags; a mask has 16 bits */
@@ -446,6 +450,51 @@ static void vec_call(uint64 d) {
         if (fl & D_NARROW) gpr &= 0xFFFFu;
         for (int i = 0; i < 8; i++) t->out.b[i] = (uint8_t)(gpr >> (8 * i));
     }
+}
+
+/* The lean call's callee: the descriptor comes through TLS, as the thunk passes nothing. */
+__attribute__((visibility("hidden"), used)) void lean_entry(void) { vec_call(my_tls()->desc); }
+
+/*
+ * Frame helpers' call (ADR 0007): the fragment stores rsp in SAVE_SP, switches to this thread's helper stack
+ * and calls here. Saved: what the SysV ABI lets lean_entry clobber (rax rcx rdx rsi rdi r8-r11, every ymm, as
+ * a VEX.128 write zeroes the upper half) and the flags; DF is cleared for memcpy. MXCSR is not: vec_call
+ * writes the raised flags to it on purpose. A pc here is outside the cache, so DynamoRIO defers signals and
+ * does not take the thread as a safe spot, as for its own clean callee.
+ */
+__asm__(".text\n"
+        ".p2align 4\n"
+        ".type lean_thunk, @function\n"
+        "lean_thunk:\n"
+        "pushfq\n cld\n"
+        "push %rax\n push %rcx\n push %rdx\n push %rsi\n push %rdi\n"
+        "push %r8\n push %r9\n push %r10\n push %r11\n"
+        /* stack top 32-aligned: 8 (return) + 80 (pushes) + 520 is a multiple of 32 */
+        "sub $520, %rsp\n"
+        "vmovdqa %ymm0, 0(%rsp)\n vmovdqa %ymm1, 32(%rsp)\n vmovdqa %ymm2, 64(%rsp)\n vmovdqa %ymm3, 96(%rsp)\n"
+        "vmovdqa %ymm4, 128(%rsp)\n vmovdqa %ymm5, 160(%rsp)\n vmovdqa %ymm6, 192(%rsp)\n vmovdqa %ymm7, 224(%rsp)\n"
+        "vmovdqa %ymm8, 256(%rsp)\n vmovdqa %ymm9, 288(%rsp)\n vmovdqa %ymm10, 320(%rsp)\n vmovdqa %ymm11, 352(%rsp)\n"
+        "vmovdqa %ymm12, 384(%rsp)\n vmovdqa %ymm13, 416(%rsp)\n vmovdqa %ymm14, 448(%rsp)\n vmovdqa %ymm15, 480(%rsp)\n"
+        "vzeroupper\n"   /* every ymm is saved: the helper's legacy-SSE code then runs without transition penalties */
+        "call lean_entry\n"
+        "vmovdqa 0(%rsp), %ymm0\n vmovdqa 32(%rsp), %ymm1\n vmovdqa 64(%rsp), %ymm2\n vmovdqa 96(%rsp), %ymm3\n"
+        "vmovdqa 128(%rsp), %ymm4\n vmovdqa 160(%rsp), %ymm5\n vmovdqa 192(%rsp), %ymm6\n vmovdqa 224(%rsp), %ymm7\n"
+        "vmovdqa 256(%rsp), %ymm8\n vmovdqa 288(%rsp), %ymm9\n vmovdqa 320(%rsp), %ymm10\n vmovdqa 352(%rsp), %ymm11\n"
+        "vmovdqa 384(%rsp), %ymm12\n vmovdqa 416(%rsp), %ymm13\n vmovdqa 448(%rsp), %ymm14\n vmovdqa 480(%rsp), %ymm15\n"
+        "add $520, %rsp\n"
+        "pop %r11\n pop %r10\n pop %r9\n pop %r8\n"
+        "pop %rdi\n pop %rsi\n pop %rdx\n pop %rcx\n pop %rax\n"
+        "popfq\n ret\n"
+        ".size lean_thunk, .-lean_thunk\n");
+extern char lean_thunk[] __attribute__((visibility("hidden")));
+
+/* rsp is the only application state that differs inside this sequence; event_restore has it from SAVE_SP. */
+static void insert_lean_call(emit_t *e, uint32_t desc) {
+    put(e, INSTR_CREATE_mov_st(e->dc, SAVE_SP, reg(DR_REG_RSP)));
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RSP), tls_opnd(offsetof(tls_t, stack), OPSZ_8)));
+    put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, desc), OPSZ_4), OPND_CREATE_INT32((int)desc)));
+    put(e, INSTR_CREATE_call_ind(e->dc, tls_opnd(offsetof(tls_t, thunk), OPSZ_8)));
+    put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RSP), SAVE_SP));
 }
 
 static void refuse_pending(void) {
@@ -544,9 +593,8 @@ static bool expand_vec(emit_t *e, instr_t *in, const form_t *f) {
     if (ib >= 0) stage(e, r[ib], offsetof(tls_t, b), count);
     if (ic >= 0) stage(e, r[ic], offsetof(tls_t, c), false);
     if (f->kind == K_FMA) put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(c), reg(ymm_of(d))));
-    uint64 desc = (uint64)f->op | ((uint64)f->type << 8) | ((uint64)imm << 16) | ((uint64)fl << 24);
-    dr_insert_clean_call_ex(e->dc, e->bb, e->where, (void *)vec_call, DR_CLEANCALL_ALWAYS_OUT_OF_LINE, 1,
-                            OPND_CREATE_INT64(desc));
+    uint32_t desc = (uint32_t)f->op | ((uint32_t)f->type << 8) | (imm << 16) | (fl << 24);
+    insert_lean_call(e, desc);
     if (fl & D_MXCSR) insert_pending_check(e);
     /* Commit: one write. A VEX.128 load zeroes the destination's upper half. */
     if (f->kind == K_MSK)
@@ -1361,7 +1409,7 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
     if (pc == NULL || !info->raw_mcontext_valid) return true;
     byte *end = info->raw_mcontext->pc;
     reg_id_t y_live[3] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
-    reg_id_t g_live[5] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
+    reg_id_t g_live[6] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
     bool fl_live = false;
     instr_t in;
     instr_init(dc, &in);
@@ -1390,7 +1438,7 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
         byte *dst = (byte *)&info->mcontext->simd[y_live[i] - DR_REG_YMM0];
         for (size_t k = 0; k < sizeof(ymm256); k++) dst[k] = t->save[i].b[k];
     }
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 6; i++)
         if (g_live[i] != DR_REG_NULL) reg_set_value(g_live[i], info->mcontext, t->gsave[i]);
     if (fl_live) {   /* ah holds SF ZF AF PF CF in their eflags positions; al bit 0 is OF */
         uint64 img = t->fl;
@@ -1399,10 +1447,28 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
     return true;
 }
 
+/* The frame helpers' stack: as deep as DynamoRIO's own, with a guard page below it. */
+#define HSTACK_GUARD 4096
+#define HSTACK_SIZE (64 * 1024)
+
 static void event_thread_init(void *dc) {
     tls_t *t = (tls_t *)(dr_get_dr_segment_base(tls_seg) + tls_offs);
     t->self = (uint64)t;
+    byte *s = dr_raw_mem_alloc(HSTACK_GUARD + HSTACK_SIZE, DR_MEMPROT_READ | DR_MEMPROT_WRITE, NULL);
+    if (s == NULL || !dr_memory_protect(s, HSTACK_GUARD, DR_MEMPROT_NONE)) dr_abort_with_code(V3COMPAT_REFUSED);
+    t->stack = (uint64)(s + HSTACK_GUARD + HSTACK_SIZE);
+    t->thunk = (uint64)lean_thunk;
     drmgr_set_tls_field(dc, tls_idx, t);
+}
+
+static void event_thread_exit(void *dc) {
+    tls_t *t = (tls_t *)drmgr_get_tls_field(dc, tls_idx);
+    if (t == NULL || t->stack == 0) return;
+    byte *base = (byte *)t->stack - HSTACK_SIZE - HSTACK_GUARD, *sp;
+    __asm__ volatile("mov %%rsp, %0" : "=r"(sp));
+    /* A helper that exits the process (vec_call's refusals) runs this on the stack itself: leave it. */
+    if (sp >= base && sp < (byte *)t->stack) return;
+    dr_raw_mem_free(base, HSTACK_GUARD + HSTACK_SIZE);
 }
 
 bool expand_init(bool helpers_only_) {
@@ -1411,12 +1477,14 @@ bool expand_init(bool helpers_only_) {
     tls_idx = drmgr_register_tls_field();
     if (tls_idx < 0) return false;
     drmgr_register_thread_init_event(event_thread_init);
+    drmgr_register_thread_exit_event(event_thread_exit);
     return drmgr_register_restore_state_ex_event(event_restore);
 }
 
 void expand_exit(void) {
     drmgr_unregister_restore_state_ex_event(event_restore);
     drmgr_unregister_thread_init_event(event_thread_init);
+    drmgr_unregister_thread_exit_event(event_thread_exit);
     drmgr_unregister_tls_field(tls_idx);
     dr_raw_tls_cfree(tls_offs, TLS_SLOTS);
 }
