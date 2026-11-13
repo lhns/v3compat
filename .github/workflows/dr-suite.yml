@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 env:
-  BASE: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
-  FIX: 7e8c88b7c0e43c1d16d92f8d7a002a872c788559
+  BASE: eb1d1fb4e611583a2d6b62508400a8bcf98cca73
+  FIX: 2c501c46186934b8d11571d950d402c26ad04342
 jobs:
   suite:
     runs-on: ubuntu-22.04
