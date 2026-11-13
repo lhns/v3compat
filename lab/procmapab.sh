@@ -1,5 +1,5 @@
 #!/bin/bash
-# LAB ONLY: PROCMAP_QUERY for memquery_from_os (fork 8de178b) against its base (origin/main, pin 14836b0) and the
+# LAB ONLY: PROCMAP_QUERY for memquery_from_os (fork 876631d) against its base (origin/main, pin 14836b0) and the
 # ceiling of skipping the i#1760 check (stub 42319db, on #9), interleaved per rep; then one perf-stat run per config.
 set -u
 SHORT=${1:-20}; LONG=${2:-6}
@@ -10,7 +10,7 @@ build() { # dir commit
 }
 build /tmp/stub 42319db295d71ead8bd00cfdc6b64bf679eac0cc
 C=~/.cache/v3compat
-BDR=$C/dr-14836b0e1dfbc5b5d2f089102d83a38f3d38ed94; FDR=$C/dr-8de178bfe83d3b841a969e5136e24d8f075dbff4; SDR=/tmp/drc/dr-42319db295d71ead8bd00cfdc6b64bf679eac0cc
+BDR=$C/dr-14836b0e1dfbc5b5d2f089102d83a38f3d38ed94; FDR=$C/dr-876631ddbb16b80183318731e9839e870bc2077c; SDR=/tmp/drc/dr-42319db295d71ead8bd00cfdc6b64bf679eac0cc
 ls -d $BDR $FDR $SDR || exit 1
 B=/tmp/bench; mkdir -p $B/javac-out
 DRO="-no_enable_reset -no_ignore_syscalls"
