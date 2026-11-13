@@ -16,7 +16,20 @@ static bool stats_on, audit_on;
 static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, __ATOMIC_RELAXED); }
 /* Executed count per DR opcode of the classes the CPU lacks. */
 static uint64 op_counts[OP_LAST];
-static bool store_xl;
+static char native_list[512];   /* LAB ONLY: ",name,name," of classes or opcodes left to the CPU */
+static bool has(const char *h, const char *k) {
+    for (; *h; h++) if (starts(h, k)) return true;
+    return false;
+}
+static bool lab_native(instr_t *in, int c) {
+    if (native_list[0] == 0) return false;
+    char key[48];
+    const char *nm = c < C_N ? cls_name[c] : "-";
+    dr_snprintf(key, sizeof key, ",%s,", nm);
+    if (has(native_list, key) || has(native_list, ",all,")) return true;
+    dr_snprintf(key, sizeof key, ",%s,", decode_opcode_name(instr_get_opcode(in)));
+    return has(native_list, key);
+}
 static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELAXED); }
 
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
@@ -48,35 +61,20 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
             }
             n[C_INSTRS]++;
         }
+        if (c != C_N && lab_native(in, c)) continue;
         expand_instr(drcontext, bb, in, c != C_N);
     }
     for (int c = 0; c < C_N; c++)
         if (n[c] != 0)
             dr_insert_clean_call(drcontext, bb, instrlist_first(bb), (void *)add_count, false, 2,
                                  OPND_CREATE_INT32(c), OPND_CREATE_INT32(n[c]));
-    return store_xl ? DR_EMIT_STORE_TRANSLATIONS : DR_EMIT_DEFAULT;
+    return DR_EMIT_DEFAULT;
 }
 
 /* DR stops a block at bytes it cannot decode and raises SIGILL there: the list cannot see them, and
  * the program would die of a signal, so this is where they are refused. A decoded form's SIGILL (ud2)
  * is the program's own. */
 static dr_signal_action_t event_signal(void *drcontext, dr_siginfo_t *info) {
-    {   /* LAB ONLY: what translation changed between the raw and the application state at a signal */
-        static int n;
-        if (info->raw_mcontext_valid && info->mcontext != NULL && n < 400) {
-            dr_mcontext_t *a = info->mcontext, *r = info->raw_mcontext;
-            int diff = 0;
-            for (int i = 0; i < 16; i++)
-                if (__builtin_memcmp(&a->simd[i], &r->simd[i], 32) != 0) diff |= 1 << i;
-            int gd = (a->xax != r->xax) | (a->xbx != r->xbx) << 1 | (a->xcx != r->xcx) << 2 | (a->xdx != r->xdx) << 3 |
-                (a->xsi != r->xsi) << 4 | (a->xdi != r->xdi) << 5 | (a->xbp != r->xbp) << 6 | (a->xsp != r->xsp) << 7 |
-                (a->r8 != r->r8) << 8 | (a->r9 != r->r9) << 9 | (a->r10 != r->r10) << 10 | (a->r11 != r->r11) << 11 |
-                (a->r12 != r->r12) << 12 | (a->r13 != r->r13) << 13 | (a->r14 != r->r14) << 14 | (a->r15 != r->r15) << 15;
-            n++;
-            dr_fprintf(STDERR, "V3S sig=%d raw=%p app=%p ymmdiff=%x gprdiff=%x flagsdiff=%d tid=%d\n", info->sig, r->pc, a->pc,
-                       diff, gd, a->xflags != r->xflags, (int)dr_get_thread_id(drcontext));
-        }
-    }
     if (info->sig != SIGILL_NUM || info->mcontext == NULL) return DR_SIGNAL_DELIVER;
     instr_t in;
     instr_init(drcontext, &in);
@@ -112,7 +110,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         if (starts(argv[i], "-stats")) stats_on = true;
         if (starts(argv[i], "-helpers-only")) helpers_only = true;
         if (starts(argv[i], "-audit")) audit_on = true;
-        if (starts(argv[i], "-store-xl")) store_xl = true;   /* LAB ONLY */
+        if (starts(argv[i], "-native=")) dr_snprintf(native_list, sizeof native_list, ",%s,", argv[i] + 8);
     }
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_bb_app2app_event(event_app2app, NULL);

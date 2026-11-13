@@ -1432,24 +1432,6 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
             g_live[(off - (int)offsetof(tls_t, gsave)) / 8] = st ? r : DR_REG_NULL;
     }
     instr_free(dc, &in);
-    {   /* LAB ONLY: every restore that puts something back, with the instruction at the interrupted pc */
-        bool any = fl_live;
-        for (int i = 0; i < 3; i++) any |= y_live[i] != DR_REG_NULL;
-        for (int i = 0; i < 6; i++) any |= g_live[i] != DR_REG_NULL;
-        static int n;
-        if (any && n++ < 200) {
-            instr_t at;
-            instr_init(dc, &at);
-            byte *nx = decode(dc, end, &at);
-            dr_fprintf(STDERR, "V3R restore start=%p pc=%p op=%s y=%s,%s,%s g=%d%d%d%d%d%d fl=%d tid=%d\n",
-                       info->fragment_info.cache_start_pc, end,
-                       nx != NULL && instr_valid(&at) ? decode_opcode_name(instr_get_opcode(&at)) : "?",
-                       y_live[0] ? get_register_name(y_live[0]) : "-", y_live[1] ? get_register_name(y_live[1]) : "-",
-                       y_live[2] ? get_register_name(y_live[2]) : "-", g_live[0] != 0, g_live[1] != 0, g_live[2] != 0,
-                       g_live[3] != 0, g_live[4] != 0, g_live[5] != 0, fl_live, (int)dr_get_thread_id(dc));
-            instr_free(dc, &at);
-        }
-    }
     tls_t *t = (tls_t *)drmgr_get_tls_field(dc, tls_idx);
     for (int i = 0; i < 3; i++) {
         if (y_live[i] == DR_REG_NULL) continue;
