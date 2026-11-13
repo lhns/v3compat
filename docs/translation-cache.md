@@ -303,8 +303,9 @@ default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and la
   it, a regstress subset and duckdb's hashes in verify mode, with hit-rate floors and the two-layout check.
   `test/pcache_tool.py` reads, checks, diffs and damages files; `lab/pcache.sh` runs the labs.
 
-**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted; ASLR on, default DR options, `-stable_reach`
-with the cache; every run `rc=0` and every duckdb and node digest equal to native) **[measured]**:
+**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted, on fork a438f5b before its rebase onto the
+memquery change; the final commit has CI and the two-layout check; ASLR on, default DR options, `-stable_reach` with
+the cache; every run `rc=0` and every duckdb and node digest equal to native) **[measured]**:
 
 | Workload | Cold to warm, traces on | Less | With `-disable_traces` | Less |
 |---|---|---|---|---|
@@ -323,22 +324,30 @@ Medians of 6 interleaved reps on each of four jobs: EPYC 9V74 (two), Xeon 8573C,
 - **`-stable_reach` alone**, no cache, interleaved A/B over 8 reps on three jobs: duckdb over 300M rows +0.0 to +0.2%
   (paired medians), duckdb's varied workload +0.2% (9V74) and +0.5% and +1.9% (two 7763s); startup within 0.01 s. A
   disp32 absolute operand for targets below 2 GB would save the scratch register where it costs; not built.
+- **`-stable_reach` with PIE code** (run 43408296003): 10 reads each of regstress (vmcode at -vm_base plus the random
+  offset) and misc_forms (vmcode placed near the app), each at another placement: 0 predicate misses, the same hits
+  every time (37,790 and 2,519).
+- **Writer:** the counters of blocks it could not make position-independent (an immediate pointing into DR, vmcode or a
+  module without being derived from the block) are the same before and after the rebase: 0-3 for duckdb, 505 for node
+  and 758 for `jit.js`, all of them in its own module. 12-41 blocks per workload fail to rebuild from their entry at
+  install (a miss); the cause is not found.
 - **Two layouts:** two training runs of each workload wrote identical entries (77,109 of 77,109 for `select 42`, 69,766
   of 69,766 for Java).
 - **Verify mode, ASLR on:** 0 mismatches over every workload and both option sets; ctest plain, training and verify
   273 of 274 each (`setuid` fails in all three in the lab, which lacks CI's `chmod o+x $HOME`); the stress set duckdb 0 of
   240, signal 0 of 390, reg/flags 0 of 306, the short loop 1 of 4,500 (SIGSEGV, and 1 of the 150 no-cache runs on the same
   Xeon 8370C: the known `regstress sig jit` flake).
-- **Signal tests fail more often with a warm cache.** The ctest signal tests (regstress, vfork-sig), `-j4` among
-  themselves, 120 passes per arm on four jobs (run 43465664481): `regstress-xlsig` failed in 12 without the cache, 19
-  training, 21 in verify mode and 31 warm; the regstress binary died of SIGSEGV early (`regstress`, `regstress-control`)
-  in 3, 1, 2 and 9; the vfork-sig tests in 13, 1, 4 and 10. Every class also fails without the cache. The rate follows
-  startup speed (warm, the fastest, is worst; verify mode, which runs the same installed code slower, is not), which
-  points at timing, not at wrong code. `regstress-xlsig`'s message is DynamoRIO's: a signal sent to a thread in its first
-  instructions kills the process under DynamoRIO alone and the client in 300 of 300 runs, natively 0 of 300
-  (`lab/xlrace.c`, run 43418236984). CI's `cache-verify` job reruns a test once when it fails that way; it did in each of
-  its first runs. Fixing DynamoRIO's handling of signals at thread start is an open item ([plan](plan.md)); whether it
-  must come before Phase 3 is the owner's decision.
+- **Signal tests under load.** The ctest signal tests (regstress, vfork-sig), `-j4` among themselves, 120 passes per
+  arm on four jobs (run 43465664481), failures without the cache / training / verify mode / warm:
+  `regstress-xlsig` 12 / 19 / 21 / 31; the regstress binary dying of SIGSEGV early (`regstress`, `regstress-control`)
+  3 / 1 / 2 / 9; the vfork-sig tests 13 / 1 / 4 / 10. Every class fails without the cache too, and no run had a verify
+  mismatch. Warm is clearly worse for `regstress-xlsig` and possibly for the SIGSEGV; training and verify are not
+  distinguishable from no cache at this count; the mechanism is not shown. `regstress-xlsig`'s message is DynamoRIO's
+  own: a signal sent to a thread in its first instructions kills `lab/xlrace.c` under DynamoRIO alone and the client
+  in 300 of 300 runs, natively 0 of 300 (run 43418236984). Run serially, as CI does, the cache arms were near clean:
+  the stress set above and `regstress-xlsig` 1 of 200 (0 of 100 without). CI's `cache-verify` job runs ctest serially
+  and reruns a test once when it fails with "default action in native thread". Whether DynamoRIO's signals at thread
+  start must be fixed before Phase 3 is the owner's decision.
 
 **Phase 3 go/no-go:** go, in the owner's judgement of the gain, with the signal-at-thread-start races above fixed
 first or accepted. Entries are position-independent and

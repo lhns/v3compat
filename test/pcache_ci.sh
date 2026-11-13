@@ -10,11 +10,12 @@ fail() { echo "FAIL: $*"; bad=1; }
 # setuid's checks run as another user, which must be able to write and read the cache
 mkdir -p $C/ct && chmod 1777 $C $C/ct
 
-# ctest_arm NAME VAR=value...: ctest under the cache. A failure that is DynamoRIO's signal at thread start
+# ctest_arm NAME VAR=value...: ctest under the cache, serially as build-test runs it (under -j4 load the signal tests'
+# own races fire more often, docs/translation-cache.md). A failure that is DynamoRIO's signal at thread start
 # (docs/plan.md, Open items) is rerun once; any other failure, or the same test failing again, fails the job.
 ctest_arm() {
   local name=$1; shift
-  env "$@" ctest --test-dir $B -j4 --output-on-failure > $C/$name.txt 2>&1 && return 0
+  env "$@" ctest --test-dir $B --output-on-failure > $C/$name.txt 2>&1 && return 0
   local failed known
   # per failed test: did its output show the signal at thread start?
   failed=$(grep -cF "***Failed" $C/$name.txt)
