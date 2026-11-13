@@ -354,7 +354,7 @@ on DynamoRIO alone) **[measured]**: `java -version` 2.37 to 1.50 s under the cli
 `mprotect` calls stay. Stress set unchanged (duckdb 0 of 240, signal 0 of 390, reg/flags 0 of 306 under the client and 0
 of 306 alone, short 0 of 4,500), ctest 272 of 272, DynamoRIO's suite the same failures on base and fix (run 43333761161).
 
-**The new-module check without reading `/proc/self/maps`, fixed in the fork** (branch `memquery-procmap`,
+**The new-module check without reading `/proc/self/maps`, fixed in the fork** (branch `memquery-procmap`, merged as `0bd5cd8`,
 [lhns/dynamorio#13](https://github.com/lhns/dynamorio/pull/13)). After #9 nearly all remaining maps reads were
 `memquery_from_os()` for the i#1760 check on each new code area outside a module. Linux 6.11+ answers it with the
 `PROCMAP_QUERY` ioctl; free addresses, `[vsyscall]` and older kernels still walk the file. Both paths answered every
