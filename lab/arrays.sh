@@ -6,11 +6,11 @@ DR=$HOME/.cache/v3compat/dr-$(sed -n 's/^set(V3COMPAT_DR_COMMIT \([0-9a-f]*\))/\
 cmake -S lab/nullclient -B /tmp/null-b -DDynamoRIO_DIR=${DR}cmake >/dev/null && cmake --build /tmp/null-b >/dev/null || exit 1
 J="java -XX:UseAVX=2 -cp /tmp/bench/classes"
 $J Bench 8 1 arrays | grep -E '^(value|parts)' >/tmp/native; sed 's/^/NATIVE /' /tmp/native
-C="helpers hnoSW hnoFMA client"
+C="helpers hnoSW hXbatch"
 run() { case $1 in client) build/inst/bin/v3compat-run -- $J Bench 8 1 arrays;;
   helpers) V3COMPAT_HELPERS_ONLY=1 build/inst/bin/v3compat-run -- $J Bench 8 1 arrays;;
   hnoSW) V3COMPAT_HELPERS_ONLY=1 build/inst/bin/v3compat-run -- $J -XX:-UseSuperWord Bench 8 1 arrays;;
-  hnoFMA) V3COMPAT_HELPERS_ONLY=1 build/inst/bin/v3compat-run -- $J -XX:-UseFMA Bench 8 1 arrays;;
+  hXbatch) V3COMPAT_HELPERS_ONLY=1 build/inst/bin/v3compat-run -- $J -Xbatch Bench 8 1 arrays;;
   empty) ${DR}bin64/drrun -no_enable_reset -no_ignore_syscalls -c /tmp/null-b/libnull.so -- $J Bench 8 1 arrays;; esac; }
 declare -A bad wrong; for c in $C; do bad[$c]=0; wrong[$c]=0; done
 for i in $(seq $1); do for c in $C; do
