@@ -1,5 +1,5 @@
-// misc_forms: forms the avxemu manifest marks refused (register-source vbroadcastss/sd, ymm
-// vmovntdqa), and what the frame path does to MXCSR: nothing, except FMA, which ORs its flags in.
+// misc_forms: what the frame path does to MXCSR: nothing, except FMA, which ORs its flags in. The semantic
+// suite cannot see this: it randomises MXCSR only for FP forms.
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,33 +29,6 @@ static uint32_t mxcsr_after(const char *kind, uint32_t init) {
 }
 
 int main(void) {
-    static uint8_t src[64] __attribute__((aligned(32))), dst[64] __attribute__((aligned(32)));
-    for (int i = 0; i < 64; i++) src[i] = (uint8_t)(i * 7 + 3);
-
-    // vbroadcastss/sd with a register source: the lowest element everywhere, xmm destination zero-extended.
-    uint8_t pre[32];
-    memset(pre, 0xEE, sizeof pre);
-    __asm__ volatile("vmovdqu %1, %%ymm1\nvmovdqu %2, %%ymm2\nvbroadcastss %%xmm1, %%ymm2\nvmovdqu %%ymm2, %0"
-                     : "=m"(dst) : "m"(src), "m"(pre) : "xmm1", "xmm2", "memory");
-    int ok = 1;
-    for (int i = 0; i < 32; i++) ok &= dst[i] == src[i % 4];
-    expect(ok, "vbroadcastss ymm, xmm");
-    __asm__ volatile("vmovdqu %1, %%ymm1\nvmovdqu %2, %%ymm2\nvbroadcastss %%xmm1, %%xmm2\nvmovdqu %%ymm2, %0"
-                     : "=m"(dst) : "m"(src), "m"(pre) : "xmm1", "xmm2", "memory");
-    ok = 1;
-    for (int i = 0; i < 16; i++) ok &= dst[i] == src[i % 4];
-    for (int i = 16; i < 32; i++) ok &= dst[i] == 0;
-    expect(ok, "vbroadcastss xmm, xmm");
-    __asm__ volatile("vmovdqu %1, %%ymm1\nvmovdqu %2, %%ymm2\nvbroadcastsd %%xmm1, %%ymm2\nvmovdqu %%ymm2, %0"
-                     : "=m"(dst) : "m"(src), "m"(pre) : "xmm1", "xmm2", "memory");
-    ok = 1;
-    for (int i = 0; i < 32; i++) ok &= dst[i] == src[i % 8];
-    expect(ok, "vbroadcastsd ymm, xmm");
-
-    // ymm non-temporal load.
-    __asm__ volatile("vmovntdqa %1, %%ymm3\nvmovdqu %%ymm3, %0" : "=m"(dst) : "m"(src) : "xmm3", "memory");
-    expect(!memcmp(dst, src, 32), "vmovntdqa ymm");
-
     // MXCSR: untouched by the other frame forms, flags ORed in by FMA, existing flags kept.
     expect(mxcsr_after("other", 0x1F80 | 0x2009) == (0x1F80 | 0x2009), "frame form leaves MXCSR alone");
     expect(mxcsr_after("fma", 0x1F80 | 0x2009) == (0x1F80 | 0x2009 | 0x20), "fma ORs the inexact flag");
