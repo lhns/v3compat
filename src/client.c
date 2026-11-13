@@ -21,7 +21,14 @@ static bool has(const char *h, const char *k) {
     for (; *h; h++) if (starts(h, k)) return true;
     return false;
 }
+static char emu_only[512], emu_except[512];   /* LAB ONLY: of the avx2 class, emulate only / all but these */
 static bool lab_native(instr_t *in, int c) {
+    if (c == C_AVX2 && (emu_only[0] || emu_except[0])) {
+        char k[48];
+        dr_snprintf(k, sizeof k, ",%s,", decode_opcode_name(instr_get_opcode(in)));
+        if (emu_only[0] && !has(emu_only, k)) return true;
+        if (emu_except[0] && has(emu_except, k)) return true;
+    }
     if (native_list[0] == 0) return false;
     char key[48];
     const char *nm = c < C_N ? cls_name[c] : "-";
@@ -111,6 +118,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         if (starts(argv[i], "-helpers-only")) helpers_only = true;
         if (starts(argv[i], "-audit")) audit_on = true;
         if (starts(argv[i], "-native=")) dr_snprintf(native_list, sizeof native_list, ",%s,", argv[i] + 8);
+        if (starts(argv[i], "-emu-only=")) dr_snprintf(emu_only, sizeof emu_only, ",%s,", argv[i] + 10);
+        if (starts(argv[i], "-emu-except=")) dr_snprintf(emu_except, sizeof emu_except, ",%s,", argv[i] + 12);
     }
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_bb_app2app_event(event_app2app, NULL);
