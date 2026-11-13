@@ -1,4 +1,4 @@
-# LAB ONLY: PROCMAP_QUERY in memquery_from_os (fork branch memquery-procmap-query); the pin is the fix.
+# LAB ONLY: PROCMAP_QUERY in memquery_from_os (fork branch procmap-query); the pin is the fix.
 ab1 bash lab/procmapab.sh 20 6
 ab2 bash lab/procmapab.sh 20 6
 verify bash lab/procmapverify.sh
