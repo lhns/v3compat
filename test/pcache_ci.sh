@@ -16,7 +16,9 @@ ctest_arm() {
   local name=$1; shift
   env "$@" ctest --test-dir $B -j4 --output-on-failure > $C/$name.txt 2>&1 && return 0
   local failed known
-  failed=$(grep -cF "***Failed" $C/$name.txt); known=$(grep -c "default action in native thread" $C/$name.txt)
+  # per failed test: did its output show the signal at thread start?
+  failed=$(grep -cF "***Failed" $C/$name.txt)
+  known=$(awk '/\*\*\*Failed/{f=1; next} /Test +#[0-9]+:|Start +[0-9]+:/{f=0} f && /native thread/{k++; f=0} END{print k+0}' $C/$name.txt)
   grep -F -A8 "***Failed" $C/$name.txt | head -40
   if [ "$failed" -gt 0 ] && [ "$known" -ge "$failed" ]; then
     echo "$name: $failed failed with the signal at thread start, rerun once"

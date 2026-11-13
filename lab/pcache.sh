@@ -97,6 +97,20 @@ srab)
       one srab-$a varied V3COMPAT_DR_OPTS="$o"
     done
   done ;;
+ctestrace)
+  # Whether the cache changes how often a ctest fails with DynamoRIO's signal at thread start: plain, training, warm
+  # and verify interleaved, each a whole ctest -j4 as in CI's cache job, N passes.
+  rm -rf /tmp/ctr; mkdir -p /tmp/ctr/c && chmod 1777 /tmp/ctr /tmp/ctr/c
+  V3COMPAT_CACHE=/tmp/ctr/c V3COMPAT_CACHE_WRITE=1 ctest --test-dir build -j4 > /dev/null 2>&1
+  for i in $(seq $2); do for a in plain train warm verify; do
+    case $a in plain) e="V3COMPAT_CACHE=" ;; train) rm -rf /tmp/ctr/t; mkdir -p /tmp/ctr/t; chmod 1777 /tmp/ctr/t; e="V3COMPAT_CACHE=/tmp/ctr/t V3COMPAT_CACHE_WRITE=1" ;;
+      warm) e="V3COMPAT_CACHE=/tmp/ctr/c" ;; verify) e="V3COMPAT_CACHE=/tmp/ctr/c V3COMPAT_CACHE_VERIFY=1" ;; esac
+    env $e ctest --test-dir build -j4 --output-on-failure > lab-out/ct-$a-$i.txt 2>&1
+    f=$(grep -F "***Failed" lab-out/ct-$a-$i.txt | grep -v "setuid" | sed -E 's/.*Test +#[0-9]+: (\S+) .*//' | tr '
+' ' ')
+    k=$(grep -c "native thread" lab-out/ct-$a-$i.txt)
+    echo "RESULT ctestrace $a pass $i failed [$f] native-thread-lines $k"
+  done; done ;;
 xlsig)
   # ctest's regstress-xlsig (SIGXCPU at emulated instructions), arms interleaved in blocks of 10
   rm -rf /tmp/pcx; mkdir -p /tmp/pcx
