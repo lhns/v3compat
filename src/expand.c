@@ -1427,6 +1427,7 @@ void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
 static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t *info) {
     (void)restore_memory;
     byte *pc = info->fragment_info.cache_start_pc;
+    { static int n; if (n++ < 300) dr_fprintf(STDERR, "V3E restore start=%p raw_valid=%d raw_pc=%p app_pc=%p mem=%d tid=%d\n", pc, info->raw_mcontext_valid, info->raw_mcontext_valid ? info->raw_mcontext->pc : NULL, info->mcontext->pc, restore_memory, (int)dr_get_thread_id(dc)); }
     if (pc == NULL || !info->raw_mcontext_valid) return true;
     byte *end = info->raw_mcontext->pc;
     reg_id_t y_live[3] = {DR_REG_NULL, DR_REG_NULL, DR_REG_NULL};
@@ -1453,6 +1454,7 @@ static bool event_restore(void *dc, bool restore_memory, dr_restore_state_info_t
             g_live[(off - (int)offsetof(tls_t, gsave)) / 8] = st ? r : DR_REG_NULL;
     }
     instr_free(dc, &in);
+    if (y_live[0] || y_live[1] || y_live[2] || g_live[0] || g_live[1] || g_live[5] || fl_live) dr_fprintf(STDERR, "V3E live y=%d%d%d g0=%d g1=%d sp=%d fl=%d end=%p\n", y_live[0] != 0, y_live[1] != 0, y_live[2] != 0, g_live[0] != 0, g_live[1] != 0, g_live[5] != 0, fl_live, end);
     tls_t *t = (tls_t *)drmgr_get_tls_field(dc, tls_idx);
     for (int i = 0; i < 3; i++) {
         if (y_live[i] == DR_REG_NULL) continue;

@@ -12,7 +12,8 @@ run() { case $1 in addv) ${DR}bin64/drrun -no_enable_reset -no_ignore_syscalls -
 declare -A bad wrong; for c in $C; do bad[$c]=0; wrong[$c]=0; done
 for i in $(seq $1); do for c in $C; do
   timeout 900 bash -c "$(declare -f run); J='$J'; DR='$DR'; run $c" >/tmp/o 2>/tmp/e; rc=$?
-  v=$(grep -c V3VERIFY /tmp/e); echo "VERIFY $c $i rc=$rc mismatches=$v wrong=$(diff -q <(grep -E '^(value|parts)' /tmp/o) /tmp/native >/dev/null && echo 0 || echo 1)"
+  grep -E '^V3E' /tmp/e | head -60 | sed "s/^/$c $i /" >> lab-out/v3e.txt
+  v=$(grep -c V3VERIFY /tmp/e); echo "VERIFY $c $i rc=$rc mismatches=$v restores=$(grep -c '^V3E restore' /tmp/e) live=$(grep -c '^V3E live' /tmp/e) nostart=$(grep -c 'V3E restore start=(nil)\|start=0x0000000000000000' /tmp/e) wrong=$(diff -q <(grep -E '^(value|parts)' /tmp/o) /tmp/native >/dev/null && echo 0 || echo 1)"
   if [ $rc != 0 ]; then bad[$c]=$((bad[$c]+1)); echo "FAIL $c $i rc=$rc $(grep -m1 -E 'crash at PC|SIG' /tmp/e)"
   elif ! diff -q <(grep -E '^(value|parts)' /tmp/o) /tmp/native >/dev/null; then wrong[$c]=$((wrong[$c]+1)); diff <(grep -E '^(value|parts)' /tmp/o) /tmp/native | grep '^<' | sed "s/^/WRONG $c $i /"; fi
 done; done
