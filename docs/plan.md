@@ -164,12 +164,16 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
   `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
 - **Node's v3 forms come from glibc's AVX2 string routines**, not V8 (turning V8's v3 flags off changes no count).
-- **FMA** through the helper: 85-210 ns scalar, 165-465 ns packed (the call itself is about 27 ns); softfma's integer
-  path is the rest. Only `Math.fma` in Java hit it among the workloads (65M).
+- **FMA** through the helper, with avxemu's integer fast path for round to nearest with normal operands and result
+  (lhns/avxemu#11) **[measured]**, EPYC 9V74, one interleaved job against the previous pin, ns/op: `vfmadd231ss` 76 to 37,
+  `sd` 68 to 42, `ps`/`pd` xmm 279 to 72 and 136 to 60, `ps`/`pd` ymm 351 to 91 and 171 to 78; dgemm 0.78 to 0.39 s, sgemm
+  0.79 to 0.26 s, Horner 0.19 to 0.11 s; Java's `Math.fma` round 593 to 375 ms (9V74), 455 to 270 ms (9V45). The lean
+  call (#39) takes scalar FMA another 205 to 90 ns on EPYC 7763. Only `Math.fma` in Java hit it among the workloads (65M).
 - **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
   0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
   duckdb varied 8.32 to 6.67 s). #40 (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
-  duckdb varied 10.63 to 10.09 s on EPYC 7763). None measured on Ivy Bridge.
+  duckdb varied 10.63 to 10.09 s on EPYC 7763). #39 (lean helper call, ADR 0007 (4)): a frame helper 27.7 to 23.5 ns
+  (Xeon 8370C), 20.8 to 17.5 (EPYC 9V74). None measured on Ivy Bridge.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -429,10 +433,10 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   43305470603. Not explained yet.
 - **Performance, ranked:** the rest of the `/proc/self/maps` reads, DynamoRIO's new-module check (i#1760) on each new code
   area, and its gencode `mprotect` toggling (`-protect_mask 0`): on top of #9 each is worth 1-15% on JIT startup (lab
-  `lab-perf-lever-ab`, run 43334850670), owner's decision; a lean helper call
-  instead of DynamoRIO's full clean call (every helper form); FMA through hardware arithmetic with an exactness guard, if
+  `lab-perf-lever-ab`, run 43334850670), owner's decision; FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
-  helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers understate helper cost 2-4x against Ivy
+  helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers
+  understate helper cost 2-4x against Ivy Bridge; an Ivy
   Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
 
 ## License
