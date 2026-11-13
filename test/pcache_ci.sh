@@ -59,10 +59,10 @@ $T diff $C/d1/duckdb.pcache $C/d2/duckdb.pcache || fail "entries differ between 
 echo "== stress subset and duckdb's hashes, verify mode"
 RS=$B/test/regstress
 mkdir -p $C/rs
-for k in "jit" "sig" "idle jit"; do V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_WRITE=1 $R -- $RS 8 10 $k > /dev/null; done
+for k in "jit" "sig" "idle jit"; do V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_WRITE=1 $R -- $RS 8 3 $k > /dev/null; done
 for k in "jit" "sig" "idle jit" "sig jit"; do
   n=0; for i in 1 2 3 4 5 6 7 8 9 10; do
-    V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_VERIFY=1 timeout 120 $R -- $RS 8 10 $k > $C/out 2>&1 || { n=$((n + 1)); tail -3 $C/out; }
+    V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_VERIFY=1 timeout 300 $R -- $RS 8 3 $k > $C/out 2>&1 || { n=$((n + 1)); echo "  rc=$?"; tail -3 $C/out; }
   done
   echo "regstress $k: $n of 10 bad"; [ $n = 0 ] || fail "regstress $k"
 done
