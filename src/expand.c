@@ -475,6 +475,7 @@ __asm__(".text\n"
         "vmovdqa %ymm4, 128(%rsp)\n vmovdqa %ymm5, 160(%rsp)\n vmovdqa %ymm6, 192(%rsp)\n vmovdqa %ymm7, 224(%rsp)\n"
         "vmovdqa %ymm8, 256(%rsp)\n vmovdqa %ymm9, 288(%rsp)\n vmovdqa %ymm10, 320(%rsp)\n vmovdqa %ymm11, 352(%rsp)\n"
         "vmovdqa %ymm12, 384(%rsp)\n vmovdqa %ymm13, 416(%rsp)\n vmovdqa %ymm14, 448(%rsp)\n vmovdqa %ymm15, 480(%rsp)\n"
+        "vzeroupper\n"   /* every ymm is saved: the helper's legacy-SSE code then runs without transition penalties */
         "call lean_entry\n"
         "vmovdqa 0(%rsp), %ymm0\n vmovdqa 32(%rsp), %ymm1\n vmovdqa 64(%rsp), %ymm2\n vmovdqa 96(%rsp), %ymm3\n"
         "vmovdqa 128(%rsp), %ymm4\n vmovdqa 160(%rsp), %ymm5\n vmovdqa 192(%rsp), %ymm6\n vmovdqa 224(%rsp), %ymm7\n"
