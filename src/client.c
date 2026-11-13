@@ -16,6 +16,7 @@ static bool stats_on, audit_on;
 static void add_count(int c, int n) { __atomic_add_fetch(&counts[c], (uint64)n, __ATOMIC_RELAXED); }
 /* Executed count per DR opcode of the classes the CPU lacks. */
 static uint64 op_counts[OP_LAST];
+static bool store_xl;
 static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELAXED); }
 
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
@@ -53,7 +54,7 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
         if (n[c] != 0)
             dr_insert_clean_call(drcontext, bb, instrlist_first(bb), (void *)add_count, false, 2,
                                  OPND_CREATE_INT32(c), OPND_CREATE_INT32(n[c]));
-    return DR_EMIT_DEFAULT;
+    return store_xl ? DR_EMIT_STORE_TRANSLATIONS : DR_EMIT_DEFAULT;
 }
 
 /* DR stops a block at bytes it cannot decode and raises SIGILL there: the list cannot see them, and
@@ -95,6 +96,7 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
         if (starts(argv[i], "-stats")) stats_on = true;
         if (starts(argv[i], "-helpers-only")) helpers_only = true;
         if (starts(argv[i], "-audit")) audit_on = true;
+        if (starts(argv[i], "-store-xl")) store_xl = true;   /* LAB ONLY */
     }
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_bb_app2app_event(event_app2app, NULL);
