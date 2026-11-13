@@ -324,6 +324,15 @@ set_tests_properties(seg-operand seg-operand-native seg-threads seg-threads-nati
 v3test(lzcnt-dlopen stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> dl $<TARGET_FILE:lzlib>)
 v3test(lzcnt-static-exec stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:lzcnt_dyn> exec $<TARGET_FILE:lzcnt_static>)
 add_test(NAME client-stats COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/stats.sh" ${RUN} $<TARGET_FILE:avx2prog> $<TARGET_FILE:hello_dyn>)
+# The translation cache fails closed (docs/translation-cache.md): two builds of one library, swapped and patched.
+add_executable(pcache_main pcache_main.c)
+target_link_libraries(pcache_main PRIVATE ${CMAKE_DL_LIBS})
+add_library(pcache_lib SHARED pcache_lib.c)
+add_library(pcache_lib_b SHARED pcache_lib.c)
+target_compile_definitions(pcache_lib_b PRIVATE PCACHE_EXTRA=5)
+add_test(NAME pcache-fail-closed COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/pcache.sh" ${RUN} $<TARGET_FILE:pcache_main>
+  $<TARGET_FILE:pcache_lib> $<TARGET_FILE:pcache_lib_b> "${CMAKE_CURRENT_SOURCE_DIR}/pcache_tool.py")
+set_tests_properties(pcache-fail-closed PROPERTIES TIMEOUT 300)
 set_tests_properties(hello-dynamic hello-static exit-code sigterm maps-has-dynamorio
   exec-child-has-dynamorio native-bypass flags-preserved client-stats fault-state flags-kept misc-forms
   lzcnt-dlopen lzcnt-static-exec PROPERTIES TIMEOUT 120)
