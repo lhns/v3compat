@@ -1,13 +1,5 @@
-# Signal at thread start: falsification against main's pin, and the stress set on the fix.
-abss1 bash lab/sigstart.sh 100
-abss2 bash lab/sigstart.sh 100
-abss3 bash lab/sigstart.sh 100
-xl bash lab/stress.sh xl 100
-duck bash lab/stress.sh duck 240
-sig bash lab/stress.sh sig 390
-regc bash lab/stress.sh regc 102
-regd bash lab/stress.sh regd 102
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
-exit bash lab/stress.sh exit 300
+# vfork_exit under the client: main's pin against the thread-start fix.
+abex1 bash lab/exitab.sh 150
+abex2 bash lab/exitab.sh 150
+abex3 bash lab/exitab.sh 150
+abex4 bash lab/exitab.sh 150
