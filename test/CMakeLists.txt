@@ -216,6 +216,11 @@ v3test(regstress-xlsig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress
 add_executable(killed killed.c)
 v3test(killed stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:killed>)
 v3test(killed-native stdout-has PASS exit 0 -- $<TARGET_FILE:killed>)
+# A signal sent to a thread before DynamoRIO has initialized it goes to the program's handler.
+add_executable(thread_start_sig thread_start_sig.c)
+target_link_options(thread_start_sig PRIVATE -pthread)
+v3test(thread-start-sig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:thread_start_sig> 20)
+v3test(thread-start-sig-native stdout-has ok exit 0 -- $<TARGET_FILE:thread_start_sig> 20)
 # Flushes of a page with hot traces in it: the fork's trace and IBL deletion fixes.
 add_executable(trace_flush trace_flush.c)
 target_compile_options(trace_flush PRIVATE -O1)
