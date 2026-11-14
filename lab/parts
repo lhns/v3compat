@@ -1,7 +1,11 @@
-# regstress sig jit: main's old pin, main, the re-lookup fix, and the fix with counters.
+# regstress sig jit on EPYC 9V74 only: layouts with and without 64-byte function alignment.
 bis1 bash lab/bisect.sh 6
 bis2 bash lab/bisect.sh 6
 bis3 bash lab/bisect.sh 6
 bis4 bash lab/bisect.sh 6
 bis5 bash lab/bisect.sh 6
 bis6 bash lab/bisect.sh 6
+bis7 bash lab/bisect.sh 6
+bis8 bash lab/bisect.sh 6
+bis9 bash lab/bisect.sh 6
+bis10 bash lab/bisect.sh 6

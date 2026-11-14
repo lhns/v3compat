@@ -1,7 +1,7 @@
 #!/bin/bash
 # bisect.sh N: `regstress 8 10 sig jit` under the client at four fork commits, interleaved: wall time and status.
 set -u
-grep -m1 'model name' /proc/cpuinfo
+grep -m1 'model name' /proc/cpuinfo; grep -q 9V74 /proc/cpuinfo || { echo 'RESULT skip: not 9V74'; exit 0; }
 declare -A C=([base]=0bd5cd82939e36c213cb19c2ab2b051b1080ffb9 [main]=ebffb4a5e1f0486649bbae745a0542c448bf8ddb
               [align]=298795a411c8298416a0e735479d61a394321b74 [p16]=471ff6e18d6a7105db4e9bc4da88a72c0bd0985f
               [p16a]=e84c4313e6d22a96bd3b99bee98ee7acb3b7ec3e)
