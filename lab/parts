@@ -10,4 +10,4 @@ regd bash lab/stress.sh regd 102
 shorta bash lab/stress.sh short 1500
 shortb bash lab/stress.sh short 1500
 shortc bash lab/stress.sh short 1500
-exit bash lab/stress.sh exit 100
+exit bash lab/stress.sh exit 300
