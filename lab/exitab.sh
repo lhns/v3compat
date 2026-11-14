@@ -1,7 +1,7 @@
 #!/bin/bash
 # exitab.sh N: vfork_exit_dyn 20 under the client, main's pin (base) against the fix, interleaved.
 set -u
-grep -m1 'model name' /proc/cpuinfo
+grep -m1 'model name' /proc/cpuinfo; grep -q 7763 /proc/cpuinfo || { echo 'RESULT skip: not 7763'; exit 0; }
 declare -A CL=([base]=/tmp/base/build/inst/bin/v3compat-run [fix]=build/inst/bin/v3compat-run)
 declare -A B=([base]=/tmp/base/build/test/vfork_exit_dyn [fix]=build/test/vfork_exit_dyn)
 declare -A bad=([base]=0 [fix]=0)

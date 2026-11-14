@@ -1,5 +1,9 @@
-# vfork_exit under the client: main's pin against the thread-start fix.
-abex1 bash lab/exitab.sh 150
-abex2 bash lab/exitab.sh 150
-abex3 bash lab/exitab.sh 150
-abex4 bash lab/exitab.sh 150
+# vfork_exit under the client on EPYC 7763: main's pin against the thread-start fix.
+abex1 bash lab/exitab.sh 200
+abex2 bash lab/exitab.sh 200
+abex3 bash lab/exitab.sh 200
+abex4 bash lab/exitab.sh 200
+abex5 bash lab/exitab.sh 200
+abex6 bash lab/exitab.sh 200
+abex7 bash lab/exitab.sh 200
+abex8 bash lab/exitab.sh 200
