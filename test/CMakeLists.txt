@@ -19,6 +19,7 @@ add_executable(lean_call lean_call.c)
 add_executable(bmi_inline bmi_inline.c)
 add_executable(vec_inline vec_inline.c)
 add_executable(cross_inline cross_inline.c)
+add_executable(block_end block_end.c)
 add_executable(gather gather.c)
 target_compile_options(gather PRIVATE -O1 -w)
 target_link_options(gather PRIVATE -static)
@@ -304,6 +305,10 @@ v3test(cross-inline stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:cross_inli
 v3test(cross-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:cross_inline>)
 v3test(cross-native stdout-has PASS exit 0 -- $<TARGET_FILE:cross_inline>)
 set_tests_properties(vec-inline vec-helpers vec-native PROPERTIES TIMEOUT 300)
+# An emulated instruction that is the last of its block runs once.
+v3test(block-end stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:block_end>)
+v3test(block-end-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:block_end>)
+v3test(block-end-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end>)
 # The AVX2 gathers against a C model: faults mid-gather and restart, masked-off elements, every width, base register,
 # 0x67 and fs. Native needs AVX2 and checks the model.
 v3test(gather stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:gather>)
