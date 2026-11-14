@@ -1,11 +1,9 @@
-# regstress sig jit on EPYC 9V74 only: layouts with and without 64-byte function alignment.
-bis1 bash lab/bisect.sh 6
-bis2 bash lab/bisect.sh 6
-bis3 bash lab/bisect.sh 6
-bis4 bash lab/bisect.sh 6
-bis5 bash lab/bisect.sh 6
-bis6 bash lab/bisect.sh 6
-bis7 bash lab/bisect.sh 6
-bis8 bash lab/bisect.sh 6
-bis9 bash lab/bisect.sh 6
-bis10 bash lab/bisect.sh 6
+# perf: the old base against 16 bytes of padding, EPYC 9V74 only.
+pd1 bash lab/perfdiff.sh 2
+pd2 bash lab/perfdiff.sh 2
+pd3 bash lab/perfdiff.sh 2
+pd4 bash lab/perfdiff.sh 2
+pd5 bash lab/perfdiff.sh 2
+pd6 bash lab/perfdiff.sh 2
+pd7 bash lab/perfdiff.sh 2
+pd8 bash lab/perfdiff.sh 2
