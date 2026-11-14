@@ -2,9 +2,11 @@
 # /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
 ab bash bench/ab.sh 6
 duck bash lab/stress.sh duck 240
-sig bash lab/stress.sh sig 390
-regc bash lab/stress.sh regc 102
-regd bash lab/stress.sh regd 102
+siga bash lab/stress.sh sig 434
+sigb bash lab/stress.sh sig 433
+sigc bash lab/stress.sh sig 433
+regc bash lab/stress.sh regc 340
+regd bash lab/stress.sh regd 340
 shorta bash lab/stress.sh short 1500
 shortb bash lab/stress.sh short 1500
 shortc bash lab/stress.sh short 1500
