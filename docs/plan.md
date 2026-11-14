@@ -384,6 +384,15 @@ freed fragments found it (run 43397328455). It now looks the trace up again. `tr
 before, 0 of 120 after; Java under the client 14 of 16 and 0 of 16, javac 11 of 12 and 0 of 12. With both fixes against
 `0bd5cd8`, interleaved, defaults (run 43437004196): status 255 in 9 of 1,872 runs before and 0 of 1,872 after.
 
+**A signal at thread start, fixed in the fork** (branch `fix-sig-thread-start`,
+[lhns/dynamorio#15](https://github.com/lhns/dynamorio/pull/15)). A signal sent to a thread right after its clone reached
+DynamoRIO before the thread's signal state existed. DynamoRIO took the default action ("default action in native
+thread", status 40), even for a signal the program handles. A thread-creating clone, except a vfork, now starts the child
+with signals blocked until its signal state exists. `test/thread_start_sig.c` (a ctest), base `ebffb4a`, interleaved, six
+jobs (runs 43554472071, 43557257607) **[measured]**: 600 of 600 bad before, 0 of 600 after, under the client and on
+DynamoRIO alone. DynamoRIO's suite the same failures on base and fix (run 43557262702). `vfork_exit` under the client on
+EPYC 7763 fails with "multiple native handlers" on base too (10 of 800; fix 19 of 800, run 43565816523).
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
