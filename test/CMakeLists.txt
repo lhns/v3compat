@@ -212,8 +212,10 @@ target_compile_options(regstress PRIVATE -O1 -w -ftls-model=local-exec)
 target_link_options(regstress PRIVATE -static -pthread)
 v3test(regstress stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 sig jit)
 v3test(regstress-control exit 77 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 badsig)
-# SIGXCPU from another thread, a signal DynamoRIO may not always delay: it must not be delivered mid-fragment.
+# SIGSTKFLT from another thread, a signal DynamoRIO may not always delay: it must not be delivered mid-fragment.
 v3test(regstress-xlsig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 xlsig jit)
+# SIGXCPU the kernel raises (kio.h): DynamoRIO took it for undelayable and crashed when it arrived in its own code.
+v3test(regstress-kio stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 kio jit)
 # Those signals sent from outside to a process with no handler: it still dies of each.
 add_executable(killed killed.c)
 v3test(killed stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:killed>)
@@ -310,6 +312,8 @@ set_tests_properties(vec-inline vec-helpers vec-native PROPERTIES TIMEOUT 300)
 v3test(block-end stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:block_end>)
 v3test(block-end-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:block_end>)
 v3test(block-end-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end>)
+v3test(block-end-kio stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:block_end> kio 20)
+v3test(block-end-kio-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end> kio 5)
 # Random sequences in RWX memory against native, every block sandboxed (-sandbox_writable), inline and helpers only.
 # With DynamoRIO's defaults they differ on main too (plan, "Open items"), so that mode is not a test yet.
 foreach(m sandbox helpers)
