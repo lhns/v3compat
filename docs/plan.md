@@ -393,6 +393,19 @@ jobs (runs 43554472071, 43557257607) **[measured]**: 600 of 600 bad before, 0 of
 DynamoRIO alone. DynamoRIO's suite the same failures on base and fix (run 43557262702). `vfork_exit` under the client on
 EPYC 7763 fails with "multiple native handlers" on base too (10 of 800; fix 19 of 800, run 43565816523).
 
+**An emulated instruction that ended a block ran twice, fixed in the client** (branch `fix-emulated-block-end`).
+DynamoRIO takes a block's fall-through from the last application instruction the client leaves in it **[source]**
+(`client_process_bb`, "Client might have truncated"). The client removes what it emulates, so a block that ended on an
+emulated instruction without a branch continued at that instruction. Blocks end that way after 256 instructions and, in
+code DynamoRIO sandboxes (writable and executed: a JIT's), before the sixth store. C2's unrolled loop has
+`vpaddd %ymm0,%ymm1,%ymm0` before each store: the wrong `arrays` value of Java's benchmark. The client now ends such a
+block with an application jump to the next instruction. `test/block_end.c` (a ctest) fails on base and passes, inline and
+helpers only, 14 of 14 jobs each (run 43637914298). Bench's `arrays` kernel with a safepoint every millisecond, 168 runs
+each, base `d12001a` interleaved with the fix (run 43638957274) **[measured]**: with `-sandbox_writable` (every writable
+region sandboxed) 168 wrong values on base, 0 with the fix; with DynamoRIO's defaults 16 on base, and 0 with the fix in
+run 43637914298. On the lab branch at pin `509c12d` (run 43633075953, 140 each): 7 with defaults, 0 with
+`-ro2sandbox_threshold 0` (never sandboxed), 140 with `-sandbox_writable`.
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -476,9 +489,14 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
   [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
   still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
-- **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
-  with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
-  43305470603. Not explained yet.
+- **A store that overwrites its own block, followed by an emulated instruction,** skips that instruction in sandboxed
+  code: DynamoRIO's exit after such a store goes to the next application instruction left in the block **[source]**
+  (`insert_selfmod_sandbox`, `after_write`). Not seen, no test. An application-level marker in front of each expansion
+  would give DynamoRIO the right address.
+- **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
+  DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
+  fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
+  in the same runs. Not explained.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
