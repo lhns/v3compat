@@ -4,8 +4,8 @@
 // Each run is UNITS units of (add, emulated, emulated) in a straight line: 256 is 1 mod 3, so successive blocks end
 // on each of the three. The emulated forms accumulate, so one run twice shows in the result. Runs the same under
 // V3COMPAT_HELPERS_ONLY=1; natively it checks the model.
-// block_end kio SECONDS repeats the runs while the kernel raises SIGXCPU in this thread (kio.h): it is delivered at
-// once, also at the jump that ends a block on an emulated instruction.
+// block_end kio SECONDS repeats the runs while the kernel raises SIGXCPU in this thread (kio.h), so signals also land
+// near the jump that ends a block on an emulated instruction.
 #include "kio.h"
 #include <stdint.h>
 #include <stdio.h>

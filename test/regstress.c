@@ -2,9 +2,9 @@
  * known value and check them all constantly, while other threads make DR flush, deliver signals or sit blocked. A wrong
  * register prints which and exits 77; badsig makes the handler flip a flag, which must be caught. sig sends SIGUSR1;
  * xlsig sends SIGSTKFLT, a signal DynamoRIO may not always delay, which it delivered at once from wherever the thread
- * was, inside an expansion too, until the fork held a kill-sent signal to the fragment's end like SIGUSR1. Interrupted at an emulated instruction, every
- * GPR must hold its value. kio has the kernel raise SIGXCPU in each worker (kio.h), which DynamoRIO still delivers at
- * once. */
+ * was, inside an expansion too, until the fork held a kill-sent signal to the fragment's end like SIGUSR1. Interrupted
+ * at an emulated instruction, every GPR must hold its value. kio has the kernel raise SIGXCPU in each worker (kio.h),
+ * which DynamoRIO crashed on when it arrived in its own code. */
 #define _GNU_SOURCE
 #include "kio.h"
 #include <pthread.h>
