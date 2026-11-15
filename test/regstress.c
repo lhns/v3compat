@@ -1,10 +1,12 @@
 /* regstress THREADS SECONDS [jit] [sig] [xlsig] [idle] [badsig]: threads run hot shared code with every register at a
  * known value and check them all constantly, while other threads make DR flush, deliver signals or sit blocked. A wrong
  * register prints which and exits 77; badsig makes the handler flip a flag, which must be caught. sig sends SIGUSR1;
- * xlsig sends SIGXCPU, which DynamoRIO delivered at once from wherever the thread was, inside an expansion too, until
- * the fork held a kill-sent signal to the fragment's end like SIGUSR1. Interrupted at an emulated instruction, every
- * GPR must hold its value. */
+ * xlsig sends SIGSTKFLT, a signal DynamoRIO may not always delay, which it delivered at once from wherever the thread
+ * was, inside an expansion too, until the fork held a kill-sent signal to the fragment's end like SIGUSR1. Interrupted
+ * at an emulated instruction, every GPR must hold its value. kio has the kernel raise SIGXCPU in each worker (kio.h),
+ * which DynamoRIO crashed on when it arrived in its own code. */
 #define _GNU_SOURCE
+#include "kio.h"
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>
@@ -124,6 +126,7 @@ EXP("vpaddd %ymm6, %ymm7, %ymm14") CHK14(4)
 "8: vzeroupper\n pop %r15\n pop %r14\n pop %r13\n pop %r12\n pop %rbp\n pop %rbx\n ret\n");
 
 static uint64_t total;
+static int kio;
 static void *worker(void *arg) {
     uint64_t base = 0x1111000000000000ull * (uint64_t)((long)arg + 1);
     for (int i = 0; i < 15; i++) exp_[i] = base + 0x0101010101ull * (i + 1);
@@ -137,6 +140,7 @@ static void *worker(void *arg) {
         rexp[4 * 4 + l] = (uint64_t)(uint32_t)(a + c) | ((uint64_t)(uint32_t)(b + d) << 32);
     }
     isworker = 1;
+    if (kio && kio_add()) _exit(83);
     run_blocks();
     __atomic_add_fetch(&total, iters, __ATOMIC_RELAXED);
     return NULL;
@@ -217,17 +221,19 @@ static void onsig(int s, siginfo_t *si, void *u) {
 static void *idler(void *arg) { (void)arg; for (;;) pause(); return NULL; }
 int main(int c, char **v) {
     int n = atoi(v[1]), secs = atoi(v[2]), jit = 0, sg = 0, idle = 0, signo = SIGUSR1;
-    for (int i = 3; i < c; i++) { if (!strcmp(v[i], "jit")) jit = 1; if (!strcmp(v[i], "sig")) sg = 1; if (!strcmp(v[i], "xlsig")) { sg = 1; signo = SIGXCPU; } if (!strcmp(v[i], "idle")) idle = 1; if (!strcmp(v[i], "badsig")) { badsig = 1; sg = 1; } }
+    for (int i = 3; i < c; i++) { if (!strcmp(v[i], "jit")) jit = 1; if (!strcmp(v[i], "sig")) sg = 1; if (!strcmp(v[i], "xlsig")) { sg = 1; signo = SIGSTKFLT; } if (!strcmp(v[i], "idle")) idle = 1; if (!strcmp(v[i], "kio")) kio = 1; if (!strcmp(v[i], "badsig")) { badsig = 1; sg = 1; } }
     pthread_t t[64], j, d;
-    struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = onsig; sa.sa_flags = SA_SIGINFO | SA_RESTART; sigaction(SIGUSR1, &sa, 0); sigaction(SIGXCPU, &sa, 0);
+    struct sigaction sa; memset(&sa, 0, sizeof sa); sa.sa_sigaction = onsig; sa.sa_flags = SA_SIGINFO | SA_RESTART; sigaction(SIGUSR1, &sa, 0); sigaction(SIGXCPU, &sa, 0); sigaction(SIGSTKFLT, &sa, 0);
     for (long i = 0; i < n; i++) pthread_create(&t[i], 0, worker, (void *)i);
     if (jit) pthread_create(&j, 0, jitter, 0);
     if (idle) pthread_create(&d, 0, idler, 0);
+    if (kio && kio_start()) _exit(83);
     for (int ms = 0; ms < secs * 100; ms++) {
         if (!sg) { usleep(10000); continue; }
         for (int k = 0; k < 20; k++) { usleep(400); for (int i = 0; i < n; i++) pthread_kill(t[i], signo); }
     }
     stopf = 1;
+    kio_stop = 1;
     for (int i = 0; i < n; i++) pthread_join(t[i], 0);
     if (jit) pthread_join(j, 0);
     printf("ok sig=%lu inblocks=%lu atexp=%lu iters=%lu jits=%lu\n", (unsigned long)nsig, (unsigned long)nsigblk, (unsigned long)nsigexp, (unsigned long)total, (unsigned long)jits);
