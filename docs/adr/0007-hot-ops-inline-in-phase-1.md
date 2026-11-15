@@ -52,3 +52,8 @@ Frame helpers leave DynamoRIO's clean call. The fragment moves rsp to a per-thre
 only what the helper may clobber under the SysV ABI (rax, rcx, rdx, rsi, rdi, r8-r11, all 16 ymm, the flags) and clears DF.
 rsp is the only application state that differs in the fragment meanwhile, and the restore event puts it back; in the thunk,
 as in a clean callee, DynamoRIO defers signals. Mcontext helpers, `cpuid` and refusals keep the clean call.
+
+## Amendment, 2026-11-15
+Every expansion starts with an application `nop` translated to the emulated instruction's address: DynamoRIO resumes
+a sandboxed block after a store that changed it at the next application instruction left in it, which must be the
+emulated one.
