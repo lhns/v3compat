@@ -406,6 +406,18 @@ region sandboxed) 168 wrong values on base, 0 with the fix; with DynamoRIO's def
 run 43637914298. On the lab branch at pin `509c12d` (run 43633075953, 140 each): 7 with defaults, 0 with
 `-ro2sandbox_threshold 0` (never sandboxed), 140 with `-sandbox_writable`.
 
+**A store that changed its own block skipped the emulated instruction after it, fixed in the client** (branch `seq-rwx`).
+In a sandboxed block DynamoRIO checks after each store whether the block's code changed and, if so, leaves it for the
+next application instruction left in it **[source]** (`insert_selfmod_sandbox`, `after_write`). The client removes what
+it emulates, so that was the instruction after the emulated one. Each expansion now starts with an application `nop` at
+the emulated instruction's address. `test/seq_rwx.c` (ctest, sandboxed: inline and helpers only) runs random sequences
+of emulated and native instructions in RWX memory, across block ends and the sixth store, with stores into their own code
+right before an emulated instruction, against native. With `-sandbox_writable`, seed 1, 300 sequences a run **[measured]**:
+5 of 5 runs differ from native on base, 0 of 5 with the fix (run 43693416475, Xeon 6975P-C; also 5 of 5 and 0 of 5 in run
+43681301324). Stress set unchanged (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020
+alone, short 0 of 4,500) and speed unchanged (same run, EPYC 9V74: duckdb varied median 8.02 s against 8.01 s, Java 14.09
+against 14.26 s, Node 3.77 against 3.73 s, every `bench_bmi` form within 0.03 ns).
+
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -489,10 +501,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
   [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
   still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
-- **A store that overwrites its own block, followed by an emulated instruction,** skips that instruction in sandboxed
-  code: DynamoRIO's exit after such a store goes to the next application instruction left in the block **[source]**
-  (`insert_selfmod_sandbox`, `after_write`). Not seen, no test. An application-level marker in front of each expansion
-  would give DynamoRIO the right address.
+- **`seq_rwx` with DynamoRIO's defaults** (RWX code write-protected, not sandboxed) differs from native in every
+  sequence, on main and with the marker, inline and helpers only (5 of 5 runs each, run 43693416475); natively it is
+  stable. Not yet explained: not known whether DynamoRIO alone does the same.
 - **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
   DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
   fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
