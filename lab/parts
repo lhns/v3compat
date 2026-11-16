@@ -1,14 +1,17 @@
-# One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
-# /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-ab bash bench/ab.sh 6
-duck bash lab/stress.sh duck 240
-siga bash lab/stress.sh sig 434
-sigb bash lab/stress.sh sig 433
-sigc bash lab/stress.sh sig 433
-regc bash lab/stress.sh regc 340
-regd bash lab/stress.sh regd 340
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
-# The javac crash under any client (plan, Open items): uncomment on a lab branch.
-# javac bash lab/javac.sh 8
+# Translation cache evidence rerun at the merged pins (#16 with 19fea7e, main with #54/#55/#57).
+t1 bash lab/pcache.sh time 6
+t2 bash lab/pcache.sh time 6
+tl bash lab/pcache.sh twolayout
+ct bash lab/pcache.sh ctest
+sduck bash lab/pcache.sh stress duck 240
+ssiga bash lab/pcache.sh stress sig 130
+ssigb bash lab/pcache.sh stress sig 130
+ssigc bash lab/pcache.sh stress sig 130
+sregc bash lab/pcache.sh stress regc 102
+sshorta bash lab/pcache.sh stress short 1500
+sshortb bash lab/pcache.sh stress short 1500
+sshortc bash lab/pcache.sh stress short 1500
+sg1 bash lab/pcache.sh sigrace 40
+sg2 bash lab/pcache.sh sigrace 40
+sg3 bash lab/pcache.sh sigrace 40
+xl bash lab/pcache.sh xlsig 100
