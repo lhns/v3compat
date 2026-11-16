@@ -117,7 +117,7 @@ Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner a
 - **Stress set:** `test/regstress.c` runs threads in hot shared code with every register and the flags checked.
   `regc` under the client and `regd` on DynamoRIO alone (modes `jit`: code generated and unmapped, `sig`: async
   signals, `idle`), `sig` (8 threads, signals and code churn), `short` (many 1-second runs, for start and exit
-  races), `xlsig` (SIGXCPU sent with `kill` at emulated instructions), `duck` (duckdb's mixed query against native
+  races), `xlsig` (SIGSTKFLT sent with `kill` at emulated instructions), `duck` (duckdb's mixed query against native
   hashes). The torn exit lab (`segv`) is `regstress jit` on 9V45 only.
 - **DynamoRIO:** a *fragment* is translated code in the code cache: a *basic block* (bb), or a *trace* stitched from hot
   bbs. A *flush* removes fragments for a code range (a JIT writing code, an `munmap`); they are freed once every thread

@@ -4,8 +4,14 @@
 // Each run is UNITS units of (add, emulated, emulated) in a straight line: 256 is 1 mod 3, so successive blocks end
 // on each of the three. The emulated forms accumulate, so one run twice shows in the result. Runs the same under
 // V3COMPAT_HELPERS_ONLY=1; natively it checks the model.
+// block_end kio SECONDS repeats the runs while the kernel raises SIGXCPU in this thread (kio.h), so signals also land
+// near the jump that ends a block on an emulated instruction.
+#include "kio.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #define UNITS 1500
 #define STR_(x) #x
@@ -26,7 +32,10 @@ int run_vec(const uint32_t *in, uint32_t *out);
 int run_bmi(uint64_t x, uint64_t *out);
 double run_fma(double a, double b);
 
-int main(void) {
+static volatile unsigned long nsig;
+static void onsig(int s) { (void)s; nsig++; }
+
+static int check(void) {
     int bad = 0;
     uint32_t in[8], out[8];
     for (int i = 0; i < 8; i++) in[i] = 0x9E3779B1u * (uint32_t)(i + 1);
@@ -47,6 +56,27 @@ int main(void) {
     }
     double d = run_fma(1.5, 2.0);
     if (d != 3.0 * 2 * UNITS) { printf("FAIL fma: %.1f, expected %.1f\n", d, 3.0 * 2 * UNITS); bad = 1; }
-    if (!bad) printf("PASS\n");
     return bad;
+}
+
+int main(int argc, char **argv) {
+    if (argc < 3 || strcmp(argv[1], "kio")) {
+        int bad = check();
+        if (!bad) printf("PASS\n");
+        return bad;
+    }
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = onsig;
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGXCPU, &sa, NULL);
+    if (kio_add() || kio_start()) { perror("kio"); return 2; }
+    time_t end = time(NULL) + atoi(argv[2]);
+    unsigned long runs = 0;
+    while (time(NULL) < end) {
+        runs++;
+        if (check()) { printf("after %lu runs, %lu signals\n", runs, nsig); return 1; }
+    }
+    printf("PASS runs=%lu signals=%lu\n", runs, nsig);
+    return 0;
 }

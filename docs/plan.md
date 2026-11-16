@@ -393,6 +393,20 @@ jobs (runs 43554472071, 43557257607) **[measured]**: 600 of 600 bad before, 0 of
 DynamoRIO alone. DynamoRIO's suite the same failures on base and fix (run 43557262702). `vfork_exit` under the client on
 EPYC 7763 fails with "multiple native handlers" on base too (10 of 800; fix 19 of 800, run 43565816523).
 
+**SIGXCPU raised by the kernel, fixed in the fork** (branch `fix-sigxcpu-delay`,
+[lhns/dynamorio#17](https://github.com/lhns/dynamorio/pull/17)). DynamoRIO counted SIGXCPU among the signals it may not
+always delay, as if it could be an instruction's fault; the kernel raises it only asynchronously (`RLIMIT_CPU`, a
+descriptor's `F_SETSIG`). One raised by the kernel (si_code > 0, not `kill`) that arrived in DynamoRIO's own code aborted
+the process as a DynamoRIO crash ("Received SIGother", status 255), with or without a client; one in the cache was
+delivered at once. It is now always delayable. `test/kio.h` has the kernel raise SIGXCPU in a chosen thread through an
+`O_ASYNC` pipe with `F_SETSIG`, thousands of times a second; `regstress kio` and `block_end kio` (an emulated instruction
+at each block end) are ctests. Pin `75f24ff` against the fix, interleaved (run 43718354913, Xeon 6975P-C) **[measured]**:
+regstress kio under the client 20 of 20 bad before, 0 of 20 after; block_end kio 10 of 10 and 0 of 10; on DynamoRIO alone
+20 of 20 bad each before (run 43681301324), 0 of 40 each after; natively 0 of 40. Stress set unchanged (duckdb 0 of 240,
+signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone, short 0 of 4,500), `xl` 0 of 190 in each
+mode. `regstress xlsig` now sends SIGSTKFLT, which DynamoRIO still may not always delay, so it keeps testing the hold of a
+kill-sent signal.
+
 **An emulated instruction that ended a block ran twice, fixed in the client** (branch `fix-emulated-block-end`).
 DynamoRIO takes a block's fall-through from the last application instruction the client leaves in it **[source]**
 (`client_process_bb`, "Client might have truncated"). The client removes what it emulates, so a block that ended on an
@@ -495,8 +509,6 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   release 0-5 of 20); the torn-exit fix's layout makes release fail every time. v3compat does not use static attach.
 - **DynamoRIO's debug suite is unusable on 9V45:** debug builds print `<Unknown processor cache size>`, failing 460 of 520
   tests on base and fix alike.
-- **A kernel-raised asynchronous signal DynamoRIO may not always delay** (SIGXCPU at `RLIMIT_CPU`, say) is still delivered
-  at once from inside a fragment; only ones sent with `kill` or `tgkill` are held. Untested.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
