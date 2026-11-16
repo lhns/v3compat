@@ -73,7 +73,8 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 | DynamoRIO fork | [lhns/dynamorio](https://github.com/lhns/dynamorio) |
 | OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
-The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-cache.md), proposed).
+The translation cache is not built ([ADR 0006](adr/0006-read-only-translation-cache.md), proposed); its design and the
+owner's open decisions: [translation-cache.md](translation-cache.md).
 
 ## Testing
 
@@ -159,7 +160,7 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   AVX2. JIT-heavy startup pays DynamoRIO: javac builds 7.9M blocks; 36-52% of its time is the kernel serving
   `/proc/self/maps` reads (814k `read` calls, 148k `mprotect`, 22k signals) and most of the rest is libdynamorio.
   Most of those reads were DynamoRIO toggling its own generated code's protection, fixed in the fork (below, "Gencode
-  protection"): javac's reads fell to about 50k.
+  protection"): javac's reads fell to about 50k, and to about 200 with the new-module check fixed (below).
 - **Any client costs 15-45% over DynamoRIO alone** on JIT startup (Node 2.63 to 3.03 s with an empty client, 3.26 s with
   ours): DynamoRIO fully decodes every block for a client. Our own translation work is about 3% of samples.
   `-fast_client_decode` is internal and does not allow changing app code. The launcher's options make no difference.
@@ -174,6 +175,15 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   duckdb varied 8.32 to 6.67 s). #40 (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
   duckdb varied 10.63 to 10.09 s on EPYC 7763). #39 (lean helper call, ADR 0007 (4)): a frame helper 27.7 to 23.5 ns
   (Xeon 8370C), 20.8 to 17.5 (EPYC 9V74). None measured on Ivy Bridge.
+
+### Startup breakdown (2026-11-12)
+
+GitHub runners, lab `lab-pcache-startup`, medians of 10 interleaved reps **[measured]**; details and the profile in
+[translation-cache.md](translation-cache.md). duckdb `select 42` on EPYC 7763: native 0.03 s, DynamoRIO alone 0.69 s (0.50 s without traces), empty
+client 0.89 s (0.65 s), client 1.09 s (0.80 s). It builds 77k blocks and 3.4k traces, all in
+file-backed modules; a static hello is 0.02 s under the client, so startup is per-block work, about 14 µs a block.
+`node -e 0`: 61k blocks, 94% in modules. DynamoRIO's `-persist` without a client: duckdb 1.6-3.0 s using its cache against
+0.47 s without; with a client it writes nothing.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -330,7 +340,7 @@ found it (`lab-perf-trace-diag`, run 43242817702). The lists now go with `trace_
 javac crashes in libdynamorio under the client and 0 of 50 with an empty client, the Java benchmark 0 of 12, no flush
 left a trace's lists behind (run 43247919081); duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0 of 306
 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500 (run 43248017594). DynamoRIO's suite,
-base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test` on debug builds,
+base and fix on one runner: the same failures apart from known flakes and `client.memory_dump_test`,
 which fails from the build directory's name (below, "Known flakes"). Reproduce with `lab/javac.sh`.
 
 **Gencode protection without reading `/proc/self/maps`, fixed in the fork** (branch `gencode-prot-no-maps`, merged as `14836b0`,
@@ -343,6 +353,84 @@ on DynamoRIO alone) **[measured]**: `java -version` 2.37 to 1.50 s under the cli
 66.6 s and 57.6 to 43.8 s, Node 3.84 to 3.78 s, duckdb unchanged; javac's `read` calls 730-773k to 52-56k. The
 `mprotect` calls stay. Stress set unchanged (duckdb 0 of 240, signal 0 of 390, reg/flags 0 of 306 under the client and 0
 of 306 alone, short 0 of 4,500), ctest 272 of 272, DynamoRIO's suite the same failures on base and fix (run 43333761161).
+
+**The new-module check without reading `/proc/self/maps`, fixed in the fork** (branch `memquery-procmap`, merged as `0bd5cd8`,
+[lhns/dynamorio#13](https://github.com/lhns/dynamorio/pull/13)). After #9 nearly all remaining maps reads were
+`memquery_from_os()` for the i#1760 check on each new code area outside a module. Linux 6.11+ answers it with the
+`PROCMAP_QUERY` ioctl; free addresses, `[vsyscall]` and older kernels still walk the file. Both paths answered every
+query in one lab-only build: 0 mismatches in 245k (run 43400000808). Base `14836b0` against the fix and a stub without the
+check, interleaved, 20 reps (javac 6), all succeeded **[measured]**: `java -version` 1.37 to 1.18 s under the client on EPYC 9V45
+and 2.68 to 2.25 s on 7763, javac 51.5 to 49.8 s and 93.7 to 91.1 s, Node 3.24 to 2.80 s and 5.49 to 5.03 s, duckdb
+unchanged, at the stub's level; javac's `read` calls 50-54k to about 200. Stress set unchanged (duckdb 0 of 240, signal
+0 of 390, reg/flags 0 of 306 under the client and 0 of 306 alone, short 0 of 4,500), DynamoRIO's suite the same failures
+on base and fix once built in the same directory (runs 43400012869, 43408308171).
+
+**The IBL's deletion race, fixed in the fork** (branch `fix-ibl-tag`, [lhns/dynamorio#11](https://github.com/lhns/dynamorio/pull/11)).
+A thread retiring a shared IBL entry points its start pc at `target_delete` and then overwrites its tag with `FAKE_TAG`; a
+thread that had matched the tag but read the redirected pc reread the tag there, could get `FAKE_TAG`, and dispatch built
+a block at -1 and forged a SIGSEGV. The hit path now keeps the matched tag in a TLS slot for `target_delete`.
+`test/trace_flush.c` (now a ctest), base `14836b0` against the fix, interleaved (run 43396958829, EPYC 9V74 and 9V45)
+**[measured]**: DynamoRIO alone 86 of 120 bad before, 0 of 120 after; under the client 49 of 120, 0 of 120. Stress set
+unchanged (duckdb 0 of 240, signal 0 of 390, reg/flags 0 of 306 under the client and 0 of 306 alone, short 0 of 4,500),
+speed unchanged; DynamoRIO's suite the same failures on base and fix (run 43396992185). Measured before the rebase onto `0bd5cd8`.
+
+**A new trace freed under the thread that emitted it, fixed in the fork** (branch `fix-trace-emit-stale`,
+[lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)). `end_and_emit_trace()` returned its trace after removing
+the shared trace head, which can walk the pending-deletion list and sign this thread off a flush of the new trace; the trace
+could be freed, and dispatch entered it, since its was-I-flushed check only runs when the thread is behind. The thread then
+ran into the freed exit stubs (a DynamoRIO crash at a pc in its own heap, status 255, or a JVM abort). A lab-only ledger of
+freed fragments found it (run 43397328455). It now looks the trace up again. `trace_flush` with
+`-lazy_deletion_max_pending 1` on DynamoRIO alone, on top of the IBL fix (run 43404515993) **[measured]**: 120 of 120 bad
+before, 0 of 120 after; Java under the client 14 of 16 and 0 of 16, javac 11 of 12 and 0 of 12. With both fixes against
+`0bd5cd8`, interleaved, defaults (run 43437004196): status 255 in 9 of 1,872 runs before and 0 of 1,872 after.
+
+**A signal at thread start, fixed in the fork** (branch `fix-sig-thread-start`,
+[lhns/dynamorio#15](https://github.com/lhns/dynamorio/pull/15)). A signal sent to a thread right after its clone reached
+DynamoRIO before the thread's signal state existed. DynamoRIO took the default action ("default action in native
+thread", status 40), even for a signal the program handles. A thread-creating clone, except a vfork, now starts the child
+with signals blocked until its signal state exists. `test/thread_start_sig.c` (a ctest), base `ebffb4a`, interleaved, six
+jobs (runs 43554472071, 43557257607) **[measured]**: 600 of 600 bad before, 0 of 600 after, under the client and on
+DynamoRIO alone. DynamoRIO's suite the same failures on base and fix (run 43557262702). `vfork_exit` under the client on
+EPYC 7763 fails with "multiple native handlers" on base too (10 of 800; fix 19 of 800, run 43565816523).
+
+**SIGXCPU raised by the kernel, fixed in the fork** (branch `fix-sigxcpu-delay`,
+[lhns/dynamorio#17](https://github.com/lhns/dynamorio/pull/17)). DynamoRIO counted SIGXCPU among the signals it may not
+always delay, as if it could be an instruction's fault; the kernel raises it only asynchronously (`RLIMIT_CPU`, a
+descriptor's `F_SETSIG`). One raised by the kernel (si_code > 0, not `kill`) that arrived in DynamoRIO's own code aborted
+the process as a DynamoRIO crash ("Received SIGother", status 255), with or without a client; one in the cache was
+delivered at once. It is now always delayable. `test/kio.h` has the kernel raise SIGXCPU in a chosen thread through an
+`O_ASYNC` pipe with `F_SETSIG`, thousands of times a second; `regstress kio` and `block_end kio` (an emulated instruction
+at each block end) are ctests. Pin `75f24ff` against the fix, interleaved (run 43718354913, Xeon 6975P-C) **[measured]**:
+regstress kio under the client 20 of 20 bad before, 0 of 20 after; block_end kio 10 of 10 and 0 of 10; on DynamoRIO alone
+20 of 20 bad each before (run 43681301324), 0 of 40 each after; natively 0 of 40. Stress set unchanged (duckdb 0 of 240,
+signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone, short 0 of 4,500), `xl` 0 of 190 in each
+mode. `regstress xlsig` now sends SIGSTKFLT, which DynamoRIO still may not always delay, so it keeps testing the hold of a
+kill-sent signal.
+
+**An emulated instruction that ended a block ran twice, fixed in the client** (branch `fix-emulated-block-end`).
+DynamoRIO takes a block's fall-through from the last application instruction the client leaves in it **[source]**
+(`client_process_bb`, "Client might have truncated"). The client removes what it emulates, so a block that ended on an
+emulated instruction without a branch continued at that instruction. Blocks end that way after 256 instructions and, in
+code DynamoRIO sandboxes (writable and executed: a JIT's), before the sixth store. C2's unrolled loop has
+`vpaddd %ymm0,%ymm1,%ymm0` before each store: the wrong `arrays` value of Java's benchmark. The client now ends such a
+block with an application jump to the next instruction. `test/block_end.c` (a ctest) fails on base and passes, inline and
+helpers only, 14 of 14 jobs each (run 43637914298). Bench's `arrays` kernel with a safepoint every millisecond, 168 runs
+each, base `d12001a` interleaved with the fix (run 43638957274) **[measured]**: with `-sandbox_writable` (every writable
+region sandboxed) 168 wrong values on base, 0 with the fix; with DynamoRIO's defaults 16 on base, and 0 with the fix in
+run 43637914298. On the lab branch at pin `509c12d` (run 43633075953, 140 each): 7 with defaults, 0 with
+`-ro2sandbox_threshold 0` (never sandboxed), 140 with `-sandbox_writable`.
+
+**A store that changed its own block skipped the emulated instruction after it, fixed in the client** (branch `seq-rwx`).
+In a sandboxed block DynamoRIO checks after each store whether the block's code changed and, if so, leaves it for the
+next application instruction left in it **[source]** (`insert_selfmod_sandbox`, `after_write`). The client removes what
+it emulates, so that was the instruction after the emulated one. Each expansion now starts with an application `nop` at
+the emulated instruction's address. `test/seq_rwx.c` (ctest, sandboxed: inline and helpers only) runs random sequences
+of emulated and native instructions in RWX memory, across block ends and the sixth store, with stores into their own code
+right before an emulated instruction, against native. With `-sandbox_writable`, seed 1, 300 sequences a run **[measured]**:
+5 of 5 runs differ from native on base, 0 of 5 with the fix (run 43693416475, Xeon 6975P-C; also 5 of 5 and 0 of 5 in run
+43681301324). Stress set unchanged (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020
+alone, short 0 of 4,500) and speed unchanged (same run, EPYC 9V74: duckdb varied median 8.02 s against 8.01 s, Java 14.09
+against 14.26 s, Node 3.77 against 3.73 s, every `bench_bmi` form within 0.03 ns).
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
@@ -368,7 +456,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
 | **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
-| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache |
+| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Not started; needs the cache ([design](translation-cache.md)) |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
 ## Known flakes
@@ -381,7 +469,7 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
 - **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
   any commit. Use release there, or another runner, for the debug suite.
-- **`client.memory_dump_test` on debug builds** fails or passes by the build directory's name: the dump's section-name
+- **`client.memory_dump_test`** (debug and release) fails or passes by the build directory's name: the dump's section-name
   hash is keyed on a buffer the maps iterator reuses, so `[vvar]` can take an earlier region's name. Compare base and
   fix built in the same directory name.
 - **One `regstress sig jit` SIGSEGV** under the client in CI, never reproduced (0 of 1,000 on several runners). If it
@@ -416,24 +504,24 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   release 0-5 of 20); the torn-exit fix's layout makes release fail every time. v3compat does not use static attach.
 - **DynamoRIO's debug suite is unusable on 9V45:** debug builds print `<Unknown processor cache size>`, failing 460 of 520
   tests on base and fix alike.
-- **A kernel-raised asynchronous signal DynamoRIO may not always delay** (SIGXCPU at `RLIMIT_CPU`, say) is still delivered
-  at once from inside a fragment; only ones sent with `kill` or `tgkill` are held. Untested.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
   performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **javac under DynamoRIO alone, and so under the client,** fails in about 1 run in 5 at the current pin (50 runs each:
-  client 9, empty client 6, DynamoRIO alone 11), at PCs outside libdynamorio or with status 134; upstream too.
-  `test/trace_flush.c` on lab branch `lab-perf-trace-fix` (threads in hot code in one page, another writing a byte of
-  that page that never executes) dies with SIGSEGV in every run on DynamoRIO alone and never natively: likely the same
-  bug, and its reproducer. Next to fix in the fork.
-- **Java's benchmark prints a wrong checksum** under the client, with exit 0: on main 1 of 61 finished runs (EPYC 9V74),
-  with #40 1 of 63 (EPYC 7763); 5 and 3 runs crashed (134, 255). Lab `lab-perf-inline3`, runs 43295809373 and
-  43305470603. Not explained yet.
-- **Performance, ranked:** the rest of the `/proc/self/maps` reads, DynamoRIO's new-module check (i#1760) on each new code
-  area, and its gencode `mprotect` toggling (`-protect_mask 0`): on top of #9 each is worth 1-15% on JIT startup (lab
-  `lab-perf-lever-ab`, run 43334850670), owner's decision; FMA through hardware arithmetic with an exactness guard, if
+- **javac under DynamoRIO alone, and so under the client,** failed in about 1 run in 5 at `14836b0`. Two fork bugs: the
+  IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
+  [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
+  still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
+- **`seq_rwx` with DynamoRIO's defaults** (RWX code write-protected, not sandboxed) differs from native in every
+  sequence, on main and with the marker, inline and helpers only (5 of 5 runs each, run 43693416475); natively it is
+  stable. Not yet explained: not known whether DynamoRIO alone does the same.
+- **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
+  DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
+  fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
+  in the same runs. Not explained.
+- **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
+  but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
   helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers
   understate helper cost 2-4x against Ivy Bridge; an Ivy

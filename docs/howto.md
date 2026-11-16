@@ -49,8 +49,10 @@ What is there:
 | `lab/javac.sh RUNS` | The javac crash: javac under the client, an empty client (`lab/nullclient`) and DynamoRIO alone, with each crash's offset |
 
 The stress set every PR that touches translation or the fork reports, in the plan's terms: duckdb 0 of 240, signal
-stress 0 of 390, reg/flags stress 0 of 306 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of
-4,500. The default `lab/parts` is that set plus one `ab` job.
+stress 0 of 1,300, reg/flags stress 0 of 1,020 under the client and 0 of 1,020 on DynamoRIO alone, the short loop 0 of
+4,500. The default `lab/parts` is that set plus one `ab` job. Regstress runs are 3 seconds: on EPYC 9V74 the wall time
+of `regstress sig jit` depends on code layout, and a 10-second run can exceed the 60 s limit with any fork commit.
+Signal stress is split over three jobs to stay inside a job's time limit.
 
 Rules of thumb: the client always emulates, even on an AVX2 runner, so runners measure emulation cost (helpers are
 2-4x cheaper there than on Ivy Bridge). Use `V3COMPAT_HELPERS_ONLY=1` to compare inline against helpers,
@@ -109,7 +111,7 @@ Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner a
 - **Stress set:** `test/regstress.c` runs threads in hot shared code with every register and the flags checked.
   `regc` under the client and `regd` on DynamoRIO alone (modes `jit`: code generated and unmapped, `sig`: async
   signals, `idle`), `sig` (8 threads, signals and code churn), `short` (many 1-second runs, for start and exit
-  races), `xlsig` (SIGXCPU sent with `kill` at emulated instructions), `duck` (duckdb's mixed query against native
+  races), `xlsig` (SIGSTKFLT sent with `kill` at emulated instructions), `duck` (duckdb's mixed query against native
   hashes). The torn exit lab (`segv`) is `regstress jit` on 9V45 only.
 - **DynamoRIO:** a *fragment* is translated code in the code cache: a *basic block* (bb), or a *trace* stitched from hot
   bbs. A *flush* removes fragments for a code range (a JIT writing code, an `munmap`); they are freed once every thread

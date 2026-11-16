@@ -1367,6 +1367,9 @@ void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
     if (!lacked && opc != OP_cpuid) return;
     if (lacked && !instr_is_evex_encoded(dc, in) && substitute(in)) return;
     emit_t e = {dc, bb, in, instr_get_app_pc(in), {DR_REG_NULL}};
+    /* An application nop at e.pc in front of the expansion: DynamoRIO resumes a sandboxed block after a store that
+     * changed it at the next application instruction left in it, which without the nop is the one after e.pc. */
+    instrlist_preinsert(bb, in, INSTR_XL8(INSTR_CREATE_nop(dc), e.pc));
     instrlist_set_translation_target(bb, e.pc);
     const form_t *f;
     if (opc == OP_cpuid) {
@@ -1398,6 +1401,10 @@ void expand_instr(void *dc, instrlist_t *bb, instr_t *in, bool lacked) {
                              OPND_CREATE_INT32(opc));
     }
     instrlist_set_translation_target(bb, NULL);
+    /* DynamoRIO takes a block's fall-through from the last application instruction left in it: without this
+     * jump a block that ends here would continue at e.pc and run the instruction again. */
+    if (instr_get_next_app(in) == NULL)
+        instrlist_preinsert(bb, in, INSTR_XL8(INSTR_CREATE_jmp(dc, opnd_create_pc(decode_next_pc(dc, e.pc))), e.pc));
     instrlist_remove(bb, in);
     instr_destroy(dc, in);
 }

@@ -7,10 +7,10 @@ DRRUN="$(ls -d ~/.cache/v3compat/dr-*/)bin64/drrun"
 RS=build/test/regstress
 mkdir -p lab-out/core; sudo sysctl -q kernel.core_pattern="$PWD/lab-out/core/core.%p"; ulimit -c unlimited
 case "$1" in
-# The stress set (docs/plan.md, "No change elsewhere").
-sig) loop sig $2 60 $RUN $RS 8 10 sig jit ;;
-regc) for k in "jit" "sig" "idle jit"; do loop regc "$2" 60 $RUN $RS 8 10 $k; done ;;
-regd) for k in "jit" "sig" "sig jit"; do loop regd "$2" 60 $DRRUN -no_enable_reset -no_ignore_syscalls -- $RS 8 10 $k; done ;;
+# The stress set (docs/plan.md, "No change elsewhere"), in 3-second runs (docs/howto.md, why).
+sig) loop sig $2 60 $RUN $RS 8 3 sig jit ;;
+regc) for k in "jit" "sig" "idle jit"; do loop regc "$2" 60 $RUN $RS 8 3 $k; done ;;
+regd) for k in "jit" "sig" "sig jit"; do loop regd "$2" 60 $DRRUN -no_enable_reset -no_ignore_syscalls -- $RS 8 3 $k; done ;;
 short) loop short $2 60 $RUN $RS 8 1 sig jit ;;
 duck)
   img='duckdb/duckdb:2.0.0@sha256:453caf4f1c445ee8363acaa6cd383751396d2eae0d02f362ada64d87267a4221'

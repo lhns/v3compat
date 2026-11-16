@@ -19,6 +19,8 @@ add_executable(lean_call lean_call.c)
 add_executable(bmi_inline bmi_inline.c)
 add_executable(vec_inline vec_inline.c)
 add_executable(cross_inline cross_inline.c)
+add_executable(block_end block_end.c)
+add_executable(seq_rwx seq_rwx.c)
 add_executable(gather gather.c)
 target_compile_options(gather PRIVATE -O1 -w)
 target_link_options(gather PRIVATE -static)
@@ -213,12 +215,24 @@ target_compile_options(regstress PRIVATE -O1 -w -ftls-model=local-exec)
 target_link_options(regstress PRIVATE -static -pthread)
 v3test(regstress stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 sig jit)
 v3test(regstress-control exit 77 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 badsig)
-# SIGXCPU from another thread, a signal DynamoRIO may not always delay: it must not be delivered mid-fragment.
+# SIGSTKFLT from another thread, a signal DynamoRIO may not always delay: it must not be delivered mid-fragment.
 v3test(regstress-xlsig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 xlsig jit)
+# SIGXCPU the kernel raises (kio.h): DynamoRIO took it for undelayable and crashed when it arrived in its own code.
+v3test(regstress-kio stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:regstress> 8 10 kio jit)
 # Those signals sent from outside to a process with no handler: it still dies of each.
 add_executable(killed killed.c)
 v3test(killed stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:killed>)
 v3test(killed-native stdout-has PASS exit 0 -- $<TARGET_FILE:killed>)
+# A signal sent to a thread before DynamoRIO has initialized it goes to the program's handler.
+add_executable(thread_start_sig thread_start_sig.c)
+target_link_options(thread_start_sig PRIVATE -pthread)
+v3test(thread-start-sig stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:thread_start_sig> 20)
+v3test(thread-start-sig-native stdout-has ok exit 0 -- $<TARGET_FILE:thread_start_sig> 20)
+# Flushes of a page with hot traces in it: the fork's trace and IBL deletion fixes.
+add_executable(trace_flush trace_flush.c)
+target_compile_options(trace_flush PRIVATE -O1)
+target_link_options(trace_flush PRIVATE -pthread)
+v3test(trace-flush stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:trace_flush> 10)
 # Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
 add_executable(jitgrowth jitgrowth.c)
 target_link_options(jitgrowth PRIVATE -pthread)
@@ -297,6 +311,22 @@ v3test(cross-inline stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:cross_inli
 v3test(cross-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:cross_inline>)
 v3test(cross-native stdout-has PASS exit 0 -- $<TARGET_FILE:cross_inline>)
 set_tests_properties(vec-inline vec-helpers vec-native PROPERTIES TIMEOUT 300)
+# An emulated instruction that is the last of its block runs once.
+v3test(block-end stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:block_end>)
+v3test(block-end-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:block_end>)
+v3test(block-end-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end>)
+v3test(block-end-kio stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:block_end> kio 20)
+v3test(block-end-kio-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end> kio 5)
+# Random sequences in RWX memory against native, every block sandboxed (-sandbox_writable), inline and helpers only.
+# With DynamoRIO's defaults they differ on main too (plan, "Open items"), so that mode is not a test yet.
+foreach(m sandbox helpers)
+  set(_e "")
+  if(m STREQUAL helpers)
+    set(_e env V3COMPAT_HELPERS_ONLY=1)
+  endif()
+  add_test(NAME seq-rwx-${m} COMMAND ${_e} sh "${CMAKE_CURRENT_SOURCE_DIR}/seq_rwx.sh" ${RUN} $<TARGET_FILE:seq_rwx> 1 300 -sandbox_writable)
+  set_tests_properties(seq-rwx-${m} PROPERTIES TIMEOUT 300 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+endforeach()
 # The AVX2 gathers against a C model: faults mid-gather and restart, masked-off elements, every width, base register,
 # 0x67 and fs. Native needs AVX2 and checks the model.
 v3test(gather stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:gather>)

@@ -15,3 +15,8 @@ renaming. Stale or corrupt entries are rejected and translation falls back to fr
 ## Consequences
 Running containers cannot poison it. The first start of a new binary is slower until the writer has run. A separate
 writer has to be deployed, and invalidation is by content rather than time.
+
+## Amendment 2026-11-12
+Proposed in [translation-cache.md](../translation-cache.md), for the owner to decide: entries would be finished
+fine-grained blocks. "Key entries by file hash" would become an index plus a compare against the bytes in memory at
+install. DynamoRIO's `-persist` is not the base.
