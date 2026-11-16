@@ -317,14 +317,18 @@ v3test(block-end-helpers stdout-has PASS exit 0 -- env V3COMPAT_HELPERS_ONLY=1 $
 v3test(block-end-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end>)
 v3test(block-end-kio stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:block_end> kio 20)
 v3test(block-end-kio-native stdout-has PASS exit 0 -- $<TARGET_FILE:block_end> kio 5)
-# Random sequences in RWX memory against native, every block sandboxed (-sandbox_writable), inline and helpers only.
-# With DynamoRIO's defaults they differ on main too (plan, "Open items"), so that mode is not a test yet.
-foreach(m sandbox helpers)
+# Random sequences in RWX memory against native: with DynamoRIO's defaults (write-protected, then sandboxed once a
+# block writes its own page) and every block sandboxed (-sandbox_writable), inline and helpers only.
+foreach(m default sandbox helpers helpers-default)
   set(_e "")
-  if(m STREQUAL helpers)
+  set(_o "")
+  if(m MATCHES "^helpers")
     set(_e env V3COMPAT_HELPERS_ONLY=1)
   endif()
-  add_test(NAME seq-rwx-${m} COMMAND ${_e} sh "${CMAKE_CURRENT_SOURCE_DIR}/seq_rwx.sh" ${RUN} $<TARGET_FILE:seq_rwx> 1 300 -sandbox_writable)
+  if(m STREQUAL sandbox OR m STREQUAL helpers)
+    set(_o -sandbox_writable)
+  endif()
+  add_test(NAME seq-rwx-${m} COMMAND ${_e} sh "${CMAKE_CURRENT_SOURCE_DIR}/seq_rwx.sh" ${RUN} $<TARGET_FILE:seq_rwx> 1 300 ${_o})
   set_tests_properties(seq-rwx-${m} PROPERTIES TIMEOUT 300 WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 endforeach()
 # The AVX2 gathers against a C model: faults mid-gather and restart, masked-off elements, every width, base register,

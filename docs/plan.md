@@ -434,6 +434,24 @@ against 14.26 s, Node 3.77 against 3.73 s, every `bench_bmi` form within 0.03 ns
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
 
+**A write fault in a sandboxed fragment could not be translated, fixed in the fork** (branch `fix-selfmod-recreate`,
+[lhns/dynamorio#18](https://github.com/lhns/dynamorio/pull/18)). With the default write-protection for code, a write
+fault from inside a sandboxed fragment is translated by rebuilding the fragment from its saved copy. The rebuild resolved
+rip-relative operands against the copy's address, so a store that had been emitted mangled through `rax` (target out of
+reach) was rebuilt unmangled, the rebuilt list was shorter, and the walk overshot. Translation failed and the fallback in
+`translate_sigcontext` used an already-overwritten `mcontext.pc`: NULL, so a release build resumed at pc 0 and faulted
+there forever. This was the cause of the `seq_rwx` differences under DynamoRIO's defaults. The rebuild now decodes with
+`decode_from_copy()` at the app pc and clears `rip_rel_valid`, and the fallback uses the sigcontext's cache pc; a write
+fault whose context cannot be translated stops the process instead of resuming. Stock DynamoRIO 058821c has the same bug
+(debug run 43846235758); per the owner it is fixed in the fork only. `seq-rwx-default` and `seq-rwx-helpers-default`
+(ctests) run `seq_rwx` under DynamoRIO's defaults. Seed 1, 300 sequences, pin `f41973e` against main's pin
+**[measured]**: 5 of 5 runs differ on main, inline and helpers only, 0 of 5 with the fix, DynamoRIO alone 0 of 20 (run
+43895130650); interleaved, 10 of 10 against 0 of 10 inline, helpers only and seed 2, DynamoRIO alone 0 of 40 (run
+43925199612). Fork suite against its base: no regression (run 43913425865; `tool.drcachesim.threads` 13 against 11 of 400
+and `api.detach_signal` 1 against 2 of 400 are noise, run 43925013986). Stress set 0 bad (run 43925199612): duckdb
+0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 per mode, short 0 of 4,500, xl 0 of 190 per mode, javac 0 of 8 per
+setup.
+
 ### The hang (fork branch `fix-pending-signal-self-link`)
 
 Two threads signalled in one shared fragment looped forever. Not specific to Go. GitHub runners, **[measured]**:
@@ -513,9 +531,6 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
   [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
   still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
-- **`seq_rwx` with DynamoRIO's defaults** (RWX code write-protected, not sandboxed) differs from native in every
-  sequence, on main and with the marker, inline and helpers only (5 of 5 runs each, run 43693416475); natively it is
-  stable. Not yet explained: not known whether DynamoRIO alone does the same.
 - **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
   DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
   fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
