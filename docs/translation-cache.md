@@ -312,25 +312,25 @@ default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and la
   it, a regstress subset and duckdb's hashes in verify mode, with hit-rate floors and the two-layout check.
   `test/pcache_tool.py` reads, checks, diffs and damages files; `lab/pcache.sh` runs the labs.
 
-**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted, before the rebase onto 19fea7e and main's block-end
-jump (#54) and expansion marker (#55), which change emitted blocks, and are being re-measured; the final commit has CI
-and the two-layout check; ASLR on, default DR options, `-stable_reach` with
-the cache; every run `rc=0` and every duckdb and node digest equal to native) **[measured]**:
+**Results** (lab `lab-pcache-rerun`, run 43860795548, fork `0e69480` on `19fea7e` with main's block-end jump (#54),
+expansion marker (#55) and delayable SIGXCPU (#57); ASLR on, default DR options, `-stable_reach` with the cache; every run
+`rc=0` and every duckdb and node digest equal to native) **[measured]**:
 
 | Workload | Cold to warm, traces on | Less | With `-disable_traces` | Less |
 |---|---|---|---|---|
-| duckdb `select 42` | 0.73-0.91 to 0.45-0.54 s | 38-42% | 0.54-0.68 to 0.25-0.30 s | 53-56% |
-| duckdb compute | 1.03-1.29 to 0.72-0.90 s | 30-32% | 0.83-1.05 to 0.51-0.68 s | 36-39% |
-| `node -e 0` | 0.57-0.70 to 0.35-0.43 s | 35-40% | 0.42-0.53 to 0.20-0.25 s | 47-53% |
-| `java -version` | 1.42-1.99 to 1.01-1.62 s | 19-30% | 1.14-1.62 to 0.80-1.14 s | 28-34% |
-| Node `jit.js` | 3.70-4.75 to 3.30-4.12 s | 11-13% | 3.04-3.93 to 2.62-3.27 s | 14-19% |
+| duckdb `select 42` | 0.55 to 0.34 s; 1.11 to 0.63 s | 39%; 43% | 0.40 to 0.18 s; 0.82 to 0.34 s | 55%; 59% |
+| duckdb compute | 0.82 to 0.59 s; 1.60 to 1.10 s | 28%; 31% | 0.68 to 0.43 s; 1.33 to 0.81 s | 38%; 39% |
+| `node -e 0` | 0.41 to 0.25 s; 0.81 to 0.49 s | 39%; 40% | 0.32 to 0.15 s; 0.60 to 0.28 s | 52%; 54% |
+| `java -version` | 1.19 to 0.81 s; 2.28 to 1.76 s | 32%; 23% | 0.89 to 0.59 s; 1.81 to 1.27 s | 34%; 30% |
+| Node `jit.js` | 2.69 to 2.40 s; 5.18 to 4.33 s | 11%; 16% | 2.28 to 1.92 s; 4.39 to 3.54 s | 16%; 19% |
 
-Medians of 6 interleaved reps on each of four jobs: EPYC 9V74 (two), Xeon 8573C, Xeon 6975P. Phase 1's stop criterion,
-40% on `select 42` with traces on, is met on two of the four (38-42%); the prototype measured 38-43% with ASLR off.
+Medians of 6 interleaved reps on each of two jobs, EPYC 9V45 and EPYC 7763 (first and second figure). Phase 1's stop
+criterion, 40% on `select 42` with traces on, is met on the 7763 (43%) and missed on the 9V45 (39%). The earlier run
+(43414511341, before the rebase) measured 38-42% on four other runners.
 
-- **Hits** (warm, traces on): `select 42` 76,946 of 77,071 blocks, compute 83,957 of 84,098, `node -e 0` 56,755 of 61,366,
-  `java -version` 69,799 of 125,936 (the rest is the JVM's generated code), `jit.js` 124,944 of 150,993. No miss came
-  from a layout predicate. Cache files: duckdb 14-15 MB, node 10-22 MB, java 14 MB.
+- **Hits** (warm, traces on, EPYC 9V45): `select 42` 76,978 of 77,102 blocks, compute 83,843 of 84,043, `node -e 0`
+  56,753 of 61,343, `java -version` 69,804 of 105,843 (the rest is the JVM's generated code), `jit.js` 124,742 of 150,750.
+  No miss came from a layout predicate. Cache files: duckdb 14-15 MB, node 10-22 MB, java 14 MB.
 - **`-stable_reach` alone**, no cache, interleaved A/B over 8 reps on three jobs: duckdb over 300M rows +0.0 to +0.2%
   (paired medians), duckdb's varied workload +0.2% (9V74) and +0.5% and +1.9% (two 7763s); startup within 0.01 s. A
   disp32 absolute operand for targets below 2 GB would save the scratch register where it costs; not built.
@@ -341,30 +341,31 @@ Medians of 6 interleaved reps on each of four jobs: EPYC 9V74 (two), Xeon 8573C,
   module without being derived from the block) are the same before and after the rebase: 0-3 for duckdb, 505 for node
   and 758 for `jit.js`, all of them in its own module. 12-41 blocks per workload fail to rebuild from their entry at
   install (a miss); the cause is not found.
-- **Two layouts:** two training runs of each workload wrote identical entries (77,109 of 77,109 for `select 42`, 69,766
-  of 69,766 for Java).
+- **Two layouts:** two training runs of each workload wrote identical entries (77,190 of 77,190 for `select 42`, 84,068 of
+  84,068 for compute, 56,878 of 56,878 for `node -e 0`, 124,495 of 124,495 for `jit.js`, 69,811 of 69,811 for Java; Xeon
+  6973P-C).
 - **Verify mode, ASLR on:** 0 mismatches over every workload and both option sets; ctest plain, training and verify
-  273 of 274 each (`setuid` fails in all three in the lab, which lacks CI's `chmod o+x $HOME`); the stress set duckdb 0 of
-  240, signal 0 of 390, reg/flags 0 of 306, the short loop 1 of 4,500 (SIGSEGV, and 1 of the 150 no-cache runs on the same
-  Xeon 8370C: the known `regstress sig jit` flake).
+  284 of 285 each (`setuid` fails in all three in the lab, which lacks CI's `chmod o+x $HOME`); the stress set duckdb 0 of
+  240, reg/flags 0 of 306, the short loop 0 of 4,500; signal 0 of 260 on two Xeon 6975P-C jobs, while on the third job
+  (EPYC 9V74) every 10-second `regstress sig jit` run, with and without the cache (129 of 130 and 13 of 13), outran the
+  60 s limit: the layout-dependent slowness on 9V74 described in the how-to, not the cache.
 - **Signal tests under load.** The ctest signal tests (regstress, vfork-sig), `-j4` among themselves, 120 passes per
-  arm on four jobs (run 43465664481), failures without the cache / training / verify mode / warm:
-  `regstress-xlsig` 12 / 19 / 21 / 31; the regstress binary dying of SIGSEGV early (`regstress`, `regstress-control`)
-  3 / 1 / 2 / 9; the vfork-sig tests 13 / 1 / 4 / 10. Every class fails without the cache too, and no run had a verify
-  mismatch. Warm is clearly worse for `regstress-xlsig` and possibly for the SIGSEGV; training and verify are not
-  distinguishable from no cache at this count; the mechanism is not shown. `regstress-xlsig`'s message is DynamoRIO's
-  own: a signal sent to a thread in its first instructions kills `lab/xlrace.c` under DynamoRIO alone and the client
-  in 300 of 300 runs, natively 0 of 300 (run 43418236984). Run serially, as CI does, the cache arms were near clean:
-  the stress set above and `regstress-xlsig` 1 of 200 (0 of 100 without). CI's `cache-verify` job runs ctest serially
-  and reruns a test once when it fails with "default action in native thread". Whether DynamoRIO's signals at thread
-  start must be fixed before Phase 3 is the owner's decision.
+  arm on three jobs (run 43860795548, Xeon 6975P-C), without the cache / training / warm / verify mode: no failure in any
+  arm. Before the fork started threads with signals blocked (lhns/dynamorio#15), the same arms failed 12 / 19 / 31 / 21
+  times for `regstress-xlsig` (run 43465664481), the warm cache clearly worst; that was DynamoRIO's signal at thread
+  start, now fixed. `regstress xlsig` serially: 0 of 100 plain, warm and verify.
 
-**Phase 3 go/no-go:** go, in the owner's judgement of the gain, with the signal-at-thread-start races above fixed
-first or accepted. Entries are position-independent and
+**Phase 3 go/no-go:** go, in the owner's judgement of the gain; the signal-at-thread-start races that made a warm
+cache worse are fixed. Entries are position-independent and
 fail closed, verify mode is clean with ASLR on, and the startup gain matches Phase 1. Phase 3 still has to decide the
 writer, the launcher option and the read-only mount, key on the client's build rather than its path (a different
 install path never hits today), and take integrity from fs-verity or a signed manifest: the checksums here only guard
 against corruption, and a file truncated while mapped would still fault.
+
+**Decision for the owner before Phase 3:** where the cache lives in the cluster and how it is filled. For example, a
+read-only volume per image filled by a training job in CI or at image build, or a per-node directory filled by a
+designated writer pod; the choice decides who may write, how a file reaches a node, and how a new image's cache is
+made before it serves traffic.
 
 ## Phases
 

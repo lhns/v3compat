@@ -456,7 +456,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
 | **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
-| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.45-0.54 s on runners, 38-42% below cold ([design](translation-cache.md); measured before the rebase onto the current fork, being re-measured) |
+| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.34-0.63 s on runners, 39-43% below cold ([design](translation-cache.md)) |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 
 ## Known flakes
@@ -472,9 +472,6 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **`client.memory_dump_test`** (debug and release) fails or passes by the build directory's name: the dump's section-name
   hash is keyed on a buffer the maps iterator reuses, so `[vvar]` can take an earlier region's name. Compare base and
   fix built in the same directory name.
-- **"default action in native thread"** fails `regstress-xlsig` when a signal reaches a thread in its first
-  instructions, more often under `-j4` load and a warm cache. DynamoRIO's own bug (Open items); CI's `cache-verify`
-  job reruns such a test once.
 - **The regstress binary dying of SIGSEGV early** (`regstress`, `regstress-control`) reproduces under `-j4` load of the
   signal tests: 3 of 120 passes without the translation cache, 9 of 120 with it warm (run 43465664481). Before that:
   one `regstress sig jit` SIGSEGV under the client in CI, not reproduced serially (0 of 1,000 on several runners). If it
@@ -514,9 +511,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **A signal to a thread in its first instructions** kills the process under DynamoRIO, with or without the client:
   "Cannot correctly handle received signal ... default action in native thread", 300 of 300 runs, natively 0 of 300
-  (`lab/xlrace.c`, run 43418236984) **[measured]**. It is what fails `regstress-xlsig` when its first signal lands early.
-  Under `-j4` load a warm translation cache makes it more frequent (31 failures in 120 passes against 12 without;
-  [translation-cache.md](translation-cache.md), Phase 2). Not fixed. These counts predate main's delayable SIGXCPU and are being re-measured.
+  (`lab/xlrace.c`, run 43418236984) **[measured]**. Measured before lhns/dynamorio#15, which starts a thread with signals blocked; with it the `-j4`
+  signal tests fail in no arm, with or without the cache (run 43860795548). `lab/xlrace.c` not rerun since.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
   performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **javac under DynamoRIO alone, and so under the client,** failed in about 1 run in 5 at `14836b0`. Two fork bugs: the
