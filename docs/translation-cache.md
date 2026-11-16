@@ -161,7 +161,7 @@ the size cap. No entry is ever removed from a running process except through DR'
   these exact bytes (validation step 2). A refused form is cached as its refusal call, which behaves the same. The audit has been
   done earlier, by the writer. It has not been skipped.
 - **ADR 0001 asks for a differential test, and verify mode is that test:** `V3COMPAT_CACHE_VERIFY=1`. Every hit is
-  also translated fresh and compared byte for byte after relocation; any difference exits 86 and names the block. CI
+  also translated fresh and compared byte for byte after relocation; any difference exits 88 and names the block. CI
   runs the app tests and the stress set with a primed cache in verify mode. The prototype includes it from the start.
 - **Exec and threads.** Children reach the cache through the same launcher options. Installs go through DR's existing
   shared-fragment locks.
@@ -266,7 +266,7 @@ that reads it; this class of attack was demonstrated against Rosetta's cache (AD
 
 ## Phase 2: what was built
 
-Fork branch `pcache-phase2` (`core/pcache.c`), v3compat branch `pcache-phase2`. Entries hit with ASLR on and DR's
+The fork commit pinned in `cmake/FetchDynamoRIO.cmake` (`core/pcache.c`). Entries hit with ASLR on and DR's
 default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and labs only.
 
 - **Nothing absolute is stored.** An entry is found by the module's build-id and the block's offset in it. Every address
@@ -278,7 +278,8 @@ default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and la
 - **`-stable_reach`.** With the default `-vm_max_offset`, DR puts vmcode at a random offset of up to 256 MB, and whether
   an address in a non-PIE executable (duckdb, node) is in rip-relative reach changed from run to run: half of all
   layouts missed almost every block **[measured]**. With `-stable_reach`, which the launcher passes with the cache, DR
-  keeps a rip-relative reference only if it reaches from every placement the offset allows; otherwise it uses the
+  keeps a rip-relative reference only if it reaches from every placement the offset allows (when vmcode is placed at
+  -vm_base; elsewhere the predicates catch a change); otherwise it uses the
   absolute form, which is always valid. The encoding is then a function of the options. Rejected: pinning
   `-vm_max_offset 0` (gives up the code cache's random placement), moving `-vm_base` (only moves the edge), two
   encodings per entry (twice the size), re-mangling at install (redoes the work). Every other reach decision in the
@@ -290,6 +291,13 @@ default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and la
   rip-relative or branch target, inside the module. Any other immediate that points into mapped memory, or a derived
   address outside the module, makes the block uncacheable. Two training runs at different layouts must write
   identical entries; CI checks it.
+- **Departure: `V3COMPAT_DR_OPTS` no longer turns the cache off.** The options are part of the key, so another option
+  set is another key and a miss.
+- **Departure: the build identity is the build-id, or a header hash, of DR and of every private module,** not hashes of
+  three libraries. Without a build-id for DR or a private module the cache stays off; app modules may use the header
+  hash because every hit compares the block's bytes.
+- **Departure: install replays through `emit_fragment_ex`,** so DR pads the exit at the real address; the body is not
+  placed at a recorded alignment.
 - **File format:** version, header and whole-file checksums (XXH64, checked at open), the full key stored and compared
   byte for byte (DR and private-module build-ids, the client's TLS slots, the options, CPUID and XCR0), a sorted index,
   a checksum per entry checked at lookup, every record bounds-checked, a size cap (`-pcache_max_size`). Anything
@@ -299,12 +307,14 @@ default options; the launcher's `V3COMPAT_CACHE*` variables are for tests and la
   corrupt entry, length, index, record kind, value class and predicate (with the outer checksums fixed up again, so
   the inner check is what rejects them), another build of a library, a library patched in place with its build-id
   kept, a library unloaded and another loaded where it was, and a library at another base both ways round. Each gives
-  the native output and no hits; the same setup undamaged hits. CI's `cache-verify` job trains over ctest and runs
+  the native output and is rejected by the check meant for it; the file-level and entry-level cases have no hits. The
+  same setup undamaged hits. CI's `cache-verify` job trains over ctest and runs
   it, a regstress subset and duckdb's hashes in verify mode, with hit-rate floors and the two-layout check.
   `test/pcache_tool.py` reads, checks, diffs and damages files; `lab/pcache.sh` runs the labs.
 
-**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted, on fork a438f5b before its rebase onto the
-memquery change; the final commit has CI and the two-layout check; ASLR on, default DR options, `-stable_reach` with
+**Results** (lab `lab-pcache-phase2`, run 43414511341 unless noted, before the rebase onto 19fea7e and main's block-end
+jump (#54) and expansion marker (#55), which change emitted blocks, and are being re-measured; the final commit has CI
+and the two-layout check; ASLR on, default DR options, `-stable_reach` with
 the cache; every run `rc=0` and every duckdb and node digest equal to native) **[measured]**:
 
 | Workload | Cold to warm, traces on | Less | With `-disable_traces` | Less |

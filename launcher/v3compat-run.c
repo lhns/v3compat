@@ -190,7 +190,8 @@ __attribute__((used)) void run(long *sp) {
         if (s && *s) {
             const char *w = envget(envp, "V3COMPAT_CACHE_WRITE="), *v = envget(envp, "V3COMPAT_CACHE_VERIFY="),
                        *st = envget(envp, "V3COMPAT_CACHE_STATS=");
-            if (slen(s) >= 1024) die(125, "V3COMPAT_CACHE is too long", "", "");
+            if (slen(s) > 400) die(125, "V3COMPAT_CACHE is too long", "", "");
+            if (has_char(s, "\"")) die(125, "V3COMPAT_CACHE may not contain a quote", "", "");
             p = scpy(p, "-pcache_dir \""); p = scpy(p, s); p = scpy(p, "\" -pcache_mode ");
             p = scpy(p, w && w[0] == '1' && !w[1] ? "2 " : "1 ");
             /* the same rip-relative choices in every run, whatever vmcode's random offset */

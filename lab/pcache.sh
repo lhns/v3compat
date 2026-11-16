@@ -4,8 +4,11 @@
 #   twolayout   two training runs per workload (two ASLR layouts): entries for the same block must be identical
 #   stress K N  the stress set kind K (duck, sig, regc, short) with N runs in verify mode, and N/10 without a cache
 #   srab N      -stable_reach alone against default, no cache, long duckdb runs
-#   diag        layouts and predicate misses of reads; xlsig N: regstress xlsig plain, warm and verify
-#   ctest       ctest plain, then training, then verify mode (status 86 on a mismatch fails a test)
+#   diag        layouts and predicate misses of reads
+#   sigrace N   the signal tests alone under ctest -j4, N passes: plain, training, warm, verify
+#   ctestrace N whole ctest -j4 runs, the same four arms, counting failures at thread start
+#   xlsig N     regstress xlsig plain, warm and verify, in blocks of 10
+#   ctest       ctest plain, then training, then verify mode (status 88 on a mismatch fails a test)
 set -u
 . lab/loop.sh
 grep -m1 'model name' /proc/cpuinfo; nproc
@@ -122,18 +125,22 @@ ctestrace)
     echo "RESULT ctestrace $a pass $i failed [$f] native-thread-lines $k"
   done; done ;;
 xlsig)
-  # ctest's regstress-xlsig (SIGXCPU at emulated instructions), arms interleaved in blocks of 10
+  # ctest's regstress-xlsig (SIGSTKFLT at emulated instructions), arms interleaved in blocks of 10
   rm -rf /tmp/pcx; mkdir -p /tmp/pcx
-  V3COMPAT_CACHE=/tmp/pcx V3COMPAT_CACHE_WRITE=1 $R -- build/test/regstress 8 10 xlsig jit > /dev/null
+  V3COMPAT_CACHE=/tmp/pcx V3COMPAT_CACHE_WRITE=1 $R -- build/test/regstress 8 3 xlsig jit > /dev/null
   for b in $(seq $(($2 / 10))); do
-    bash -c ". lab/loop.sh; loop xl-plain 10 60 $R -- build/test/regstress 8 10 xlsig jit" | grep RESULT
-    V3COMPAT_CACHE=/tmp/pcx bash -c ". lab/loop.sh; loop xl-warm 10 60 $R -- build/test/regstress 8 10 xlsig jit" | grep RESULT
-    V3COMPAT_CACHE=/tmp/pcx V3COMPAT_CACHE_VERIFY=1 bash -c ". lab/loop.sh; loop xl-verify 10 60 $R -- build/test/regstress 8 10 xlsig jit" | grep RESULT
+    bash -c ". lab/loop.sh; loop xl-plain 10 60 $R -- build/test/regstress 8 3 xlsig jit" | grep RESULT
+    V3COMPAT_CACHE=/tmp/pcx bash -c ". lab/loop.sh; loop xl-warm 10 60 $R -- build/test/regstress 8 3 xlsig jit" | grep RESULT
+    V3COMPAT_CACHE=/tmp/pcx V3COMPAT_CACHE_VERIFY=1 bash -c ". lab/loop.sh; loop xl-verify 10 60 $R -- build/test/regstress 8 3 xlsig jit" | grep RESULT
   done ;;
 stress)
-  # Trained once per kind, then N runs reading it in verify mode (exit 86 on a mismatch), N/10 with no cache.
+  # Trained once per kind, then N runs reading it in verify mode (exit 88 on a mismatch), N/10 with no cache.
   K=$2 N=$3 RS=build/test/regstress
   rm -rf /tmp/pcs; mkdir -p /tmp/pcs
+  case $K in
+  duck|sig|regc|short) ;;
+  *) echo "stress: unknown kind '$K' (duck, sig, regc, short)"; exit 2 ;;
+  esac
   case $K in
   duck)
     V3COMPAT_CACHE=/tmp/pcs V3COMPAT_CACHE_WRITE=1 $R -- ./duckdb -csv -noheader -f test/apps/duckdb-varied.sql > /dev/null

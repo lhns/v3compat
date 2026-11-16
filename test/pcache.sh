@@ -1,7 +1,8 @@
 #!/bin/sh
 # pcache.sh RUN MAIN LIB LIB_B TOOL: the translation cache fails closed (docs/translation-cache.md, Phase 2).
-# Every damaged, stale or foreign cache gives the native output, exit 0 and no hits, each rejected by the check
-# meant for it; the same setup undamaged hits, also at another load base. LIB_B is another build of LIB.
+# Every damaged, stale or foreign cache gives the native output and exit 0, rejected by the check meant for it; the
+# file-level and entry-level cases have no hits. The same setup undamaged hits, also at another load base.
+# LIB_B is another build of LIB.
 RUN=$1; MAIN=$2; LIB=$3; LIB_B=$4; TOOL=$5
 unset V3COMPAT_CACHE V3COMPAT_CACHE_WRITE V3COMPAT_CACHE_VERIFY V3COMPAT_CACHE_STATS V3COMPAT_DR_OPTS
 d=$(mktemp -d); trap 'rm -rf "$d"' EXIT

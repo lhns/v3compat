@@ -1,6 +1,6 @@
 #!/bin/bash
 # pcache_ci.sh BUILD DUCKDB: the translation cache in CI (docs/translation-cache.md, Phase 2), ASLR on. Every
-# hit is also translated fresh and compared (exit 86 on a difference) over ctest, a stress subset and duckdb's
+# hit is also translated fresh and compared (exit 88 on a difference) over ctest, a stress subset and duckdb's
 # hashes; warm runs must hit, and two training runs at different layouts must write the same entries.
 set -u
 B=$1; DUCK=$2; R=$B/inst/bin/v3compat-run; T="python3 test/pcache_tool.py"
@@ -62,7 +62,7 @@ mkdir -p $C/rs
 for k in "jit" "sig" "idle jit"; do V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_WRITE=1 $R -- $RS 8 3 $k > /dev/null; done
 for k in "jit" "sig" "idle jit" "sig jit"; do
   n=0; for i in 1 2 3 4 5 6 7 8 9 10; do
-    V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_VERIFY=1 timeout 300 $R -- $RS 8 3 $k > $C/out 2>&1 || { n=$((n + 1)); echo "  rc=$?"; tail -3 $C/out; }
+    V3COMPAT_CACHE=$C/rs V3COMPAT_CACHE_VERIFY=1 timeout 300 $R -- $RS 8 3 $k > $C/out 2>&1 || { rc=$?; n=$((n + 1)); echo "  rc=$rc"; tail -3 $C/out; }
   done
   echo "regstress $k: $n of 10 bad"; [ $n = 0 ] || fail "regstress $k"
 done

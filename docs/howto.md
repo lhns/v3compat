@@ -17,7 +17,7 @@ V3COMPAT_CI=1 ctest --test-dir build --output-on-failure
   cases) are fetched by CMake at the commit pinned in `CMakeLists.txt` (`AVXEMU_COMMIT`).
 - The translation cache is test and lab only: `V3COMPAT_CACHE=DIR` reads `DIR/<program>.pcache`, with
   `V3COMPAT_CACHE_WRITE=1` a training run writes it, `V3COMPAT_CACHE_VERIFY=1` translates every hit fresh as well and
-  exits 86 on a difference (`2` only reports), `V3COMPAT_CACHE_STATS=1` prints hit counts (`2` also the key).
+  exits 88 on a difference (`2` only reports), `V3COMPAT_CACHE_STATS=1` prints hit counts (`2` also the key).
   Never time a verify run.
 - `V3COMPAT_HELPERS_ONLY=1` sends every emulated form to its helper, except `movbe` stores, which are always inline.
 - `allowlist-check` fails after a DynamoRIO or XED bump until `test/allow/regen.sh` is rerun ([ADR 0008](adr/0008-audited-list-keyed-on-shape.md)).
