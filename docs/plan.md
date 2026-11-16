@@ -448,7 +448,9 @@ fault whose context cannot be translated stops the process instead of resuming. 
 **[measured]**: 5 of 5 runs differ on main, inline and helpers only, 0 of 5 with the fix, DynamoRIO alone 0 of 20 (run
 43895130650); interleaved, 10 of 10 against 0 of 10 inline, helpers only and seed 2, DynamoRIO alone 0 of 40 (run
 43925199612). Fork suite against its base: no regression (run 43913425865; `tool.drcachesim.threads` 13 against 11 of 400
-and `api.detach_signal` 1 against 2 of 400 are noise, run 43925013986). Stress set 0 bad (run 43925199612): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 per mode, short 0 of 4,500, xl 0 of 190 per mode, javac 0 of 8 per setup.
+and `api.detach_signal` 1 against 2 of 400 are noise, run 43925013986). Stress set 0 bad (run 43925199612): duckdb
+0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 per mode, short 0 of 4,500, xl 0 of 190 per mode, javac 0 of 8 per
+setup.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
 
