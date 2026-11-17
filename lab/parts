@@ -12,3 +12,5 @@ shortb bash lab/stress.sh short 1500
 shortc bash lab/stress.sh short 1500
 # The javac crash under any client (plan, Open items): uncomment on a lab branch.
 # javac bash lab/javac.sh 8
+# vfork_exit and a lost SIGCHLD, base (origin/main) against this branch, EPYC 7763 only: over-launch, most runners skip.
+# ab-vfx bash lab/vfxab.sh 500
