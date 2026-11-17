@@ -490,6 +490,13 @@ and stalled in its own exit synch. The permission is now cleared before such a d
   stuck children and SIGSEGVs. Before, on base alone (run 44049241668): native 0 of 110.
 - `sigchld-exit-fork` is now a ctest.
 
+**Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
+- A signal to a thread in its first instructions (`lab/xlrace.c`) killed the process 300 of 300 under DynamoRIO, with or
+  without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
+  lhns/dynamorio#15, which starts a thread with signals blocked.
+- javac crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295, `lab/javacdiag.sh`):
+  now 0 of 200 each under the client, an empty client and DynamoRIO alone.
+
 ### The hang (fork branch `fix-pending-signal-self-link`)
 
 Two threads signalled in one shared fragment looped forever. Not specific to Go. GitHub runners, **[measured]**:
@@ -543,7 +550,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   7763 and 9V45, base and fix alike: 21 of 45 runs past 120 s on three 7763s **[measured]**. With no exit event DynamoRIO
   marks itself exited before it synchs, so new threads spin in thread init on `thread_initexit_lock` against the exit's
   synch and about 1,000 exiting threads **[measured]**. With `-synch_at_exit` 0 of 45 past 6.7 s on the same runners.
-  v3compat always has a client, which synchs first.
+  v3compat always has a client, which synchs first. Still there with lhns/dynamorio#20 (pin `af12842`, run 44109231119):
+  17 of 75 past 130 s, the rest 2.1-2.9 s, on Xeon 6975P-C and EPYC 9V74 (none on 7763 or 9V45) **[measured]**.
 - **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
   300 children a run **[measured]**. At random points from their creation on, 10 runs each: under the client 10 of 10 bad
   on base (8 hangs, 2 crashes) and 10 of 10 on the first fix commit (9, 1); on DynamoRIO alone 10 of 10 hang on both. At
@@ -567,16 +575,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
-- **A signal to a thread in its first instructions** kills the process under DynamoRIO, with or without the client:
-  "Cannot correctly handle received signal ... default action in native thread", 300 of 300 runs, natively 0 of 300
-  (`lab/xlrace.c`, run 43418236984) **[measured]**. Measured before lhns/dynamorio#15, which starts a thread with signals blocked; with it the `-j4`
-  signal tests fail in no arm, with or without the cache (run 43860795548). `lab/xlrace.c` not rerun since.
-- **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone, then the ranked
-  performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **javac under DynamoRIO alone, and so under the client,** failed in about 1 run in 5 at `14836b0`. Two fork bugs: the
-  IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
-  [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
-  still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
+- **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
+  crashes, above; Java's status 134 aborts, below, remain), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
   DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
   fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
