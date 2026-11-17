@@ -1,7 +1,7 @@
 # 0006: A read-only translation cache with a separate writer
 
 ## Status
-Proposed: depends on Phase 3.
+Accepted, with the amendments below.
 
 ## Context
 Translating at every start repeats work, and starting fast is a goal. A writable cache shared between containers is
@@ -20,3 +20,9 @@ writer has to be deployed, and invalidation is by content rather than time.
 Proposed in [translation-cache.md](../translation-cache.md), for the owner to decide: entries would be finished
 fine-grained blocks. "Key entries by file hash" would become an index plus a compare against the bytes in memory at
 install. DynamoRIO's `-persist` is not the base.
+
+## Amendment 2026-11-17
+The cache lives on each node of a CPU class, in a root-owned directory, one file per image digest. A training Job
+pinned to that class writes it; containers mount it read-only. A Job writes to a staging path and a separate step
+renames the file into the tree, so one image's run cannot write another image's entries. Integrity starts with a
+hash manifest; fs-verity can replace it where the node's filesystem supports it.
