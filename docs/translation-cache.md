@@ -1,7 +1,7 @@
 # Translation cache across runs: design
 
 **Status:** Phases 1 and 2 are built on fork branches, lab and test only ([Phase 2](#phase-2-what-was-built)). Nothing is
-deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md), which stays Proposed until Phase 3. Tags as in
+deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md). Tags as in
 the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
 
 ## Summary
@@ -362,10 +362,15 @@ writer, the launcher option and the read-only mount, key on the client's build r
 install path never hits today), and take integrity from fs-verity or a signed manifest: the checksums here only guard
 against corruption, and a file truncated while mapped would still fault.
 
-**Decision for the owner before Phase 3:** where the cache lives in the cluster and how it is filled. For example, a
-read-only volume per image filled by a training job in CI or at image build, or a per-node directory filled by a
-designated writer pod; the choice decides who may write, how a file reaches a node, and how a new image's cache is
-made before it serves traffic.
+**Decided for Phase 3** (ADR 0006, amendment 2026-11-17): a per-node directory, one file per image digest, filled
+by a training Job on the target CPU class.
+- The key contains CPUID and XCR0, so only a node of the class can write entries that hit there. Per-image layers
+  built in CI, or a shared network volume, gain nothing.
+- A training run executes inside the image it trains and is only as trusted as that image. Sharing one file between
+  images would let one image's run write code another image executes. The Job writes a staging file; a separate step
+  renames it into the read-only tree.
+- A miss translates fresh, so a new image serves traffic at once; its Job can run when the digest changes.
+- Integrity: a hash manifest first, fs-verity where the filesystem supports it.
 
 ## Phases
 
@@ -390,11 +395,6 @@ Each phase ends at a go/no-go for the owner.
 
 ## Decisions for the owner
 
-1. Whether to fund Phase 1 when the expected gain is about 2x on startup, or 4x with traces off, not the 10x Phase 3 needs. Or whether to revise
-   Phase 3's gate first, after the Ivy Bridge ladder (Phase 0, which needs access to that host).
-2. Whether to accept a new subsystem of about 2k lines in the fork's core, carried through every rebase.
-3. Whether the cache is per node class, built on the target CPU (recommended), or per image, which needs Ivy
-   Bridge-class builders in CI.
-4. Integrity: fs-verity on the nodes or a signed manifest.
-5. Whether a training run at build time is an acceptable first writer, given that coverage is whatever the training
-   workload executes.
+Decided. Phases 1 and 2 were funded and merged with the fork's cache subsystem (v3compat #56). Placement, writer and
+integrity are in ADR 0006's amendment of 2026-11-17. Still open: the Ivy Bridge ladder (Phase 0), which says whether
+the cache gets near Phase 3's startup gate there.
