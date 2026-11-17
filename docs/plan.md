@@ -521,6 +521,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 
 - **`client.attach_test`** in DynamoRIO's own suite fails intermittently on base and fix alike: rerun it (the suite
   workflow reruns one-sided failures 20 times).
+- **`tool.drcachesim.coherence` and `api.detach_signal`** (release) flake on any commit: 11 and 4 of 240 on `521016e`,
+  7 and 3 of 240 on the safe-spot fix, interleaved on four runners (run 44100838667). 20 reruns can show 2 against 0.
 - **`api.static_prepop`** fails in its second attach on AVX-512 runners (static re-attach loses AVX-512 state, "Open
   items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
 - **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
