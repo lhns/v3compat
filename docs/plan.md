@@ -509,7 +509,7 @@ unsandboxed. Evidence **[measured]**:
 - `test/flushed_fault.c` (ctest `flushed-fault`) faults in a loop on a code page another thread writes. 5-second runs,
   Xeon 6975P-C (run 44142431509): DynamoRIO alone 60 of 60 bad on base, 0 of 60 with the fix; under the client 28 of
   60 and 0 of 60; natively 0 of 4.
-- Stress set: running (run 44143673801).
+- Stress set 0 bad (run 44143673801): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone, short 0 of 4,500; speed unchanged (Java median 14.0 s on both, duckdb varied 6.75 against 6.76 s).
 - Fork suite against its base: the same failures on both after reruns (run 44142730409).
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
