@@ -490,6 +490,32 @@ and stalled in its own exit synch. The permission is now cleared before such a d
   stuck children and SIGSEGVs. Before, on base alone (run 44049241668): native 0 of 110.
 - `sigchld-exit-fork` is now a ctest.
 
+**A fault in a flushed block, translated against a sandboxed rebuild, fixed in the fork** (branch
+`fix-xl8-flushed-unsandboxed`, [lhns/dynamorio#21](https://github.com/lhns/dynamorio/pull/21)). A fragment pending
+deletion has no stored translation, so a fault in it is translated by rebuilding the block from app code through
+`check_thread_vm_area()` **[source]**. A write to its page flushes it, and after `-ro2sandbox_threshold` writes the page is
+sandboxed. A block built before that was rebuilt with the selfmod checks it was emitted without **[source]**. The walk
+missed and the fault's pc became 0. HotSpot's safepoint poll faulting there gave the JVM's status 134 aborts (`get_poll_stub`, "pc
+must refer to an nmethod"). A rebuild of a block built without sandboxing, and of every block of a trace, now stays
+unsandboxed. Evidence **[measured]**:
+- The client's view of each SIGSEGV, lab only (run 44137849808): in 11 of 11 aborts (8 with defaults, 3 with
+  `-disable_traces`) the last poll fault was in a block (not a trace) with `app_code_consistent` false, at the block's
+  2nd instruction (no sandbox prologue), translated to pc 0.
+- Bench's `arrays` kernel, a safepoint every millisecond, 400 runs an arm, interleaved, 20 runners (run 44141984403):
+  8 aborts on base `af12842`, 0 with the fix, 0 with the fix and `-disable_traces`. On base alone (run 44132089263):
+  9 of 400 with defaults, 8 of 400 with `-disable_traces`, 0 of 400 with `-ro2sandbox_threshold 0` or
+  `-sandbox_writable`. The earlier "0 with `-disable_traces`" (140 runs) does not hold on `af12842`.
+- A lab-only print on the fix (run 44142666373): a rebuild kept unsandboxed in 4 of 180 runs, about the base abort
+  rate; no translation failed.
+- `test/flushed_fault.c` (ctest `flushed-fault`) faults in a loop on a code page another thread writes. 5-second runs,
+  Xeon 6975P-C (run 44142431509): DynamoRIO alone 60 of 60 bad on base, 0 of 60 with the fix; under the client 28 of
+  60 and 0 of 60; natively 0 of 4.
+- Stress set 0 bad (run 44143673801): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of
+  1,020 alone, short 0 of 4,500; speed unchanged (Java median 14.0 s on both, duckdb varied 6.75 against 6.76 s).
+- Fork suite against its base, release and debug (run 44142730409): the same failures on both after reruns. One-side
+  failures, 20 reruns each, base against fix: `client.detach_test` 0 and 1, and 20 and 20 on another runner;
+  `linux.signal_pre_syscall` 5 and 6; `tool.drcachesim.instr-only-trace` 4 and 4; `client.attach_test` 3 and 2.
+
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`lab/xlrace.c`) killed the process 300 of 300 under DynamoRIO, with or
   without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
@@ -576,11 +602,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
-  crashes, above; Java's status 134 aborts, below, remain), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
-  DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
-  fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
-  in the same runs. Not explained.
+  crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
+- **A crash under `-sandbox_writable`:** Bench's `arrays` kernel with frequent safepoints crashed 1 of 400 runs with
+  status 255 ("v3compat internal crash", a SIGSEGV DynamoRIO attributes to the client, Xeon 6975P-C, run 44132089263). Not investigated.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
