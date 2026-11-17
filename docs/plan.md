@@ -600,7 +600,7 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
   crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **A crash under `-sandbox_writable`:** Bench's `arrays` kernel with frequent safepoints crashed 1 of 400 runs with
-  status 255 ("v3compat internal crash", SIGSEGV in the cache, Xeon 6975P-C, run 44132089263). Not investigated.
+  status 255 ("v3compat internal crash", a SIGSEGV DynamoRIO attributes to the client, Xeon 6975P-C, run 44132089263). Not investigated.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
