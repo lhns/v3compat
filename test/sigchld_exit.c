@@ -1,7 +1,6 @@
 /* sigchld_exit N [vfork]: threads exit all the time while N children exit one at a time; a SIGCHLD handler reaps
  * each, and the next child starts only once the previous one is reaped, so a lost SIGCHLD shows as a timeout.
- * Lab only. "PASS" as the last line. Fork children fail under the client on base and fix alike (docs/plan.md,
- * Open items). */
+ * "PASS" as the last line. */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <signal.h>
