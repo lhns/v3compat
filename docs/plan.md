@@ -283,7 +283,8 @@ That fix had two races, both fixed (fork branch `fix-vfork-exit-race`). The exit
 then waited without bound for its suspend signal; a thread still inside the clone syscall reads as `running`, so it was
 not abandoned, then slept in vfork with the signal pending: a hang. Now the wait also abandons it once it is in vfork.
 An abandoned thread let go by its child came back with no record and its DR TLS still the clone copy, so its child's
-SIGCHLD aborted the process ("multiple native handlers", status 40); it now exits on any signal. Both need load:
+SIGCHLD aborted the process ("multiple native handlers", status 40); it now exits on any signal (most aborts left were
+the exiting thread's, fixed below with #19). Both need load:
 `test/vfork_exit_load.sh` (CI, 60 s) runs each way of ending, 8 copies at once; it failed 19 of 20 runs before, 0 of 20
 after. Same runner, `vfork_exit 20` per run, 1,920 runs a way of ending under the client on EPYC 7763, 9V45 and 9V74
 **[measured]**: before, the hang in 28, 29, 2 and 31 runs (another thread exits, SIGTERM, the main thread waiting,
@@ -391,7 +392,8 @@ thread", status 40), even for a signal the program handles. A thread-creating cl
 with signals blocked until its signal state exists. `test/thread_start_sig.c` (a ctest), base `ebffb4a`, interleaved, six
 jobs (runs 43554472071, 43557257607) **[measured]**: 600 of 600 bad before, 0 of 600 after, under the client and on
 DynamoRIO alone. DynamoRIO's suite the same failures on base and fix (run 43557262702). `vfork_exit` under the client on
-EPYC 7763 fails with "multiple native handlers" on base too (10 of 800; fix 19 of 800, run 43565816523).
+EPYC 7763 failed with "multiple native handlers" on base too (10 of 800; fix 19 of 800, run 43565816523): a signal in a
+thread's own exit, fixed below.
 
 **SIGXCPU raised by the kernel, fixed in the fork** (branch `fix-sigxcpu-delay`,
 [lhns/dynamorio#17](https://github.com/lhns/dynamorio/pull/17)). DynamoRIO counted SIGXCPU among the signals it may not
@@ -433,6 +435,46 @@ alone, short 0 of 4,500) and speed unchanged (same run, EPYC 9V74: duckdb varied
 against 14.26 s, Node 3.77 against 3.73 s, every `bench_bmi` form within 0.03 ns).
 
 CI runs the query 30 times under the client: against a 10% bad rate that catches it with 96%, against 2%, 45%.
+
+**A write fault in a sandboxed fragment could not be translated, fixed in the fork** (branch `fix-selfmod-recreate`,
+[lhns/dynamorio#18](https://github.com/lhns/dynamorio/pull/18)). With the default write-protection for code, a write
+fault from inside a sandboxed fragment is translated by rebuilding the fragment from its saved copy. The rebuild resolved
+rip-relative operands against the copy's address, so a store that had been emitted mangled through `rax` (target out of
+reach) was rebuilt unmangled, the rebuilt list was shorter, and the walk overshot. Translation failed and the fallback in
+`translate_sigcontext` used an already-overwritten `mcontext.pc`: NULL, so a release build resumed at pc 0 and faulted
+there forever. This was the cause of the `seq_rwx` differences under DynamoRIO's defaults. The rebuild now decodes with
+`decode_from_copy()` at the app pc and clears `rip_rel_valid`, and the fallback uses the sigcontext's cache pc; a write
+fault whose context cannot be translated stops the process instead of resuming. Stock DynamoRIO 058821c has the same bug
+(debug run 43846235758); per the owner it is fixed in the fork only. `seq-rwx-default` and `seq-rwx-helpers-default`
+(ctests) run `seq_rwx` under DynamoRIO's defaults. Seed 1, 300 sequences, pin `f41973e` against main's pin
+**[measured]**: 5 of 5 runs differ on main, inline and helpers only, 0 of 5 with the fix, DynamoRIO alone 0 of 20 (run
+43895130650); interleaved, 10 of 10 against 0 of 10 inline, helpers only and seed 2, DynamoRIO alone 0 of 40 (run
+43925199612). Fork suite against its base: no regression (run 43913425865; `tool.drcachesim.threads` 13 against 11 of 400
+and `api.detach_signal` 1 against 2 of 400 are noise, run 43925013986). Stress set 0 bad (run 43925199612): duckdb
+0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 per mode, short 0 of 4,500, xl 0 of 190 per mode, javac 0 of 8 per
+setup.
+
+**A signal in a thread's own exit, fixed in the fork** (branch `fix-exit-sigmask`,
+[lhns/dynamorio#19](https://github.com/lhns/dynamorio/pull/19)). A thread ending with `exit` or `exit_group` blocks
+signals for its exit (i#2921), but `dynamo_thread_exit_common()` restored the app's mask when the thread went native,
+before its dcontext and TLS were gone **[source]**. A signal in that window took `execute_native_handler()`; once a vfork
+child had run, which sets `multiple_handlers_present`, the process aborted with "multiple native handlers" (status 40 for
+the process, so `vfork_exit` returns 1). In `vfork_exit`'s race mode the child's SIGCHLD lands there as the group's main
+thread ends. This is stock DynamoRIO code; before the vfork-exit fix that exit hung instead. A thread in
+`cleanup_and_terminate()` now keeps its mask; detach and going native still restore the app's. Evidence **[measured]**:
+- A lab-only dump at the abort (run 43948017298, EPYC 7763): 215 of 215 the main thread in its own `exit_group`, the
+  interrupted mask empty, no DR TLS, SIGCHLD from the vfork child.
+- A lab-only 20 ms sleep at four points of the exit (run 43954599586, 320 runs an arm, race mode): after the thread's
+  record is removed 164 of 320 runs bad on base, 0 of 320 with the fix; elsewhere at most 3 of 320 on base, 0 with the fix.
+- `vfork_exit_dyn 20` under the client, interleaved, EPYC 7763 (run 43956311210): 82 of 3,000 bad on base `19fea7e`,
+  0 of 3,000 with the fix.
+- Race mode on DynamoRIO alone, about 890 runs an arm (run 43955001267): before the race fix (`0f97a362`) 5 bad, 4 of them
+  this abort; base 5, all this abort; fix 0. Stock `058821c` and `b2a31c51` (before the vfork-exit fix) hang every run.
+- With #16 merged, the cache lab's four arms (no cache, training, warm, verify) 0 of 2,800 each on EPYC 7763 (run
+  43956493569); before, no cache 2.4-3.9% and training about 3.7 times that.
+- Fork suite against its base: the same failures on both after reruns (run 43954664151).
+
+It is lab-only (`lab/vfxab.sh`): on the Xeons most runners have, base fails about 0.05% of runs.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
 
@@ -479,6 +521,11 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 
 ## Open items
 
+- **`lab/sigchld_exit` with fork children** fails under the client on base and fix alike (run 43956311210, EPYC 7763):
+  77 and 81 failing runs of about 110 each, mostly "no SIGCHLD in 5 s (not reapable)", 9 core dumps **[measured]**.
+  "Not reapable" means the child was still running or already reaped, so it is not shown to be a lost SIGCHLD. Vfork
+  children 0 bad on both. Native and DynamoRIO alone not measured yet.
+
 - **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
   AMD (1.67x with no client) and needs more forms inline.
 - **DynamoRIO alone, threads churning at exit** (no client, 1,000 threads) stalls the exit for a minute or more on EPYC
@@ -519,9 +566,6 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   IBL deletion race above, and a freshly emitted trace freed under the thread that emitted it (fork
   [lhns/dynamorio#12](https://github.com/lhns/dynamorio/pull/12)); both are pinned. With only the IBL fix, javac and Java
   still crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295).
-- **`seq_rwx` with DynamoRIO's defaults** (RWX code write-protected, not sandboxed) differs from native in every
-  sequence, on main and with the marker, inline and helpers only (5 of 5 runs each, run 43693416475); natively it is
-  stable. Not yet explained: not known whether DynamoRIO alone does the same.
 - **The JVM's status 134 aborts** (`get_poll_stub`, "pc must refer to an nmethod") under frequent safepoints: with
   DynamoRIO's defaults 4 of 140 (run 43633075953), 8 of 168 on base (run 43638957274) and 2 of 168 with the block-end
   fix (run 43637914298); 0 with `-ro2sandbox_threshold 0` (140), `-disable_traces` (140) and `-sandbox_writable` (476)
