@@ -494,8 +494,8 @@ and stalled in its own exit synch. The permission is now cleared before such a d
 `fix-xl8-flushed-unsandboxed`, [lhns/dynamorio#21](https://github.com/lhns/dynamorio/pull/21)). A fragment pending
 deletion has no stored translation, so a fault in it is translated by rebuilding the block from app code through
 `check_thread_vm_area()` **[source]**. A write to its page flushes it, and after `-ro2sandbox_threshold` writes the page is
-sandboxed. A block built before that was rebuilt with the selfmod checks it was emitted without. The walk missed and
-the fault's pc became 0. HotSpot's safepoint poll faulting there gave the JVM's status 134 aborts (`get_poll_stub`, "pc
+sandboxed. A block built before that was rebuilt with the selfmod checks it was emitted without **[source]**. The walk
+missed and the fault's pc became 0. HotSpot's safepoint poll faulting there gave the JVM's status 134 aborts (`get_poll_stub`, "pc
 must refer to an nmethod"). A rebuild of a block built without sandboxing, and of every block of a trace, now stays
 unsandboxed. Evidence **[measured]**:
 - The client's view of each SIGSEGV, lab only (run 44137849808): in 11 of 11 aborts (8 with defaults, 3 with
