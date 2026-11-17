@@ -476,6 +476,20 @@ thread ends. This is stock DynamoRIO code; before the vfork-exit fix that exit h
 
 It is lab-only (`lab/vfxab.sh`): on the Xeons most runners have, base fails about 0.05% of runs.
 
+**A signal delivered at a safe spot, fixed in the fork** (branch `fix-safe-spot-signal`). A thread waiting in
+`check_wait_at_safe_spot()` has `synch_perm` set; an async signal there is delivered at once (`record_pending_signal()`,
+i#2659) and the thread never returns to the wait that resets it **[source]**. It ran on with a stale permission, and a
+later fork's synch-all took it as at a safe spot wherever it was, e.g. exiting or mid-clone with its count raised. The
+synch waited on that count until its loop limit (about 50 s), reported success, and the fork child inherited the count
+and stalled in its own exit synch. The permission is now cleared before such a delivery, under the thread's
+`synch_lock`; if the lock is busy or a synch has set the thread's context, the signal waits. Evidence **[measured]**:
+- A lab-only event log per thread (fork branch `diag-fork-counters`): perm 6 set on entering the wait, SIGCHLD
+  delivered, `dynamo_thread_exit_common`, no reset; the synch's held thread had `is_exiting=1`, `perm=6`.
+- `sigchld_exit 300 fork`, 8 runners, interleaved (run 44090766308): DynamoRIO alone 106 of 114 bad on base `521016e`,
+  0 of 114 with the fix; under the client 99 of 114 and 1 of 114 (one late reap). Base failures were late reaps, hangs,
+  stuck children and SIGSEGVs. Before, on base alone (run 44049241668): native 0 of 110.
+- `sigchld-exit-fork` is now a ctest.
+
 ### The hang (fork branch `fix-pending-signal-self-link`)
 
 Two threads signalled in one shared fragment looped forever. Not specific to Go. GitHub runners, **[measured]**:
@@ -507,6 +521,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 
 - **`client.attach_test`** in DynamoRIO's own suite fails intermittently on base and fix alike: rerun it (the suite
   workflow reruns one-sided failures 20 times).
+- **`tool.drcachesim.coherence` and `api.detach_signal`** (release) flake on any commit: 11 and 4 of 240 on `521016e`,
+  7 and 3 of 240 on the safe-spot fix, interleaved on four runners (run 44100838667). 20 reruns can show 2 against 0.
 - **`api.static_prepop`** fails in its second attach on AVX-512 runners (static re-attach loses AVX-512 state, "Open
   items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
 - **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
@@ -520,11 +536,6 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   recurs, keep the CPU model and the run, and rerun `lab/stress.sh sig` on that runner type.
 
 ## Open items
-
-- **`lab/sigchld_exit` with fork children** fails under the client on base and fix alike (run 43956311210, EPYC 7763):
-  77 and 81 failing runs of about 110 each, mostly "no SIGCHLD in 5 s (not reapable)", 9 core dumps **[measured]**.
-  "Not reapable" means the child was still running or already reaped, so it is not shown to be a lost SIGCHLD. Vfork
-  children 0 bad on both. Native and DynamoRIO alone not measured yet.
 
 - **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
   AMD (1.67x with no client) and needs more forms inline.

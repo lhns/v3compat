@@ -280,6 +280,16 @@ if(MUSL_GCC)
   endforeach()
 endif()
 
+# Children exit while threads churn: a signal delivered at a safe spot left a stale synch permission, and a fork's synch
+# then stalled on an exiting thread and the child inherited its count (docs/plan.md).
+add_executable(sigchld_exit sigchld_exit.c)
+target_link_libraries(sigchld_exit PRIVATE pthread)
+foreach(m fork vfork)
+  v3test(sigchld-exit-${m} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:sigchld_exit> 300 ${m})
+  set_tests_properties(sigchld-exit-${m} PROPERTIES TIMEOUT 120)
+endforeach()
+v3test(sigchld-exit-native stdout-has PASS exit 0 -- $<TARGET_FILE:sigchld_exit> 300)
+
 add_executable(swapper swapper.c)
 add_test(NAME exec-identity COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/exec_identity.sh" ${INST}/bin/v3compat-run ${B})
 add_test(NAME launcher-failures COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/launcher.sh" ${INST} $<TARGET_FILE:hello_dyn> ${B})
