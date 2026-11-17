@@ -498,12 +498,13 @@ sandboxed. A block built before that was rebuilt with the selfmod checks it was 
 the fault's pc became 0. HotSpot's safepoint poll faulting there gave the JVM's status 134 aborts (`get_poll_stub`, "pc
 must refer to an nmethod"). A rebuild of a block built without sandboxing, and of every block of a trace, now stays
 unsandboxed. Evidence **[measured]**:
-- The client's view of each SIGSEGV, lab only (run 44137849808): in 6 of 6 aborts the last poll fault was in a block
-  (not a trace) with `app_code_consistent` false, at the block's 2nd instruction, translated to pc 0.
+- The client's view of each SIGSEGV, lab only (run 44137849808): in 11 of 11 aborts (8 with defaults, 3 with
+  `-disable_traces`) the last poll fault was in a block (not a trace) with `app_code_consistent` false, at the block's
+  2nd instruction (no sandbox prologue), translated to pc 0.
 - Bench's `arrays` kernel, a safepoint every millisecond, 400 runs an arm, interleaved, 20 runners (run 44141984403):
   8 aborts on base `af12842`, 0 with the fix, 0 with the fix and `-disable_traces`. On base alone (run 44132089263):
   9 of 400 with defaults, 8 of 400 with `-disable_traces`, 0 of 400 with `-ro2sandbox_threshold 0` or
-  `-sandbox_writable`. The earlier "0 with `-disable_traces`" (140 runs) was too few runs.
+  `-sandbox_writable`. The earlier "0 with `-disable_traces`" (140 runs) does not hold on `af12842`.
 - A lab-only print on the fix (run 44142666373): a rebuild kept unsandboxed in 4 of 180 runs, about the base abort
   rate; no translation failed.
 - `test/flushed_fault.c` (ctest `flushed-fault`) faults in a loop on a code page another thread writes. 5-second runs,
@@ -511,7 +512,9 @@ unsandboxed. Evidence **[measured]**:
   60 and 0 of 60; natively 0 of 4.
 - Stress set 0 bad (run 44143673801): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of
   1,020 alone, short 0 of 4,500; speed unchanged (Java median 14.0 s on both, duckdb varied 6.75 against 6.76 s).
-- Fork suite against its base: the same failures on both after reruns (run 44142730409).
+- Fork suite against its base, release and debug (run 44142730409): the same failures on both after reruns. One-side
+  failures, 20 reruns each, base against fix: `client.detach_test` 0 and 1, and 20 and 20 on another runner;
+  `linux.signal_pre_syscall` 5 and 6; `tool.drcachesim.instr-only-trace` 4 and 4; `client.attach_test` 3 and 2.
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`lab/xlrace.c`) killed the process 300 of 300 under DynamoRIO, with or
