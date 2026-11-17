@@ -1,8 +1,9 @@
 /* flushed_fault SECONDS: a thread faults over and over in a loop on a writable code page (a JIT's safepoint poll)
  * while a writer dirties a byte of that page that is never executed. Each write flushes the page, and after
  * -ro2sandbox_threshold writes DynamoRIO sandboxes it. A fault in a block flushed just before used to be translated
- * against a sandboxed rebuild of that block, which did not match the emitted code, and the handler saw pc 0 (fork fix
- * fix-xl8-flushed-unsandboxed). The handler checks the pc of every fault. Prints "ok" and exits 0 when all were right. */
+ * against a sandboxed rebuild of that block, which did not match the emitted code, and the handler saw pc 0
+ * (lhns/dynamorio#21). The handler checks the pc of every fault. Prints "ok" and exits 0 when all were right and
+ * there were faults and writes to check. */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <signal.h>
@@ -80,6 +81,10 @@ int main(int argc, char **argv) {
     atomic_store(&stop, 1);
     pthread_join(r, 0);
     pthread_join(w, 0);
+    if (!atomic_load(&faults) || !atomic_load(&writes)) {
+        printf("FAIL: nothing tested, faults=%lu writes=%lu\n", atomic_load(&faults), atomic_load(&writes));
+        return 1;
+    }
     printf("ok faults=%lu writes=%lu\n", atomic_load(&faults), atomic_load(&writes));
     return 0;
 }
