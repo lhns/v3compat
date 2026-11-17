@@ -233,6 +233,11 @@ add_executable(trace_flush trace_flush.c)
 target_compile_options(trace_flush PRIVATE -O1)
 target_link_options(trace_flush PRIVATE -pthread)
 v3test(trace-flush stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:trace_flush> 10)
+# A fault in a block flushed as its page switches to sandboxing: the fork's flushed-fragment translation fix.
+add_executable(flushed_fault flushed_fault.c)
+target_link_options(flushed_fault PRIVATE -pthread)
+v3test(flushed-fault stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_fault> 10)
+v3test(flushed-fault-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_fault> 2)
 # Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
 add_executable(jitgrowth jitgrowth.c)
 target_link_options(jitgrowth PRIVATE -pthread)
