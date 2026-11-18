@@ -1354,6 +1354,8 @@ static bool substitute(instr_t *in) {
 }
 
 void expand_refuse(void *dc, instrlist_t *bb, instr_t *in) {
+    /* The application nop of expand_instr: without it a sandboxed block resumes after the refused form. */
+    instrlist_preinsert(bb, in, INSTR_XL8(INSTR_CREATE_nop(dc), instr_get_app_pc(in)));
     instrlist_set_translation_target(bb, instr_get_app_pc(in));
     dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(instr_get_app_pc(in)),
                          OPND_CREATE_INT32(instr_get_opcode(in)));
