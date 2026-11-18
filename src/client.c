@@ -99,6 +99,6 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
     if (!expand_init(helpers_only)) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_bb_app2app_event(event_app2app, NULL);
     drmgr_register_signal_event(event_signal);
-    exec_policy_init();
+    if (!exec_policy_init()) dr_abort_with_code(V3COMPAT_REFUSED);
     drmgr_register_exit_event(event_exit);
 }
