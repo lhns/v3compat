@@ -11,21 +11,11 @@ fail() { echo "FAIL: $*"; bad=1; }
 mkdir -p $C/ct && chmod 1777 $C $C/ct
 
 # ctest_arm NAME VAR=value...: ctest under the cache, serially as build-test runs it (under -j4 load the signal tests'
-# own races fire more often, docs/translation-cache.md). A failure that is DynamoRIO's signal at thread start
-# (docs/plan.md, Open items) is rerun once; any other failure, or the same test failing again, fails the job.
+# own races fire more often, docs/translation-cache.md).
 ctest_arm() {
   local name=$1; shift
   env "$@" ctest --test-dir $B --output-on-failure > $C/$name.txt 2>&1 && return 0
-  local failed known
-  # per failed test: did its output show the signal at thread start?
-  failed=$(grep -cF "***Failed" $C/$name.txt)
-  known=$(awk '/\*\*\*Failed/{f=1; next} /Test +#[0-9]+:|Start +[0-9]+:/{f=0} f && /native thread/{k++; f=0} END{print k+0}' $C/$name.txt)
   grep -F -A8 "***Failed" $C/$name.txt | head -40
-  if [ "$failed" -gt 0 ] && [ "$known" -ge "$failed" ]; then
-    echo "$name: $failed failed with the signal at thread start, rerun once"
-    env "$@" ctest --test-dir $B --rerun-failed --output-on-failure > $C/$name-rerun.txt 2>&1 && return 0
-    tail -30 $C/$name-rerun.txt
-  fi
   fail "ctest $name"
 }
 echo "== ctest, training, then verify mode"

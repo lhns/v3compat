@@ -1,5 +1,5 @@
 # Opt-in (-DV3COMPAT_SEMANTIC=ON): lhns/avxemu's instruction-form cases, run on the real CPU
-# under the client, against the reference recorded on AVX2 silicon. Fetches avxemu at configure time.
+# under the client, against the reference recorded on AVX2 silicon. The avxemu checkout is always fetched; this adds its tests.
 set(S "${AVXEMU_SRC}")
 
 add_executable(semhw sem_adapter.c "${S}/test/spec/sem_hw.S" "${S}/test/spec/spec.c" "${S}/test/spec/known.c"
