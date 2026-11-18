@@ -54,6 +54,7 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 | Other vector forms (`vpsllv*`, `vpunpck*`, `vpack*`, ...), FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
 | `rorx`, `andn`, `mulx`, `shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`, MOVBE loads and stores | Inline | 0.6-1.7 ns **[measured]** for the shifts, `bzhi`, `tzcnt`, `lzcnt` (Xeon 8573C; 80-85 ns as helpers) |
 | `bextr`, `blsi`/`blsr`/`blsmsk`, `pdep`, `pext` | Helper through the mcontext | 320-400 ns **[measured]** |
+| AVX2 gathers | Inline, unrolled per element: one real load each, the mask and destination written back per element; also under `V3COMPAT_HELPERS_ONLY=1` | Not measured |
 | `cpuid` | Translated to report the emulated CPU | Rare |
 | `xgetbv` | Native: AVX2 adds no XCR0 bits | Native |
 
@@ -74,7 +75,7 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 | OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
 
 The translation cache is built for tests and labs through Phase 2 and not deployed ([ADR 0006](adr/0006-read-only-translation-cache.md),
-proposed); its design, what Phase 2 built and the owner's open decisions: [translation-cache.md](translation-cache.md).
+accepted); its design, what Phase 2 built and the owner's open decisions: [translation-cache.md](translation-cache.md).
 
 ## Testing
 
@@ -172,8 +173,8 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   call (#39) takes scalar FMA another 205 to 90 ns on EPYC 7763. Only `Math.fma` in Java hit it among the workloads (65M).
 - **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
   0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
-  duckdb varied 8.32 to 6.67 s). #40 (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
-  duckdb varied 10.63 to 10.09 s on EPYC 7763). #39 (lean helper call, ADR 0007 (4)): a frame helper 27.7 to 23.5 ns
+  duckdb varied 8.32 to 6.67 s). #40, merged (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
+  duckdb varied 10.63 to 10.09 s on EPYC 7763). #39, merged (lean helper call, ADR 0007 (4)): a frame helper 27.7 to 23.5 ns
   (Xeon 8370C), 20.8 to 17.5 (EPYC 9V74). None measured on Ivy Bridge.
 
 ### Startup breakdown (2026-11-12)
@@ -517,10 +518,10 @@ unsandboxed. Evidence **[measured]**:
   `linux.signal_pre_syscall` 5 and 6; `tool.drcachesim.instr-only-trace` 4 and 4; `client.attach_test` 3 and 2.
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
-- A signal to a thread in its first instructions (`lab/xlrace.c`) killed the process 300 of 300 under DynamoRIO, with or
+- A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
   without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
   lhns/dynamorio#15, which starts a thread with signals blocked.
-- javac crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295, `lab/javacdiag.sh`):
+- javac crashed in about 2% of runs in every configuration, DynamoRIO alone too (run 43331210295; `lab/javacdiag.sh` is only in that run's lab branch, not on main):
   now 0 of 200 each under the client, an empty client and DynamoRIO alone.
 
 ### The hang (fork branch `fix-pending-signal-self-link`)
@@ -544,7 +545,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33) and vector (#35) forms merged |
+| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33), vector (#35) and cross-lane (#40) forms and the lean helper call (#39) merged |
 | **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.34-0.63 s on runners, 39-43% below cold ([design](translation-cache.md)) |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
 

@@ -1,7 +1,8 @@
 # Translation cache across runs: design
 
-**Status:** Phases 1 and 2 are built on fork branches, lab and test only ([Phase 2](#phase-2-what-was-built)). Nothing is
-deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md). Tags as in
+**Status:** Phases 1 and 2 are built and merged (the fork's cache subsystem, v3compat #56), lab and test only
+([Phase 2](#phase-2-what-was-built)). Nothing is deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md)
+(Accepted). Tags as in
 the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
 
 ## Summary
@@ -24,8 +25,8 @@ the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
 
   If Ivy Bridge scales like the runners (a cold start there is 5.1 s), a warm start there is about 1.3 s. That still
   misses Phase 3's gate of 0.5 s, so the cache alone does not get there.
-- **Smallest useful first step:** a lab-only prototype on a fork branch, with ASLR off, verify mode on and a numeric
-  stop criterion ([Phases](#phases)). Before that, the owner needs to run the startup ladder on Ivy Bridge.
+- **Smallest useful first step, done:** the lab-only prototype and then Phase 2 ([Phases](#phases)). Not done: the
+  owner's startup ladder on Ivy Bridge.
 
 ## Where startup goes
 
@@ -49,7 +50,7 @@ DR alone or the empty client. The first run's 7763 numbers agree within 0.02 s.
 - **DR's own startup is not the cost:** a static hello runs in 0.01-0.02 s under the client. Startup is per-block
   work. duckdb `select 42` builds 77k blocks and 3.4k traces, all from file-backed modules, about 417k instructions.
   `node -e 0` builds 61k blocks, 94% from modules and 3.9k from JIT or other anonymous memory **[measured]**
-  (`lab/countclient`). That comes to about 14 µs a block under the client on a 7763, or 10 µs without traces.
+  (`lab/countclient`, added by PR #64). That comes to about 14 µs a block under the client on a 7763, or 10 µs without traces.
 - **Traces cost 0.29 s of duckdb's 1.09 s** under the client (3.4k traces), and 0.19 s on DR alone. DR builds a trace
   by decoding its blocks again and calling the client again. A block cache does not cover that.
 - **Where the time goes, layer by layer**, for duckdb `select 42` without traces: DR alone 0.50 s, the empty client
@@ -389,8 +390,8 @@ Each phase ends at a go/no-go for the owner.
 2. **Relocation and format.** Relocation records with ASLR on, the cache file format with checksums, the full key,
    the fail-closed tests and verify mode in CI. Built: [Phase 2](#phase-2-what-was-built).
 3. **Deployment.** The training-run writer as a build tool, the launcher option, the read-only mount from the runtime
-   wrapper, and integrity through fs-verity or a signed manifest. ADR 0006 is revised to Accepted, or superseded,
-   with what was learned.
+   wrapper, and integrity through fs-verity or a signed manifest. ADR 0006 (Accepted) is amended with what was
+   learned.
 4. **Optional:** eager install, traces, and the node writer with offline translation.
 
 ## Decisions for the owner

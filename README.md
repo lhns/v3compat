@@ -17,16 +17,16 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
 
 **Limits and known problems:**
 - The shipped config runs with DynamoRIO's cache reset off (`-no_enable_reset`, [ADR 0010](docs/adr/0010-no-cache-reset.md)).
-  The stress set on AVX2 runners at the current pin: duckdb 0 of 240 bad, signal stress 0 of 390, register and flags
-  stress (`test/regstress.c`) 0 of 306 under the client and 0 of 306 on DynamoRIO alone, the short loop 0 of 4,500.
-  Zero failures bound the rate, they do not prove it zero: by the rule of three, at most 1.3%, 0.8%, 1.0% and 0.07% (95%).
+  The stress set on AVX2 runners at the current pin: duckdb 0 of 240 bad, signal stress 0 of 1,300, register and flags
+  stress (`test/regstress.c`) 0 of 1,020 under the client and 0 of 1,020 on DynamoRIO alone, the short loop 0 of 4,500.
+  Zero failures bound the rate, they do not prove it zero: by the rule of three, at most 1.3%, 0.2%, 0.3% and 0.07% (95%).
 - Every system call leaves the code cache (`-no_ignore_syscalls`, [ADR 0011](docs/adr/0011-no-ignored-syscalls.md)), so code a JIT unmaps is freed while other threads wait.
 - A `vfork` child killed with SIGKILL before it execs can hang or crash its parent (`docs/plan.md`, open items).
 - Startup is DynamoRIO translation, about 5 s for duckdb on Ivy Bridge; no cache yet.
 - Java and javac run under the client since the fork fixed a crash in trace building that any client hit
-  ([lhns/dynamorio#8](https://github.com/lhns/dynamorio/pull/8); upstream has it). javac still fails in about 1 run in 5,
-  on DynamoRIO alone too (plan, "Open items"). JVM
-  workloads are in scope; see "Open items" in the plan.
+  ([lhns/dynamorio#8](https://github.com/lhns/dynamorio/pull/8); upstream has it). javac crashed in about 2% of runs in every
+  configuration, DynamoRIO alone too, until the fork's signal fixes: now 0 of 200 under the client (plan, "Open items").
+  JVM workloads are in scope; see "Open items" in the plan.
 
 **Untested or unverified:**
 - Ivy Bridge since the last fix: the reset and stress results above come from AVX2 runners, not Ivy Bridge. The earlier
@@ -65,8 +65,8 @@ build/inst/bin/v3compat-run [--] prog args...
 
 ### Semantic suite (opt-in)
 
-`cmake -S . -B build -DV3COMPAT_SEMANTIC=ON` adds `semantic-hw`: it fetches a pinned
-[avxemu](https://github.com/lhns/avxemu) commit and runs its instruction-form cases under the client against
+`cmake -S . -B build -DV3COMPAT_SEMANTIC=ON` adds `semantic-hw`: it runs the instruction-form cases of the pinned
+[avxemu](https://github.com/lhns/avxemu) commit (always fetched, for the helpers) under the client against
 the digests recorded on AVX2 hardware, also with inline expansions off. `test/sem/refused.txt` lists the forms still
 refused, and has to be exact. A program that executes a form off the [audited list](docs/allowlist.md) exits with status 86; `V3COMPAT_AUDIT=1` lists such forms instead.
 

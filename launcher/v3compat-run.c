@@ -7,7 +7,8 @@
  *   V3COMPAT_UNPROTECTED_GENCODE=1   -protect_mask 0: faster JIT startup, but DynamoRIO's generated code stays
  *                      writable, so a stray app write corrupts it instead of faulting
  *   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals at exit
- *   V3COMPAT_HELPERS_ONLY=1   no inline expansions, to compare them with the helpers
+ *   V3COMPAT_HELPERS_ONLY=1   every emulated form through its helper, to compare with the inline ones (movbe stores and
+ *                      gathers stay inline)
  *   V3COMPAT_AUDIT=1   print forms off the audited list at translation; run the native ones anyway
  *   V3COMPAT_CACHE=DIR translation cache, for tests and labs only (docs/translation-cache.md); with
  *                      V3COMPAT_CACHE_WRITE=1 a training run, V3COMPAT_CACHE_VERIFY=1|2, V3COMPAT_CACHE_STATS=1|2 */
