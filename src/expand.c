@@ -1168,8 +1168,7 @@ static void expand_bmi_inline(emit_t *e, instr_t *in) {
 /*
  * AVX2 gathers: avxemu's gather lives in its emulator, and the helper archive never touches memory, so these are
  * expanded here. Unrolled, one block per element, so the translation scan in event_restore stays a straight
- * read. The operands are copied to the
- * frame (a = index, b = mask, c = destination). Each active element: one real load (the only instruction
+ * read. The operands are copied to the frame (a = index, b = mask, c = destination). Each active element: one real load (the only instruction
  * that may fault), then the element is stored to c, its mask element zeroed in b, and c and b are written back
  * to the registers. A fault at element k has therefore left k elements done and visible, and the gather
  * restarts from the registers as a signal handler's return leaves them. A masked-off element is not read, but its mask element is cleared.
