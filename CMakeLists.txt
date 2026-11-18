@@ -12,17 +12,15 @@ include(cmake/FetchDynamoRIO.cmake)
 set(CMAKE_CXX_SIZEOF_DATA_PTR ${CMAKE_C_SIZEOF_DATA_PTR})
 find_package(DynamoRIO REQUIRED)
 
-# lhns/avxemu's emulation core: its archive's flags, checked by its guard script (test/CMakeLists.txt).
+# lhns/avxemu's emulation core. avxemu defines the archive (sources and flags, cmake/helpers.cmake);
+# its guard script checks it (test/CMakeLists.txt).
 include(FetchContent)
-set(AVXEMU_COMMIT fd9a6de57ea0e229a0d25ec4eff6f7149283b73f)
+set(AVXEMU_COMMIT 2412126c1f8af48abdbbed7073882ae0e81f4b70)
 FetchContent_Declare(avxemu GIT_REPOSITORY https://github.com/lhns/avxemu GIT_TAG ${AVXEMU_COMMIT}
                      SOURCE_SUBDIR no-cmake-project)
 FetchContent_MakeAvailable(avxemu)
 set(AVXEMU_SRC "${avxemu_SOURCE_DIR}")
-add_library(avxemu_helpers STATIC "${AVXEMU_SRC}/src/exec.c" "${AVXEMU_SRC}/src/exec_bmi.c" "${AVXEMU_SRC}/src/softfma.c")
-target_include_directories(avxemu_helpers PUBLIC "${AVXEMU_SRC}/src")
-target_compile_options(avxemu_helpers PRIVATE -O2 -std=c11 -w -mavx -mno-avx2 -mno-fma -mno-f16c -mno-bmi -mno-bmi2
-  -mno-lzcnt -mno-movbe -mtune=ivybridge -fPIC -fno-stack-protector -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
+include("${AVXEMU_SRC}/cmake/helpers.cmake")
 
 add_library(v3compat SHARED src/client.c src/execpolicy.c src/expand.c src/allow.c)
 target_link_libraries(v3compat avxemu_helpers)
@@ -52,6 +50,11 @@ add_executable(allow_dkey test/allow/dkey.c src/allow.c)
 target_include_directories(allow_dkey PRIVATE src)
 set_target_properties(allow_dkey PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
 configure_DynamoRIO_standalone(allow_dkey)
+# Every key of allowlist.inc is found by the lookup (it includes allow.c for the static tables).
+add_executable(allow_lookup test/allow/lookup.c)
+target_include_directories(allow_lookup PRIVATE src)
+set_target_properties(allow_lookup PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
+configure_DynamoRIO_standalone(allow_lookup)
 
 include(GNUInstallDirs)
 install(TARGETS v3compat LIBRARY DESTINATION libexec/v3compat)

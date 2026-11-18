@@ -40,6 +40,11 @@ static const struct form { const char *name; const unsigned char *b; size_t n; }
     FORM("andn-fs-rip", 0x64, 0xc4, 0xe2, 0xf0, 0xf2, 0x05, 0x00, 0x00, 0x00, 0x00),
     FORM("andn-gs-rip", 0x65, 0xc4, 0xe2, 0xf0, 0xf2, 0x05, 0x00, 0x00, 0x00, 0x00),
     FORM("pause-rexb", 0xf3, 0x41, 0x90),           /* CPUs disagree whether it is xchg r8, rax */
+    /* A store that changes the block (the immediate of the mov below), then a refused form: after the store DynamoRIO
+     * resumes a sandboxed block at the next application instruction, which must be the refused one. */
+    FORM("selfmod-rdpid", 0xc7, 0x05, 0x05, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,   /* movl $1, 5(%rip) */
+         0xf3, 0x0f, 0xc7, 0xf9,                                                         /* rdpid %rcx */
+         0xb8, 0x00, 0x00, 0x00, 0x00),                                                  /* mov $0, %eax */
     /* Run natively, listed. */
     FORM("pause", 0xf3, 0x90),
     FORM("rep-ret-next", 0xf3, 0xc3),

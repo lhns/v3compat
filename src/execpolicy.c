@@ -289,12 +289,12 @@ static bool initial_env(const char *key, size_t klen, char *out, size_t max) {
     return found && olen > 0;
 }
 
-void exec_policy_init(void) {
+bool exec_policy_init(void) {
     char path[PATHBUF];
     tls_idx = drmgr_register_tls_field();
     if (tls_idx < 0 || !drmgr_register_thread_init_event(event_thread_init) ||
         !drmgr_register_thread_exit_event(event_thread_exit))
-        return;
+        return false;
 
     /* The descriptor DynamoRIO loaded from: hold it privately and hand the number back, so the app sees no extra
      * fd and the file reads even if it has been deleted or is a memfd. */
@@ -313,7 +313,6 @@ void exec_policy_init(void) {
             dr_free_module_data(m);
         }
     }
-    drmgr_register_filter_syscall_event(event_filter);
-    drmgr_register_pre_syscall_event(event_pre);
-    drmgr_register_post_syscall_event(event_post);
+    return drmgr_register_filter_syscall_event(event_filter) && drmgr_register_pre_syscall_event(event_pre) &&
+           drmgr_register_post_syscall_event(event_post);
 }

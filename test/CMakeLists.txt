@@ -391,6 +391,15 @@ foreach(f xop-bextr-imm vaesenc-ymm vpclmulqdq-ymm rdgsbase wrgsbase rdfsbase tp
   v3test(refused-${f} exit 86 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(refused-${f} PROPERTIES TIMEOUT 120)
 endforeach()
+# A refused form behind a store into its own block still exits 86: sandboxed from the start, and once written (DR's default).
+foreach(m default sandbox)
+  set(_o "")
+  if(m STREQUAL sandbox)
+    set(_o "V3COMPAT_DR_OPTS=-sandbox_writable")
+  endif()
+  v3test(refused-selfmod-${m} exit 86 -- env ${_o} ${RUN} -- $<TARGET_FILE:refuse_forms> selfmod-rdpid)
+  set_tests_properties(refused-selfmod-${m} PROPERTIES TIMEOUT 120)
+endforeach()
 foreach(f pause rep-ret-next endbr64 prefetchw popcnt crc32 aesenc vcvtph2ps rdrand not-executed)
   v3test(listed-${f} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:refuse_forms> ${f})
   set_tests_properties(listed-${f} PROPERTIES TIMEOUT 120)
@@ -409,6 +418,8 @@ target_compile_options(allow_probe PRIVATE -fno-stack-protector -O1 -U_FORTIFY_S
 target_link_options(allow_probe PRIVATE -static)
 add_test(NAME allowlist-check COMMAND sh -c "gzip -dc '${_A}/evidence/rows.tsv.gz' > rows.tsv && $<TARGET_FILE:allow_dkey> < rows.tsv > keys.tsv && python3 '${_A}/gen.py' sweep $<TARGET_FILE:allow_probe> rows.tsv allow_probe.tsv && python3 '${_A}/gen.py' check allow_probe.tsv keys.tsv")
 set_tests_properties(allowlist-check PROPERTIES TIMEOUT 300)
+add_test(NAME allowlist-lookup COMMAND $<TARGET_FILE:allow_lookup>)
+set_tests_properties(allowlist-lookup PROPERTIES PASS_REGULAR_EXPRESSION "PASS")
 add_test(NAME allow-probe-isolation COMMAND sh "${_A}/isolation.sh" $<TARGET_FILE:allow_probe>)
 
 # The client's archive must stay plain AVX1 with no libc: the CI CPU would run anything.

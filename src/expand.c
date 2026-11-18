@@ -422,8 +422,8 @@ static uint32_t fbits(float f) {
     return u;
 }
 
-/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` (as fp_fault in
- * avxemu's emulate.c): the application then gets the SIGFPE of that kind. */
+/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` (the FP
+ * contract in avxemu's avxemu_helpers.h): the application then gets the SIGFPE of that kind. */
 static void pending_operands(tls_t *t, uint32_t ex) {
     uint32_t x, y;
     if (ex & 1) { x = fbits(0.0f); y = fbits(0.0f); }                  /* IE */
@@ -672,6 +672,20 @@ static void bmi_call(uint64 d) {
     dr_set_mcontext(dc, &mc);
 }
 
+static const reg_id_t gp_cand[] = {DR_REG_RCX, DR_REG_RBX, DR_REG_RSI, DR_REG_RDI, DR_REG_R8, DR_REG_R9,
+                                   DR_REG_R10, DR_REG_R11, DR_REG_R12, DR_REG_R13, DR_REG_R14, DR_REG_R15};
+/* The registers whose low word has an addressable high byte, for the 16-bit swap. */
+static const reg_id_t gp_legacy[] = {DR_REG_RAX, DR_REG_RCX, DR_REG_RDX, DR_REG_RBX};
+
+/* The first of c that the instruction does not name and is neither skip nor skip2. */
+static reg_id_t pick_gp(instr_t *in, const reg_id_t *c, int n, reg_id_t skip, reg_id_t skip2) {
+    for (int i = 0; i < n; i++)
+        if (c[i] != skip && c[i] != skip2 && !instr_uses_reg(in, c[i])) return c[i];
+    return DR_REG_NULL;   /* an instruction names five registers at most */
+}
+#define PICK2(in, skip, skip2) pick_gp((in), gp_cand, sizeof gp_cand / sizeof gp_cand[0], (skip), (skip2))
+#define PICK(in, skip) PICK2(in, skip, DR_REG_NULL)
+
 /* movbe to memory: the store is the commit, and if it faults event_restore has the scratch. */
 static void expand_movbe_store(emit_t *e, instr_t *in) {
     opnd_t m = instr_get_dst(in, 0);
@@ -685,6 +699,7 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
         if (g == DR_REG_NULL) g = c;
         else if (addr == DR_REG_NULL) addr = c;
     }
+    if (addr == DR_REG_NULL) addr = PICK(in, g);   /* base, index and the source take three of the four */
     bool seg = uses_seg(m);
     if (abs || seg) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(addr)));
     if (abs) {
@@ -747,20 +762,6 @@ static void expand_bmi(emit_t *e, instr_t *in, const form_t *f) {
 }
 
 /* ---- Scalar BMI inline: GPR scratch saved in raw TLS, one faulting load first, one commit ---- */
-
-static const reg_id_t gp_cand[] = {DR_REG_RCX, DR_REG_RBX, DR_REG_RSI, DR_REG_RDI, DR_REG_R8, DR_REG_R9,
-                                   DR_REG_R10, DR_REG_R11, DR_REG_R12, DR_REG_R13, DR_REG_R14, DR_REG_R15};
-/* The registers whose low word has an addressable high byte, for the 16-bit swap. */
-static const reg_id_t gp_legacy[] = {DR_REG_RAX, DR_REG_RCX, DR_REG_RDX, DR_REG_RBX};
-
-/* The first of c that the instruction does not name and is neither skip nor skip2. */
-static reg_id_t pick_gp(instr_t *in, const reg_id_t *c, int n, reg_id_t skip, reg_id_t skip2) {
-    for (int i = 0; i < n; i++)
-        if (c[i] != skip && c[i] != skip2 && !instr_uses_reg(in, c[i])) return c[i];
-    return DR_REG_NULL;   /* an instruction names five registers at most */
-}
-#define PICK2(in, skip, skip2) pick_gp((in), gp_cand, sizeof gp_cand / sizeof gp_cand[0], (skip), (skip2))
-#define PICK(in, skip) PICK2(in, skip, DR_REG_NULL)
 
 static reg_id_t gsz(reg_id_t r, uint bytes) { return reg_resize_to_opsz(r, bytes == 8 ? OPSZ_8 : OPSZ_4); }
 static void save_g(emit_t *e, int i, reg_id_t r) { put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(i), reg(r))); }
@@ -1161,9 +1162,9 @@ static void expand_bmi_inline(emit_t *e, instr_t *in) {
 }
 
 /*
- * AVX2 gathers: avxemu's archive never touches memory, so these are expanded here. Unrolled, one block per
- * element, so the translation scan in event_restore stays a straight read. The operands are copied to the
- * frame (a = index, b = mask, c = destination). Each active element: one real load (the only instruction
+ * AVX2 gathers: avxemu's gather lives in its emulator, and the helper archive never touches memory, so these are
+ * expanded here. Unrolled, one block per element, so the translation scan in event_restore stays a straight
+ * read. The operands are copied to the frame (a = index, b = mask, c = destination). Each active element: one real load (the only instruction
  * that may fault), then the element is stored to c, its mask element zeroed in b, and c and b are written back
  * to the registers. A fault at element k has therefore left k elements done and visible, and the gather
  * restarts from the registers as a signal handler's return leaves them. A masked-off element is not read, but its mask element is cleared.
@@ -1348,6 +1349,8 @@ static bool substitute(instr_t *in) {
 }
 
 void expand_refuse(void *dc, instrlist_t *bb, instr_t *in) {
+    /* The application nop of expand_instr: without it a sandboxed block resumes after the refused form. */
+    instrlist_preinsert(bb, in, INSTR_XL8(INSTR_CREATE_nop(dc), instr_get_app_pc(in)));
     instrlist_set_translation_target(bb, instr_get_app_pc(in));
     dr_insert_clean_call(dc, bb, in, (void *)refuse_call, false, 2, OPND_CREATE_INTPTR(instr_get_app_pc(in)),
                          OPND_CREATE_INT32(instr_get_opcode(in)));
