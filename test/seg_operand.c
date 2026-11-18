@@ -85,6 +85,10 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
 #define T_MBS64(mn, M) "movbe %rsi, " M
 #define T_MBS32(mn, M) "movbe %esi, " M
 #define T_MBS16(mn, M) "movbe %si, " M
+// Source rcx: with the shape's base and index (rdx, rax) it leaves the client one of rax..rbx for its scratch, not two.
+#define T_MBS64C(mn, M) "movbe %rcx, " M
+#define T_MBS32C(mn, M) "movbe %ecx, " M
+#define T_MBS16C(mn, M) "movbe %cx, " M
 #define T_BIN(mn, M) #mn " " M ", %ymm1, %ymm2"
 #define T_BINX(mn, M) #mn " " M ", %xmm1, %xmm2"
 #define T_UN(mn, M) #mn " " M ", %ymm2"
@@ -126,6 +130,7 @@ struct { uint64_t g[16]; uint8_t y[16][32]; uint64_t fl; } d_out __attribute__((
     F(X, RORX_32, rorx_32) F(X, LZ32, lzcnt_32) F(X, LZ16, lzcnt_16) F(X, TZ32, tzcnt_32) \
     F(X, BZHI32, bzhi_32) F(X, MASKLD, vpmaskmovq) F(X, MASKSTQ, vpmaskmovq_st) \
     F(X, UN, vbroadcasti128) F(X, UN, vcvtph2ps) \
+    F(X, MBS64C, movbe_st64_c) F(X, MBS32C, movbe_st32_c) F(X, MBS16C, movbe_st16_c) \
     F(X, IMM3, vmpsadbw) F(X, IMM3, vpalignr) F(X, IMM3, vpblendd) F(X, IMM3, vpblendw) F(X, IMM3, vperm2i128) \
     F(X, UN, vpabsb) F(X, UN, vpabsw) \
     F(X, BIN, vpackssdw) F(X, BIN, vpacksswb) F(X, BIN, vpackusdw) F(X, BIN, vpackuswb) \

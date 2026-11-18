@@ -50,6 +50,11 @@ add_executable(allow_dkey test/allow/dkey.c src/allow.c)
 target_include_directories(allow_dkey PRIVATE src)
 set_target_properties(allow_dkey PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
 configure_DynamoRIO_standalone(allow_dkey)
+# Every key of allowlist.inc is found by the lookup (it includes allow.c for the static tables).
+add_executable(allow_lookup test/allow/lookup.c)
+target_include_directories(allow_lookup PRIVATE src)
+set_target_properties(allow_lookup PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tools")
+configure_DynamoRIO_standalone(allow_lookup)
 
 include(GNUInstallDirs)
 install(TARGETS v3compat LIBRARY DESTINATION libexec/v3compat)
