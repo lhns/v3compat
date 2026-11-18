@@ -401,8 +401,8 @@ static uint32_t fbits(float f) {
     return u;
 }
 
-/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` (as fp_fault in
- * avxemu's emulate.c): the application then gets the SIGFPE of that kind. */
+/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` (the FP
+ * contract in avxemu's avxemu_helpers.h): the application then gets the SIGFPE of that kind. */
 static void pending_operands(tls_t *t, uint32_t ex) {
     uint32_t x, y;
     if (ex & 1) { x = fbits(0.0f); y = fbits(0.0f); }                  /* IE */
@@ -1166,8 +1166,9 @@ static void expand_bmi_inline(emit_t *e, instr_t *in) {
 }
 
 /*
- * AVX2 gathers: avxemu's archive never touches memory, so these are expanded here. Unrolled, one block per
- * element, so the translation scan in event_restore stays a straight read. The operands are copied to the
+ * AVX2 gathers: avxemu's gather lives in its emulator, and the helper archive never touches memory, so these are
+ * expanded here. Unrolled, one block per element, so the translation scan in event_restore stays a straight
+ * read. The operands are copied to the
  * frame (a = index, b = mask, c = destination). Each active element: one real load (the only instruction
  * that may fault), then the element is stored to c, its mask element zeroed in b, and c and b are written back
  * to the registers. A fault at element k has therefore left k elements done and visible, and the gather
