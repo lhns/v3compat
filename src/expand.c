@@ -651,6 +651,26 @@ static void bmi_call(uint64 d) {
     dr_set_mcontext(dc, &mc);
 }
 
+static const reg_id_t gp_cand[] = {DR_REG_RCX, DR_REG_RBX, DR_REG_RSI, DR_REG_RDI, DR_REG_R8, DR_REG_R9,
+                                   DR_REG_R10, DR_REG_R11, DR_REG_R12, DR_REG_R13, DR_REG_R14, DR_REG_R15};
+/* The registers whose low word has an addressable high byte, for the 16-bit swap. */
+static const reg_id_t gp_legacy[] = {DR_REG_RAX, DR_REG_RCX, DR_REG_RDX, DR_REG_RBX};
+
+static bool reg_in_instr(instr_t *in, reg_id_t r) {
+    for (int i = 0; i < instr_num_srcs(in); i++)
+        if (opnd_uses_reg(instr_get_src(in, i), r)) return true;
+    for (int i = 0; i < instr_num_dsts(in); i++)
+        if (opnd_uses_reg(instr_get_dst(in, i), r)) return true;
+    return false;
+}
+
+static reg_id_t pick_gp(instr_t *in, const reg_id_t *c, int n, reg_id_t skip) {
+    for (int i = 0; i < n; i++)
+        if (c[i] != skip && !reg_in_instr(in, c[i])) return c[i];
+    return DR_REG_NULL;   /* an instruction names five registers at most */
+}
+#define PICK(in, skip) pick_gp((in), gp_cand, sizeof gp_cand / sizeof gp_cand[0], (skip))
+
 /* movbe to memory: the store is the commit, and if it faults event_restore has the scratch. */
 static void expand_movbe_store(emit_t *e, instr_t *in) {
     opnd_t m = instr_get_dst(in, 0);
@@ -664,6 +684,7 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
         if (g == DR_REG_NULL) g = c;
         else if (addr == DR_REG_NULL) addr = c;
     }
+    if (addr == DR_REG_NULL) addr = PICK(in, g);   /* base, index and the source take three of the four */
     bool seg = uses_seg(m);
     if (abs || seg) put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(1), reg(addr)));
     if (abs) {
@@ -732,26 +753,6 @@ static void expand_bmi(emit_t *e, instr_t *in, const form_t *f) {
 }
 
 /* ---- Scalar BMI inline: GPR scratch saved in raw TLS, one faulting load first, one commit ---- */
-
-static const reg_id_t gp_cand[] = {DR_REG_RCX, DR_REG_RBX, DR_REG_RSI, DR_REG_RDI, DR_REG_R8, DR_REG_R9,
-                                   DR_REG_R10, DR_REG_R11, DR_REG_R12, DR_REG_R13, DR_REG_R14, DR_REG_R15};
-/* The registers whose low word has an addressable high byte, for the 16-bit swap. */
-static const reg_id_t gp_legacy[] = {DR_REG_RAX, DR_REG_RCX, DR_REG_RDX, DR_REG_RBX};
-
-static bool reg_in_instr(instr_t *in, reg_id_t r) {
-    for (int i = 0; i < instr_num_srcs(in); i++)
-        if (opnd_uses_reg(instr_get_src(in, i), r)) return true;
-    for (int i = 0; i < instr_num_dsts(in); i++)
-        if (opnd_uses_reg(instr_get_dst(in, i), r)) return true;
-    return false;
-}
-
-static reg_id_t pick_gp(instr_t *in, const reg_id_t *c, int n, reg_id_t skip) {
-    for (int i = 0; i < n; i++)
-        if (c[i] != skip && !reg_in_instr(in, c[i])) return c[i];
-    return DR_REG_NULL;   /* an instruction names five registers at most */
-}
-#define PICK(in, skip) pick_gp((in), gp_cand, sizeof gp_cand / sizeof gp_cand[0], (skip))
 
 static reg_id_t gsz(reg_id_t r, uint bytes) { return reg_resize_to_opsz(r, bytes == 8 ? OPSZ_8 : OPSZ_4); }
 static void save_g(emit_t *e, int i, reg_id_t r) { put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(i), reg(r))); }
