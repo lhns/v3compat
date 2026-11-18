@@ -72,10 +72,8 @@ static char *put(char *o, const char *end, const char *s) {
 }
 
 static char *put_num(char *o, const char *end, uint v) {
-    char t[12];
-    int n = 0;
-    do t[n++] = (char)('0' + v % 10); while ((v /= 10) != 0);
-    while (n > 0 && o < end) *o++ = t[--n];
+    char t[24], *e = put_dec(t, v);
+    for (const char *q = t; q < e && o < end; q++) *o++ = *q;
     return o;
 }
 

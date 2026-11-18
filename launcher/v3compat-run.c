@@ -35,19 +35,13 @@ void *memset(void *d, int c, unsigned long n) {
     return d;
 }
 
-static unsigned long slen(const char *s) { unsigned long n = 0; while (s[n]) n++; return n; }
-static int has_prefix(const char *s, const char *p) {
-    while (*p) if (*s++ != *p++) return 0;
-    return 1;
-}
 static int has_char(const char *s, const char *set) {
     for (; *s; s++) for (const char *c = set; *c; c++) if (*s == *c) return 1;
     return 0;
 }
-static char *scpy(char *d, const char *s) { while (*s) *d++ = *s++; return d; }
 
 static const char *envget(char **envp, const char *name) { /* name is "NAME=" */
-    for (; *envp; envp++) if (has_prefix(*envp, name)) return *envp + slen(name);
+    for (; *envp; envp++) if (starts(*envp, name)) return *envp + slen(name);
     return 0;
 }
 
@@ -215,20 +209,14 @@ __attribute__((used)) void run(long *sp) {
     envstr = grab(slen(prog) + 64);
     scpy(scpy(envstr, "DYNAMORIO_EXE_PATH="), prog);
     fdstr = grab(64);
-    {
-        char *q = scpy(fdstr, "DYNAMORIO_EXE_FD=");
-        long v = x->fd, div = 1;
-        while (v / div >= 10) div *= 10;
-        for (; div; div /= 10) *q++ = (char)('0' + v / div % 10);
-        *q = 0;
-    }
+    *put_dec(scpy(fdstr, "DYNAMORIO_EXE_FD="), x->fd) = 0;
 
     for (nenv = envp; *nenv; nenv++) ne++;
     nenv = grab(sizeof(char *) * (unsigned long)(ne + 5));
     for (k = 0, i = 0; i < ne; i++) {
         const char *v = envp[i];
-        if (has_prefix(v, "DYNAMORIO_EXE_PATH=") || has_prefix(v, "DYNAMORIO_EXE_FD=") ||
-            has_prefix(v, "DYNAMORIO_RUNUNDER=") || has_prefix(v, "DYNAMORIO_OPTIONS="))
+        if (starts(v, "DYNAMORIO_EXE_PATH=") || starts(v, "DYNAMORIO_EXE_FD=") ||
+            starts(v, "DYNAMORIO_RUNUNDER=") || starts(v, "DYNAMORIO_OPTIONS="))
             continue;
         nenv[k++] = envp[i];
     }
