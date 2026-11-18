@@ -89,7 +89,8 @@ DR_EXPORT void dr_client_main(client_id_t id, int argc, const char *argv[]) {
     (void)id;
     dr_set_client_name("v3compat", "https://github.com/lhns/v3compat");
     if (!drmgr_init()) return;
-    /* The launcher turns V3COMPAT_STATS=1 and V3COMPAT_HELPERS_ONLY=1 into these options. */
+    /* The launcher turns V3COMPAT_STATS=1, V3COMPAT_HELPERS_ONLY=1 and V3COMPAT_AUDIT=1 into -stats, -helpers-only and
+     * -audit. */
     bool helpers_only = false;
     for (int i = 1; i < argc; i++) {
         if (starts(argv[i], "-stats")) stats_on = true;

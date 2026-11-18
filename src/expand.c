@@ -65,6 +65,20 @@ static instr_t *put(emit_t *e, instr_t *i) {
     return i;
 }
 
+/* After the commit: what follows translates to the next application instruction. */
+static void to_next_pc(emit_t *e) { instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc)); }
+
+/* movbe's byte swap of the low `bytes` of r (a 64-bit register). A word swaps its two byte registers, which leaves
+ * flags alone, unlike a 16-bit rotate. */
+static void put_bswap(emit_t *e, reg_id_t r, uint bytes) {
+    if (bytes == 2) {
+        reg_id_t lo = reg_resize_to_opsz(r, OPSZ_1);
+        put(e, INSTR_CREATE_xchg(e->dc, reg((reg_id_t)(lo - DR_REG_AL + DR_REG_AH)), reg(lo)));
+    } else {
+        put(e, INSTR_CREATE_bswap(e->dc, reg(reg_resize_to_opsz(r, bytes == 8 ? OPSZ_8 : OPSZ_4))));
+    }
+}
+
 static void pick_scratch(emit_t *e, instr_t *in) {
     int n = 0;
     for (reg_id_t y = DR_REG_YMM15; n < 3; y--)
@@ -199,7 +213,7 @@ static void expand_inline(emit_t *e, instr_t *in) {
     if (mem) reload_y(e, 2);
     reload_y(e, 0);
     put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
-    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    to_next_pc(e);
     reload_y(e, 1);
 }
 
@@ -284,8 +298,14 @@ static void expand_oneop(emit_t *e, instr_t *in) {
     reload_y(e, 0);
     /* commit; a VEX.128 write zeroes the destination's upper half */
     put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(ydst ? t1 : t1x)));
-    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    to_next_pc(e);
     reload_y(e, 1);
+}
+
+/* A helper could not do its form: say so, as refuse_call does, and exit. */
+static void refuse_helper(const char *which, uint64 d, int r) {
+    dr_fprintf(STDERR, "v3compat: refusing: the %s returned %d for op %d\n", which, r, (int)(d & 0xff));
+    dr_exit_process(V3COMPAT_REFUSED);
 }
 
 static void refuse_call(app_pc pc, int opc) {
@@ -372,7 +392,8 @@ static const form_t vec_forms[] = {
     FMA2(vfmsubadd132, VFMSUBADD132), FMA2(vfmsubadd213, VFMSUBADD213), FMA2(vfmsubadd231, VFMSUBADD231),
 };
 
-/* Scalars, through the mcontext: they are rare, and flags and registers commit atomically. */
+/* Scalar forms: the inline sequences below take the common ones, the rest go through the mcontext, where flags and
+ * registers commit atomically. */
 static const form_t bmi_forms[] = {
     {OP_andn, BMI_ANDN}, {OP_blsi, BMI_BLSI}, {OP_blsr, BMI_BLSR}, {OP_blsmsk, BMI_BLSMSK},
     {OP_bzhi, BMI_BZHI}, {OP_bextr, BMI_BEXTR}, {OP_mulx, BMI_MULX}, {OP_pdep, BMI_PDEP},
@@ -440,12 +461,12 @@ static void vec_call(uint64 d) {
     if ((fl & D_MXCSR) && raised) __builtin_ia32_ldmxcsr(csr | raised);
     if (r == AVXEMU_FP_PENDING) {
         uint32_t ex = raised & ~(csr >> 7) & 0x3Fu;
-        if (ex == 0) dr_exit_process(V3COMPAT_REFUSED);
+        if (ex == 0) refuse_helper("vector helper, with a pending exception and nothing unmasked,", d, r);
         pending_operands(t, ex);
         t->pending = ex;
         return;
     }
-    if (r != 1) dr_exit_process(V3COMPAT_REFUSED);
+    if (r != 1) refuse_helper("vector helper", d, r);
     if (fl & D_GPR) {
         if (fl & D_NARROW) gpr &= 0xFFFFu;
         for (int i = 0; i < 8; i++) t->out.b[i] = (uint8_t)(gpr >> (8 * i));
@@ -643,8 +664,8 @@ static void bmi_call(uint64 d) {
     uint imm = (d >> 48) & 0xff;
     uint64 s1 = src_value((d >> 16) & 0xff, imm, t, &mc), s2 = src_value((d >> 24) & 0xff, imm, t, &mc);
     uint64_t dst = 0, dst2 = 0, flags = mc.xflags;
-    if (bmi_exec((vex_op)(d & 0xff), opsize, s1, s2, &dst, &dst2, &flags) != 1)
-        dr_exit_process(V3COMPAT_REFUSED);
+    int r = bmi_exec((vex_op)(d & 0xff), opsize, s1, s2, &dst, &dst2, &flags);
+    if (r != 1) refuse_helper("scalar helper", d, r);
     write_gpr((reg_id_t)((d >> 32) & 0xff), opsize, dst, &mc);
     if (((d >> 40) & 0xff) != S_NONE) write_gpr((reg_id_t)((d >> 40) & 0xff), opsize, dst2, &mc);
     mc.xflags = flags;
@@ -674,15 +695,9 @@ static void expand_movbe_store(emit_t *e, instr_t *in) {
     }
     put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(0), reg(g)));
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(g), reg(src)));
-    if (size == 2) {
-        /* xchg of the byte registers leaves flags alone, unlike a 16-bit rotate. */
-        reg_id_t lo = reg_resize_to_opsz(g, OPSZ_1);
-        put(e, INSTR_CREATE_xchg(e->dc, reg((reg_id_t)(lo - DR_REG_AL + DR_REG_AH)), reg(lo)));
-    } else {
-        put(e, INSTR_CREATE_bswap(e->dc, reg(size == 8 ? g : reg_resize_to_opsz(g, OPSZ_4))));
-    }
+    put_bswap(e, g, size);
     put(e, INSTR_CREATE_mov_st(e->dc, m, reg(reg_resize_to_opsz(g, opnd_get_size(m)))));
-    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    to_next_pc(e);
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(g), SAVE_G(0)));
     if (abs || seg) put(e, INSTR_CREATE_mov_ld(e->dc, reg(addr), SAVE_G(1)));
 }
@@ -738,25 +753,18 @@ static const reg_id_t gp_cand[] = {DR_REG_RCX, DR_REG_RBX, DR_REG_RSI, DR_REG_RD
 /* The registers whose low word has an addressable high byte, for the 16-bit swap. */
 static const reg_id_t gp_legacy[] = {DR_REG_RAX, DR_REG_RCX, DR_REG_RDX, DR_REG_RBX};
 
-static bool reg_in_instr(instr_t *in, reg_id_t r) {
-    for (int i = 0; i < instr_num_srcs(in); i++)
-        if (opnd_uses_reg(instr_get_src(in, i), r)) return true;
-    for (int i = 0; i < instr_num_dsts(in); i++)
-        if (opnd_uses_reg(instr_get_dst(in, i), r)) return true;
-    return false;
-}
-
-static reg_id_t pick_gp(instr_t *in, const reg_id_t *c, int n, reg_id_t skip) {
+/* The first of c that the instruction does not name and is neither skip nor skip2. */
+static reg_id_t pick_gp(instr_t *in, const reg_id_t *c, int n, reg_id_t skip, reg_id_t skip2) {
     for (int i = 0; i < n; i++)
-        if (c[i] != skip && !reg_in_instr(in, c[i])) return c[i];
+        if (c[i] != skip && c[i] != skip2 && !instr_uses_reg(in, c[i])) return c[i];
     return DR_REG_NULL;   /* an instruction names five registers at most */
 }
-#define PICK(in, skip) pick_gp((in), gp_cand, sizeof gp_cand / sizeof gp_cand[0], (skip))
+#define PICK2(in, skip, skip2) pick_gp((in), gp_cand, sizeof gp_cand / sizeof gp_cand[0], (skip), (skip2))
+#define PICK(in, skip) PICK2(in, skip, DR_REG_NULL)
 
 static reg_id_t gsz(reg_id_t r, uint bytes) { return reg_resize_to_opsz(r, bytes == 8 ? OPSZ_8 : OPSZ_4); }
 static void save_g(emit_t *e, int i, reg_id_t r) { put(e, INSTR_CREATE_mov_st(e->dc, SAVE_G(i), reg(r))); }
 static void load_g(emit_t *e, reg_id_t r, int i) { put(e, INSTR_CREATE_mov_ld(e->dc, reg(r), SAVE_G(i))); }
-static void to_next_pc(emit_t *e) { instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc)); }
 
 /* One real load of m, `bytes` wide (a word zero-extends), into t: the only instruction that may fault. */
 static void load_gpr(emit_t *e, opnd_t m, reg_id_t t, uint bytes) {
@@ -889,27 +897,14 @@ static void expand_mulx(emit_t *e, instr_t *in) {
 static void expand_movbe_load(emit_t *e, instr_t *in) {
     reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
     uint bytes = opnd_size_in_bytes(reg_get_size(d));
-    reg_id_t t = bytes == 2 ? pick_gp(in, gp_legacy, 4, DR_REG_NULL) : PICK(in, DR_REG_NULL);
+    reg_id_t t = bytes == 2 ? pick_gp(in, gp_legacy, 4, DR_REG_NULL, DR_REG_NULL) : PICK(in, DR_REG_NULL);
     reg_id_t tt = bytes == 2 ? reg_resize_to_opsz(t, OPSZ_2) : gsz(t, bytes);
     save_g(e, 0, t);
     load_gpr(e, instr_get_src(in, 0), t, bytes);
-    if (bytes == 2) {
-        /* xchg of the byte registers leaves flags alone, unlike a 16-bit rotate. */
-        reg_id_t lo = reg_resize_to_opsz(t, OPSZ_1);
-        put(e, INSTR_CREATE_xchg(e->dc, reg((reg_id_t)(lo - DR_REG_AL + DR_REG_AH)), reg(lo)));
-    } else {
-        put(e, INSTR_CREATE_bswap(e->dc, reg(tt)));
-    }
+    put_bswap(e, t, bytes);
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(d), reg(tt)));   /* commit; a word merges into the destination */
     to_next_pc(e);
     load_g(e, t, 0);
-}
-
-/* A register that is neither a, b nor named by the instruction. */
-static reg_id_t pick_not(instr_t *in, reg_id_t a, reg_id_t b) {
-    for (size_t i = 0; i < sizeof gp_cand / sizeof gp_cand[0]; i++)
-        if (gp_cand[i] != a && gp_cand[i] != b && !reg_in_instr(in, gp_cand[i])) return gp_cand[i];
-    return DR_REG_NULL;
 }
 
 /*
@@ -922,7 +917,7 @@ static void expand_shx(emit_t *e, instr_t *in) {
     reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
     uint bytes = opnd_size_in_bytes(reg_get_size(d));
     reg_id_t cnt = reg_to_pointer_sized(opnd_get_reg(instr_get_src(in, 1)));
-    reg_id_t t = pick_not(in, DR_REG_RCX, DR_REG_NULL), tt = gsz(t, bytes);
+    reg_id_t t = PICK(in, DR_REG_RCX), tt = gsz(t, bytes);
     save_g(e, 0, DR_REG_RAX);
     save_g(e, 1, DR_REG_RCX);
     save_g(e, 2, t);
@@ -976,7 +971,7 @@ static void expand_bzhi(emit_t *e, instr_t *in) {
     reg_id_t d = opnd_get_reg(instr_get_dst(in, 0));
     uint bytes = opnd_size_in_bytes(reg_get_size(d));
     reg_id_t idx = reg_to_pointer_sized(opnd_get_reg(instr_get_src(in, 1)));
-    reg_id_t t = pick_not(in, DR_REG_RCX, DR_REG_NULL), t2 = pick_not(in, DR_REG_RCX, t);
+    reg_id_t t = PICK(in, DR_REG_RCX), t2 = PICK2(in, DR_REG_RCX, t);
     reg_id_t tt = gsz(t, bytes), tt2 = gsz(t2, bytes);
     instr_t *big = INSTR_CREATE_label(e->dc), *done = INSTR_CREATE_label(e->dc);
     save_g(e, 0, t);
@@ -1092,7 +1087,7 @@ static void expand_msk(emit_t *e, instr_t *in) {
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(g), SAVE_G(0)));
     reload_y(e, 0);
     put(e, INSTR_CREATE_vmovd(e->dc, reg(d), reg(t1x)));   /* commit; a 32-bit write zero-extends */
-    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    to_next_pc(e);
     reload_y(e, 1);
 }
 
@@ -1149,7 +1144,7 @@ static void expand_cross(emit_t *e, instr_t *in) {
     if (perm_d || mem) reload_y(e, 2);
     reload_y(e, 0);
     put(e, INSTR_CREATE_vmovdqu(e->dc, reg(d), reg(t1)));   /* commit */
-    instrlist_set_translation_target(e->bb, decode_next_pc(e->dc, e->pc));
+    to_next_pc(e);
     reload_y(e, 1);
 }
 
@@ -1223,7 +1218,7 @@ static void expand_gather(emit_t *e, instr_t *in) {
     reg_id_t t[4];
     int n = 0;
     for (size_t i = 0; i < sizeof gp_cand / sizeof gp_cand[0] && n < 4; i++)
-        if (!reg_in_instr(in, gp_cand[i])) t[n++] = gp_cand[i];
+        if (!instr_uses_reg(in, gp_cand[i])) t[n++] = gp_cand[i];
     reg_id_t tm = t[0], ta = t[1], td = t[2], tb = t[3];   /* mask, address, data, copy of the base */
     save_g(e, 0, DR_REG_RAX);
     for (int i = 0; i < 4; i++) save_g(e, i + 1, t[i]);
@@ -1315,7 +1310,6 @@ static bool vec_shape_ok(instr_t *in) {
     return opnd_is_reg(d) && reg_is_ymm(opnd_get_reg(d)) && opnd_is_reg(a) && reg_is_ymm(opnd_get_reg(a));
 }
 
-/* EVEX has no DR flag in this version: it is opcode 0x62 after any legacy padding. */
 /*
  * AVX1 has the same operation under another opcode for these, faults and all, so the application
  * instruction stays and only its opcode changes. DR lists the store forms of the masked moves'

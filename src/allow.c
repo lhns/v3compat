@@ -55,6 +55,7 @@ int classify(void *dc, instr_t *in) {
     return C_N;
 }
 
+/* EVEX has no DR flag in this version: it is opcode 0x62 after any legacy padding. */
 bool instr_is_evex_encoded(void *dc, instr_t *in) {
     if (!instr_raw_bits_valid(in)) return false;
     const byte *p = instr_get_raw_bits(in);
