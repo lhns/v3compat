@@ -556,28 +556,18 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   workflow reruns one-sided failures 20 times).
 - **`tool.drcachesim.coherence` and `api.detach_signal`** (release) flake on any commit: 11 and 4 of 240 on `521016e`,
   7 and 3 of 240 on the safe-spot fix, interleaved on four runners (run 44100838667). 20 reruns can show 2 against 0.
-- **`api.static_prepop`** fails in its second attach on AVX-512 runners (static re-attach loses AVX-512 state, "Open
-  items"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
+- **`api.static_prepop`** fails in its second attach on AVX-512 runners (static re-attach loses AVX-512 state, "Won't
+  fix"). v3compat does not use static attach; ignore it on AVX-512 runners, compare base and fix.
 - **DynamoRIO's debug suite on EPYC 9V45**: debug builds print `<Unknown processor cache size>` and fail most tests on
   any commit. Use release there, or another runner, for the debug suite.
 - **`client.memory_dump_test`** (debug and release) fails or passes by the build directory's name: the dump's section-name
   hash is keyed on a buffer the maps iterator reuses, so `[vvar]` can take an earlier region's name. Compare base and
   fix built in the same directory name.
-- **The regstress binary dying of SIGSEGV early** (`regstress`, `regstress-control`) reproduces under `-j4` load of the
-  signal tests: 3 of 120 passes without the translation cache, 9 of 120 with it warm (run 43465664481). Before that:
-  one `regstress sig jit` SIGSEGV under the client in CI, not reproduced serially (0 of 1,000 on several runners). If it
-  recurs, keep the CPU model and the run, and rerun `lab/stress.sh sig` on that runner type.
 
 ## Open items
 
 - **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
   AMD (1.67x with no client) and needs more forms inline.
-- **DynamoRIO alone, threads churning at exit** (no client, 1,000 threads) stalls the exit for a minute or more on EPYC
-  7763 and 9V45, base and fix alike: 21 of 45 runs past 120 s on three 7763s **[measured]**. With no exit event DynamoRIO
-  marks itself exited before it synchs, so new threads spin in thread init on `thread_initexit_lock` against the exit's
-  synch and about 1,000 exiting threads **[measured]**. With `-synch_at_exit` 0 of 45 past 6.7 s on the same runners.
-  v3compat always has a client, which synchs first. Still there with lhns/dynamorio#20 (pin `af12842`, run 44109231119):
-  17 of 75 past 130 s, the rest 2.1-2.9 s, on Xeon 6975P-C and EPYC 9V74 (none on 7763 or 9V45) **[measured]**.
 - **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
   300 children a run **[measured]**. At random points from their creation on, 10 runs each: under the client 10 of 10 bad
   on base (8 hangs, 2 crashes) and 10 of 10 on the first fix commit (9, 1); on DynamoRIO alone 10 of 10 hang on both. At
@@ -589,15 +579,6 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   0 of 300 after, at most 1% (95%) **[measured]**.
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
-- **Cache reset** (matters only if reset is turned back on; the launcher keeps it off, [ADR 0010](adr/0010-no-cache-reset.md)).
-  Flags lost in the relocation window (upstream [i#400](https://github.com/DynamoRIO/dynamorio/issues/400)), crashes under
-  the client with forced resets (likely upstream [i#4219](https://github.com/DynamoRIO/dynamorio/issues/4219), not tested), hangs under reset with code churn. Anything new that relocates a thread needs
-  `test/regstress.c`.
-- **DynamoRIO static re-attach loses AVX-512 state.** `api.static_prepop` fails in its second attach on AVX-512 CPUs only
-  (glibc's EVEX `strchrnul` returns a wrong position); 0 of 10 with glibc's AVX-512 routines disabled. Base fails too (debug 20 of 20,
-  release 0-5 of 20); the torn-exit fix's layout makes release fail every time. v3compat does not use static attach.
-- **DynamoRIO's debug suite is unusable on 9V45:** debug builds print `<Unknown processor cache size>`, failing 460 of 520
-  tests on base and fix alike.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
@@ -610,7 +591,33 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
   helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers
   understate helper cost 2-4x against Ivy Bridge; an Ivy
-  Bridge A/B needs access to such a host from the owner and is not required before a speed PR merges.
+  Bridge A/B can run on the cluster's `kube-worker-04` and is not required before a speed PR merges.
+
+## Later
+
+On the roadmap, not being worked on.
+
+- **Cache reset, fixed so it can be turned on** (owner, 2026-11-18). It stays off for now
+  ([ADR 0010](adr/0010-no-cache-reset.md)). Known: flags lost in the relocation window (upstream
+  [i#400](https://github.com/DynamoRIO/dynamorio/issues/400)), crashes under the client with forced resets (likely upstream
+  [i#4219](https://github.com/DynamoRIO/dynamorio/issues/4219), not tested), hangs under reset with code churn. Anything new
+  that relocates a thread needs `test/regstress.c`.
+
+## Won't fix
+
+Owner's decision, 2026-11-18: these do not affect v3compat's configuration. The evidence stays here.
+
+- **DynamoRIO alone, threads churning at exit** (no client, 1,000 threads) stalls the exit for a minute or more. v3compat
+  always has a client, which synchs first. 21 of 45 runs past 120 s on three EPYC 7763s; with `-synch_at_exit` 0 of 45 past
+  6.7 s **[measured]**. With no exit event DynamoRIO marks itself exited before it synchs, so new threads spin in thread
+  init on `thread_initexit_lock` against the exit's synch and about 1,000 exiting threads **[measured]**. Still there on
+  pin `af12842` (run 44109231119): 17 of 75 past 130 s, the rest 2.1-2.9 s, on Xeon 6975P-C and EPYC 9V74 **[measured]**.
+- **DynamoRIO static re-attach loses AVX-512 state;** v3compat does not use static attach. `api.static_prepop` fails in
+  its second attach on AVX-512 CPUs only (glibc's EVEX `strchrnul` returns a wrong position); 0 of 10 with glibc's AVX-512
+  routines disabled. Base fails too (debug 20 of 20, release 0-5 of 20); the torn-exit fix's layout makes release fail
+  every time.
+- **DynamoRIO's debug suite on EPYC 9V45:** debug builds print `<Unknown processor cache size>` and fail 460 of 520 tests
+  on base and fix alike. Use release there ("Known flakes").
 
 ## License
 
