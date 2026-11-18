@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+project(countclient C)
+find_package(DynamoRIO REQUIRED)
+add_library(count SHARED count.c)
+configure_DynamoRIO_client(count)
