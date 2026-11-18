@@ -5,8 +5,6 @@
 #   stress K N  the stress set kind K (duck, sig, regc, short) with N runs in verify mode, and N/10 without a cache
 #   srab N      -stable_reach alone against default, no cache, long duckdb runs
 #   diag        layouts and predicate misses of reads
-#   sigrace N   the signal tests alone under ctest -j4, N passes: plain, training, warm, verify
-#   ctestrace N whole ctest -j4 runs, the same four arms, counting failures at thread start
 #   xlsig N     regstress xlsig plain, warm and verify, in blocks of 10
 #   ctest       ctest plain, then training, then verify mode (status 88 on a mismatch fails a test)
 set -u
@@ -100,30 +98,6 @@ srab)
       one srab-$a varied V3COMPAT_DR_OPTS="$o"
     done
   done ;;
-sigrace)
-  # The signal tests alone, -j4 among themselves, N passes per arm interleaved: plain, training, warm, verify.
-  rm -rf /tmp/sgr; mkdir -p /tmp/sgr/c && chmod 1777 /tmp/sgr /tmp/sgr/c
-  V3COMPAT_CACHE=/tmp/sgr/c V3COMPAT_CACHE_WRITE=1 ctest --test-dir build -R 'regstress|vfork-sig' -j4 > /dev/null 2>&1
-  for i in $(seq $2); do for a in plain train warm verify; do
-    case $a in plain) e="V3COMPAT_CACHE=" ;; train) rm -rf /tmp/sgr/t; mkdir -p /tmp/sgr/t; e="V3COMPAT_CACHE=/tmp/sgr/t V3COMPAT_CACHE_WRITE=1" ;;
-      warm) e="V3COMPAT_CACHE=/tmp/sgr/c" ;; verify) e="V3COMPAT_CACHE=/tmp/sgr/c V3COMPAT_CACHE_VERIFY=1" ;; esac
-    env $e ctest --test-dir build -R 'regstress|vfork-sig' -j4 --output-on-failure > lab-out/sg-$a-$i.txt 2>&1
-    grep -F "***Failed" lab-out/sg-$a-$i.txt | sed -E "s/.*Test +#[0-9]+: ([^ ]+) .*/RESULT sigrace $a \1/"
-    echo "RESULT sigrace $a pass"
-  done; done ;;
-ctestrace)
-  # Whether the cache changes how often a ctest fails with DynamoRIO's signal at thread start: plain, training, warm
-  # and verify interleaved, each a whole ctest -j4 as in CI's cache job, N passes.
-  rm -rf /tmp/ctr; mkdir -p /tmp/ctr/c && chmod 1777 /tmp/ctr /tmp/ctr/c
-  V3COMPAT_CACHE=/tmp/ctr/c V3COMPAT_CACHE_WRITE=1 ctest --test-dir build -j4 > /dev/null 2>&1
-  for i in $(seq $2); do for a in plain train warm verify; do
-    case $a in plain) e="V3COMPAT_CACHE=" ;; train) rm -rf /tmp/ctr/t; mkdir -p /tmp/ctr/t; chmod 1777 /tmp/ctr/t; e="V3COMPAT_CACHE=/tmp/ctr/t V3COMPAT_CACHE_WRITE=1" ;;
-      warm) e="V3COMPAT_CACHE=/tmp/ctr/c" ;; verify) e="V3COMPAT_CACHE=/tmp/ctr/c V3COMPAT_CACHE_VERIFY=1" ;; esac
-    env $e ctest --test-dir build -j4 --output-on-failure > lab-out/ct-$a-$i.txt 2>&1
-    f=$(grep -F "***Failed" lab-out/ct-$a-$i.txt | grep -v "setuid" | sed -E 's/.*Test +#[0-9]+: ([^ ]+) .*/\1/' | tr '\n' ' ')
-    k=$(grep -c "native thread" lab-out/ct-$a-$i.txt)
-    echo "RESULT ctestrace $a pass $i failed [$f] native-thread-lines $k"
-  done; done ;;
 xlsig)
   # ctest's regstress-xlsig (SIGSTKFLT at emulated instructions), arms interleaved in blocks of 10
   rm -rf /tmp/pcx; mkdir -p /tmp/pcx

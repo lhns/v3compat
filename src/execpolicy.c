@@ -26,20 +26,10 @@ static file_t held = INVALID_FILE;
 /* The kernel itself runs an empty argv as one empty string (Linux 5.18); DR reads argv[0] unchecked. */
 static char *empty_vec[2] = {"", 0};
 
-static size_t slen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }
 static bool eq(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
     return *a == *b;
 }
-static char *put_int(char *p, long v) {
-    char t[24];
-    int n = 0;
-    if (v < 0) { *p++ = '-'; v = -v; }
-    do { t[n++] = (char)('0' + v % 10); v /= 10; } while (v);
-    while (n) *p++ = t[--n];
-    return p;
-}
-static char *put_str(char *p, const char *s) { while (*s) *p++ = *s++; return p; }
 #define fd_path v3c_fd_path
 
 /* The app's string at src, at most max-1 bytes; -1 if it faults, -2 if it does not fit. */
@@ -69,8 +59,8 @@ static bool is_self_exe(const char *p) {
         if (*d < '0' || *d > '9') return false;
         n = n * 10 + (*d - '0');
     }
-    q = put_str(task, "/proc/self/task/");
-    *put_int(q, n) = 0;
+    q = scpy(task, "/proc/self/task/");
+    *put_dec(q, n) = 0;
     return V3C_SC(V3C_SYS_stat, task, &st, 0) == 0;
 }
 
@@ -181,11 +171,11 @@ static bool pre_execveat(void *dc, tls_t *t) {
     }
     /* The kernel's name for it, which AT_EXECFN and a script's interpreter see. */
     if (!by_fd) {
-        put_str(t->path, path)[0] = 0;
+        scpy(t->path, path)[0] = 0;
     } else {
-        char *q = put_int(put_str(t->path, "/dev/fd/"), dirfd);
+        char *q = put_dec(scpy(t->path, "/dev/fd/"), dirfd);
         if ((size_t)n + (size_t)(q - t->path) + 2 > PATHBUF) return fail_with(dc, 36);
-        if (n > 0) q = put_str(put_str(q, "/"), path);
+        if (n > 0) q = scpy(scpy(q, "/"), path);
         *q = 0;
     }
     if (n == 0) {

@@ -7,7 +7,8 @@
  *   V3COMPAT_UNPROTECTED_GENCODE=1   -protect_mask 0: faster JIT startup, but DynamoRIO's generated code stays
  *                      writable, so a stray app write corrupts it instead of faulting
  *   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals at exit
- *   V3COMPAT_HELPERS_ONLY=1   no inline expansions, to compare them with the helpers
+ *   V3COMPAT_HELPERS_ONLY=1   every emulated form through its helper, to compare with the inline ones (movbe stores and
+ *                      gathers stay inline)
  *   V3COMPAT_AUDIT=1   print forms off the audited list at translation; run the native ones anyway
  *   V3COMPAT_CACHE=DIR translation cache, for tests and labs only (docs/translation-cache.md); with
  *                      V3COMPAT_CACHE_WRITE=1 a training run, V3COMPAT_CACHE_VERIFY=1|2, V3COMPAT_CACHE_STATS=1|2 */
@@ -35,19 +36,13 @@ void *memset(void *d, int c, unsigned long n) {
     return d;
 }
 
-static unsigned long slen(const char *s) { unsigned long n = 0; while (s[n]) n++; return n; }
-static int has_prefix(const char *s, const char *p) {
-    while (*p) if (*s++ != *p++) return 0;
-    return 1;
-}
 static int has_char(const char *s, const char *set) {
     for (; *s; s++) for (const char *c = set; *c; c++) if (*s == *c) return 1;
     return 0;
 }
-static char *scpy(char *d, const char *s) { while (*s) *d++ = *s++; return d; }
 
 static const char *envget(char **envp, const char *name) { /* name is "NAME=" */
-    for (; *envp; envp++) if (has_prefix(*envp, name)) return *envp + slen(name);
+    for (; *envp; envp++) if (starts(*envp, name)) return *envp + slen(name);
     return 0;
 }
 
@@ -215,20 +210,14 @@ __attribute__((used)) void run(long *sp) {
     envstr = grab(slen(prog) + 64);
     scpy(scpy(envstr, "DYNAMORIO_EXE_PATH="), prog);
     fdstr = grab(64);
-    {
-        char *q = scpy(fdstr, "DYNAMORIO_EXE_FD=");
-        long v = x->fd, div = 1;
-        while (v / div >= 10) div *= 10;
-        for (; div; div /= 10) *q++ = (char)('0' + v / div % 10);
-        *q = 0;
-    }
+    *put_dec(scpy(fdstr, "DYNAMORIO_EXE_FD="), x->fd) = 0;
 
     for (nenv = envp; *nenv; nenv++) ne++;
     nenv = grab(sizeof(char *) * (unsigned long)(ne + 5));
     for (k = 0, i = 0; i < ne; i++) {
         const char *v = envp[i];
-        if (has_prefix(v, "DYNAMORIO_EXE_PATH=") || has_prefix(v, "DYNAMORIO_EXE_FD=") ||
-            has_prefix(v, "DYNAMORIO_RUNUNDER=") || has_prefix(v, "DYNAMORIO_OPTIONS="))
+        if (starts(v, "DYNAMORIO_EXE_PATH=") || starts(v, "DYNAMORIO_EXE_FD=") ||
+            starts(v, "DYNAMORIO_RUNUNDER=") || starts(v, "DYNAMORIO_OPTIONS="))
             continue;
         nenv[k++] = envp[i];
     }

@@ -16,3 +16,6 @@ trampolines, the SIGILL handler, live relocation and the ELF metadata parser. No
 ## Consequences
 Semantic fixes keep their value. Helpers are slow, so hot instructions need new inline expansions. If Phase 0 fails,
 the preload remains as a narrow fallback for provable images.
+
+## Amendment 2026-11-18
+Phase 0 passed and the preload is removed from lhns/avxemu, so the fallback above no longer applies.

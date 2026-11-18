@@ -424,8 +424,10 @@ add_test(NAME allow-probe-isolation COMMAND sh "${_A}/isolation.sh" $<TARGET_FIL
 
 # The client's archive must stay plain AVX1 with no libc: the CI CPU would run anything.
 add_test(NAME helpers-guard COMMAND sh "${AVXEMU_SRC}/test/check-helpers-lib.sh" $<TARGET_FILE:avxemu_helpers>)
+# emulated-iforms.txt is regen.sh's output for the pinned avxemu's manifest: a pin bump must regenerate it.
+add_test(NAME emulated-iforms COMMAND sh -c "sh '${_A}/iforms.sh' '${AVXEMU_SRC}/test/spec/manifest.tsv' | diff - '${_A}/emulated-iforms.txt'")
 
-option(V3COMPAT_SEMANTIC "Add the opt-in semantic suite test (fetches lhns/avxemu)" OFF)
+option(V3COMPAT_SEMANTIC "Add the opt-in semantic suite test (avxemu's instruction-form cases)" OFF)
 if(V3COMPAT_SEMANTIC)
   add_subdirectory(sem)
 endif()

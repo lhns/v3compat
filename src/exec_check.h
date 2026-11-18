@@ -2,11 +2,10 @@
  * Freestanding (raw syscalls, no libc), so the static launcher and the libc-less client share it. */
 #ifndef V3COMPAT_EXEC_CHECK_H
 #define V3COMPAT_EXEC_CHECK_H
+#include "str.h"
 
 /* The launcher's status for a refusal; under the client the exec itself fails, with x->err (ADR 0009). */
-#ifndef V3COMPAT_REFUSED_EXEC
-#define V3COMPAT_REFUSED_EXEC 87 /* also in expand.h */
-#endif
+#define V3COMPAT_REFUSED_EXEC 87
 
 enum { V3C_MAXSHEBANG = 4, V3C_HDR = 256 };
 /* OK: fd is the file to run, open and close-on-exec, and nothing else may be run instead of it.
@@ -48,7 +47,7 @@ enum {
     V3C_O_CLOEXEC = 02000000, V3C_O_NONBLOCK = 04000, V3C_O_NOFOLLOW = 0400000, V3C_O_PATH = 010000000,
     V3C_X_OK = 1, V3C_R_OK = 4,
     V3C_ENOENT = 2, V3C_EACCES = 13, V3C_ENOEXEC = 8, V3C_ELOOP = 40, V3C_ENOSYS = 38, V3C_EPERM = 1,
-    V3C_EBADF = 9, V3C_EINVAL = 22
+    V3C_EINVAL = 22
 };
 
 struct v3c_stat { /* x86-64 kernel struct stat */
@@ -71,13 +70,7 @@ static inline long v3c_faccess(const char *p, int mode) {
 
 /* "/proc/self/fd/<fd>", which reaches that very file whatever has happened to its name. */
 static inline void v3c_fd_path(char *out, long fd) {
-    static const char pre[] = "/proc/self/fd/";
-    char t[24];
-    int n = 0;
-    for (const char *q = pre; *q;) *out++ = *q++;
-    do { t[n++] = (char)('0' + fd % 10); fd /= 10; } while (fd);
-    while (n) *out++ = t[--n];
-    *out = 0;
+    *put_dec(scpy(out, "/proc/self/fd/"), fd) = 0;
 }
 static inline long v3c_faccess_fd(long fd, int mode) {
     char p[40];
