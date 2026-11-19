@@ -517,6 +517,21 @@ unsandboxed. Evidence **[measured]**:
   failures, 20 reruns each, base against fix: `client.detach_test` 0 and 1, and 20 and 20 on another runner;
   `linux.signal_pre_syscall` 5 and 6; `tool.drcachesim.instr-only-trace` 4 and 4; `client.attach_test` 3 and 2.
 
+**`close_range` over a huge range, fixed in the fork** (branch `fix-close-range-scan`,
+[lhns/dynamorio#23](https://github.com/lhns/dynamorio/pull/23)). DynamoRIO's pre-handler looked up every fd of the
+range in its fd and signalfd tables **[source]**. CPython's `close_fds` (the `subprocess` default) ends the range at
+`INT_MAX`, glibc's `closefrom()` at `~0U`, so one `subprocess.run(["true"])` took about a minute, the vfork child busy
+in that loop while the parent waited in `vfork`. It now visits only DynamoRIO's own fds and the std fds. Evidence
+**[measured]**:
+- Python 3.12, Xeon 8573C (run 44505587469): `subprocess.run(["true"])` natively 0.01 s, DynamoRIO alone 66.9 s, under
+  the client 66.96 s; `close_fds=False`, `os.posix_spawn`, `os.fork` and C `posix_spawn` or `vfork` 0.02-0.11 s. strace:
+  67 s between the child's `close_range(3, 3)` and its `close_range(5, 2147483647)`, the child running in between.
+- Main's pin `5693e56` against the fix, interleaved, 3 reps, EPYC 7763 (run 44507982244): 37.7-41.1 s before,
+  0.11-0.15 s after, under the client and alone. `test/close_range.c` (ctest `close-range`) past 90 s in 6 of 6 before,
+  0.05-0.07 s after.
+- Fork suite against its base `6185c7a`, release and debug (run 44507970821): the same failures on both after reruns.
+- Stress set (run 44507982244): pending.
+
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
   without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
