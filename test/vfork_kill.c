@@ -1,7 +1,7 @@
 /* vfork_kill [runs] [zero]: a vfork child is SIGKILLed at a random point from its creation on, so some die before their
  * thread setup or while holding a lock of the translator's; the rest exec /bin/true. The parent must go on: set a
- * handler, create a thread, vfork again, exit. zero kills at once, mostly before the child's thread setup. Same output natively and
- * translated: "PASS" as the last line. */
+ * handler, create a thread, vfork again, exit. zero kills at once, mostly before the child's thread setup. Same output
+ * natively and translated: "PASS" as the last line. */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <pthread.h>

@@ -518,11 +518,13 @@ unsandboxed. Evidence **[measured]**:
   failures, 20 reruns each, base against fix: `client.detach_test` 0 and 1, and 20 and 20 on another runner;
   `linux.signal_pre_syscall` 5 and 6; `tool.drcachesim.instr-only-trace` 4 and 4; `client.attach_test` 3 and 2.
 
-**A vfork child SIGKILLed while DynamoRIO runs in it, made safe in the fork** (branch `fix-vfork-kill`, [lhns/dynamorio#22](https://github.com/lhns/dynamorio/pull/22)). A
-vfork child runs DynamoRIO's thread init and code in its parent's memory, and DynamoRIO's locks do not survive their
-owner. A child killed in its init still held `thread_initexit_lock`, and its parent then waited for it in
-`cleanup_after_vfork_child_death()`. A child killed after the lock but before its init finished left a half-built thread,
-whose exit paths the parent ran (`trace_abort`, `instrument_thread_exit_event`, a heap free of NULL: status 255) **[measured]**.
+**A vfork child SIGKILLed while DynamoRIO runs in it, made safe in the fork** (branch `fix-vfork-kill`,
+[lhns/dynamorio#22](https://github.com/lhns/dynamorio/pull/22), merged as `6185c7a`: the tree of `4a1ec1a`, which the
+runs below measured). A vfork child runs DynamoRIO's thread init and code in its parent's memory, and DynamoRIO's locks
+do not survive their owner. A child killed in its init still held `thread_initexit_lock`, and its parent then waited for
+it in `cleanup_after_vfork_child_death()`. A child killed after the lock but before its init finished left a half-built
+thread, whose exit paths the parent ran (`trace_abort`, `instrument_thread_exit_event`, a heap free of NULL: status 255)
+**[measured]**.
 Now:
 - The parent takes `thread_initexit_lock` for the child before the syscall. The child inits under it and gives it back, or
   the parent unlocks it if the child died first.
