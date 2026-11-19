@@ -124,7 +124,11 @@ int main(int argc, char **argv) {
     int secs = argc > 2 ? atoi(argv[2]) : 5;
     if (!strcmp(m, "rewrite") || !strcmp(m, "rewrite-same")) mode_span = 0;
     else if (!strcmp(m, "span") || !strcmp(m, "span-below")) mode_span = 1;
-    else { fprintf(stderr, "usage: flushed_xl8 rewrite|rewrite-same|span|span-below [SECONDS]\n"); return 2; }
+    else if (!strcmp(m, "module") || !strcmp(m, "module-same")) mode_module = 1;
+    else {
+        fprintf(stderr, "usage: flushed_xl8 rewrite|rewrite-same|span|span-below|module|module-same [SECONDS]\n");
+        return 2;
+    }
     control = strchr(m, '-') != NULL;
     buf = mmap(0, LEN, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
     bad_page = mmap(0, PG, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
