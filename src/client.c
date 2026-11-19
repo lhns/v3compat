@@ -21,7 +21,7 @@ static void add_op(int op) { __atomic_add_fetch(&op_counts[op], 1, __ATOMIC_RELA
 static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb, bool for_trace,
                                      bool translating) {
     /* Runs when translating too: DR maps PCs through the list, so it must come out the same. */
-    (void)tag; (void)for_trace; (void)translating;
+    (void)for_trace;
     int n[C_N] = {0};
     instr_t *next;
     for (instr_t *in = instrlist_first_app(bb); in != NULL; in = next) {
@@ -53,6 +53,13 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
         if (n[c] != 0)
             dr_insert_clean_call(drcontext, bb, instrlist_first(bb), (void *)add_count, false, 2,
                                  OPND_CREATE_INT32(c), OPND_CREATE_INT32(n[c]));
+    /* Code outside a module image can be rewritten after its block is flushed while a thread is still inside: a
+     * fault there would be translated against a rebuild from the new bytes (plan.md, "Flushed blocks whose code
+     * changed"). A translation stored at emit does not read app memory. */
+    if (translating) return DR_EMIT_DEFAULT;
+    module_data_t *m = dr_lookup_module(tag);
+    if (m == NULL) return DR_EMIT_STORE_TRANSLATIONS;
+    dr_free_module_data(m);
     return DR_EMIT_DEFAULT;
 }
 
