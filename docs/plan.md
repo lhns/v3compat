@@ -577,6 +577,25 @@ No change elsewhere **[measured]**:
   `tool.drcachesim.windows-simple` 7 and 5, `tool.drcachesim.builtin-prefetch-basic-counts` 3 and 1,
   `tool.drcacheoff.synch_attach` 0 and 4 (base failed it in its first pass).
 
+**`close_range` over a huge range, fixed in the fork** (branch `fix-close-range-scan`,
+[lhns/dynamorio#23](https://github.com/lhns/dynamorio/pull/23), pinned at its merge `2dad0c3`). DynamoRIO's pre-handler
+looked up every fd of the range in its fd and signalfd tables **[source]**. CPython's `close_fds` (the `subprocess` default) ends the range at
+`INT_MAX`, glibc's `closefrom()` at `~0U`, so one `subprocess.run(["true"])` took about a minute, the vfork child busy
+in that loop while the parent waited in `vfork`. It now visits only DynamoRIO's own fds and the std fds. Evidence
+**[measured]**:
+- Python 3.12, Xeon 8573C (run 44505587469): `subprocess.run(["true"])` natively 0.01 s, DynamoRIO alone 66.9 s, under
+  the client 66.96 s; `close_fds=False`, `os.posix_spawn`, `os.fork` and C `posix_spawn` or `vfork` 0.02-0.11 s. strace:
+  67 s between the child's `close_range(3, 3)` and its `close_range(5, 2147483647)`, the child running in between.
+- Main's pin `5693e56` against the fix, interleaved, 3 reps, EPYC 7763 (run 44507982244): 37.7-41.1 s before,
+  0.11-0.15 s after, under the client and alone. `test/close_range.c` (ctest `close-range`) past 90 s in 6 of 6 before,
+  0.05-0.07 s after.
+- Fork suite against its base `6185c7a`, release and debug (run 44507970821): the same failures on both after reruns
+  but `client.detach_test` on one debug runner, 20 of 20 failing on both when repeated.
+- Stress set (run 44507982244): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020
+  alone, short 0 of 4,500 (Xeon 6975P-C, EPYC 9V74 and 7763).
+The numbers above were measured on `3ae7f84`. The PR head `c047585` added an errno sign fix and a 32-bit range fix
+on top: v3compat ctests 303 of 303 on it (lab run 44538367127).
+
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
   without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
