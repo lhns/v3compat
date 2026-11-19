@@ -1,5 +1,6 @@
 /* null_call: a call through a NULL pointer faults at pc 0 with address 0, and the app's handler must see exactly that
  * (it is not a translation failure). Prints "ok" after several rounds. */
+#define _GNU_SOURCE
 #include <setjmp.h>
 #include <signal.h>
 #include <stdint.h>
