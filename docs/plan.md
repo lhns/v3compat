@@ -576,31 +576,6 @@ No change elsewhere **[measured]**:
   reruns. One-side failures over 20 reruns, base against fix: `client.attach_test` 2 and 6,
   `tool.drcachesim.windows-simple` 7 and 5, `tool.drcachesim.builtin-prefetch-basic-counts` 3 and 1,
   `tool.drcacheoff.synch_attach` 0 and 4 (base failed it in its first pass).
-**Flushed blocks whose code changed, fixed in the client with a fork fix** (branch `fix-xl8-flushed-stored`, fork
-branch `fix-xl8-stored-xl8`, [lhns/dynamorio#25](https://github.com/lhns/dynamorio/pull/25)). #21 left two cases where a fault in a flushed block is translated against a
-rebuild that does not match the emitted code, and the handler sees pc 0 **[measured]**: the block's code was rewritten
-after the flush (a JIT patching a method it retires), or its fall-through crosses into a page sandboxed since, where
-the rebuild stops. The client now returns `DR_EMIT_STORE_TRANSLATIONS` for blocks outside module images, so their
-translation is recorded at emit and never rebuilt from memory **[source]**. DynamoRIO's `-safe_translate_flushed`
-(record at flush time) deadlocks: the rebuild inside `vm_area_unlink_fragments()` takes the shared vmareas write lock
-it already holds (gdb, run 44450035455; debug build "deadlock on recursive mutex_lock", run 44449537159). Stored
-translations had their own bug, fixed in the fork: `recreate_app_state_from_info()` marked the instruction after a
-clean call as inside it and ignored its spill, so a rip-relative store mangled through `rax` right after a helper call
-resumed with DynamoRIO's address in `rax`. Evidence **[measured]**:
-- `test/flushed_xl8.c` (ctests `flushed-rewrite`, `flushed-span`): base 400 of 400 runs bad in each mode, the fix
-  0 of 400; 20 jobs on EPYC 7763, 9V45, 9V74, Xeon 8573C, 6973P-C and 6975P-C (run 44521030426). DynamoRIO alone fails
-  both too (run 44450035455): the fix is the client's.
-- The walk bug: `seq_rwx` helpers only, DR defaults, seeds 1, 5, 7, with stored translations: 3 of 3 runs differ from
-  native on each seed before the fork fix (run 44463418374), 0 after, inline and helpers only (run 44471420044). A
-  lab-only comparison of every stored translation of a live block against a rebuild: 0 mismatches in 117,074 over the
-  whole ctest with `-store_translations` (run 44471420044).
-- No change elsewhere: Bench's `arrays` with a safepoint every ms 0 of 400 on both; `flushed-fault` 0 of 1,000 on both
-  (run 44595406053); stress set 0 bad (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and
-  0 of 1,020 alone, short 0 of 4,500; runs 44521030426 and 44574749511); fork suite the same failures on both after
-  reruns (run 44518216908).
-- Cost, Xeon 6975P-C, 6 reps interleaved (run 44521030426): Java 13.61 to 14.18 s, `java -version` 1.45 to 1.53 s,
-  Node 3.54 to 3.60 s, duckdb compute 1.02 to 1.05 s, varied 6.65 to 6.67 s; peak RSS unchanged (run 44456279663).
-- Not covered: module code rewritten in place keeps the rebuild.
 
 **`close_range` over a huge range, fixed in the fork** (branch `fix-close-range-scan`,
 [lhns/dynamorio#23](https://github.com/lhns/dynamorio/pull/23), pinned at its merge `2dad0c3`). DynamoRIO's pre-handler
@@ -620,6 +595,33 @@ in that loop while the parent waited in `vfork`. It now visits only DynamoRIO's 
   alone, short 0 of 4,500 (Xeon 6975P-C, EPYC 9V74 and 7763).
 The numbers above were measured on `3ae7f84`. The PR head `c047585` added an errno sign fix and a 32-bit range fix
 on top: v3compat ctests 303 of 303 on it (lab run 44538367127).
+
+**Flushed blocks whose code changed, fixed in the client with a fork fix** (branch `fix-xl8-flushed-stored`, fork
+branch `fix-xl8-stored-xl8`, [lhns/dynamorio#25](https://github.com/lhns/dynamorio/pull/25)). The sandboxed-rebuild fix
+above (#21) left two cases where a fault in a flushed block is translated against a rebuild that does not match the
+emitted code, and the handler sees pc 0 **[measured]**: the block's code was rewritten after the flush (a JIT patching
+a method it retires), or its fall-through crosses into a page sandboxed since, where the rebuild stops. The client now
+returns `DR_EMIT_STORE_TRANSLATIONS` for blocks outside module images, so their translation is recorded at emit and
+never rebuilt from memory **[source]**. DynamoRIO's `-safe_translate_flushed` (record at flush time) deadlocks: the
+rebuild inside `vm_area_unlink_fragments()` takes the shared vmareas write lock it already holds (gdb, run
+44450035455; debug build "deadlock on recursive mutex_lock", run 44449537159). Stored translations had their own bug,
+fixed in the fork: `recreate_app_state_from_info()` marked the instruction after a clean call as inside it and ignored
+its spill, so a rip-relative store mangled through `rax` right after a helper call resumed with DynamoRIO's address in
+`rax`. Evidence **[measured]**:
+- `test/flushed_xl8.c` (ctests `flushed-rewrite`, `flushed-span`): base 400 of 400 runs bad in each mode, the fix
+  0 of 400; 20 jobs on EPYC 7763, 9V45, 9V74, Xeon 8573C, 6973P-C and 6975P-C (run 44521030426). DynamoRIO alone fails
+  both too (run 44450035455): the fix is the client's.
+- The walk bug: `seq_rwx` helpers only, DR defaults, seeds 1, 5, 7, with stored translations: 3 of 3 runs differ from
+  native on each seed before the fork fix (run 44463418374), 0 after, inline and helpers only (run 44471420044). A
+  lab-only comparison of every stored translation of a live block against a rebuild: 0 mismatches in 117,074 over the
+  whole ctest with `-store_translations` (run 44471420044).
+- No change elsewhere: Bench's `arrays` with a safepoint every ms 0 of 400 on both; `flushed-fault` 0 of 1,000 on both
+  (run 44595406053); stress set 0 bad (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and
+  0 of 1,020 alone, short 0 of 4,500; runs 44521030426 and 44574749511); fork suite the same failures on both after
+  reruns (run 44518216908).
+- Cost, Xeon 6975P-C, 6 reps interleaved (run 44521030426): Java 13.61 to 14.18 s, `java -version` 1.45 to 1.53 s,
+  Node 3.54 to 3.60 s, duckdb compute 1.02 to 1.05 s, varied 6.65 to 6.67 s; peak RSS unchanged (run 44456279663).
+- Not covered: module code rewritten in place keeps the rebuild.
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or

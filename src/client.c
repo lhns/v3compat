@@ -53,9 +53,9 @@ static dr_emit_flags_t event_app2app(void *drcontext, void *tag, instrlist_t *bb
         if (n[c] != 0)
             dr_insert_clean_call(drcontext, bb, instrlist_first(bb), (void *)add_count, false, 2,
                                  OPND_CREATE_INT32(c), OPND_CREATE_INT32(n[c]));
-    /* Code outside a module image can be rewritten after its block is flushed while a thread is still inside: a
-     * fault there would be translated against a rebuild from the new bytes (plan.md, "Flushed blocks whose code
-     * changed"). A translation stored at emit does not read app memory. */
+    /* Outside module images a block flushed while a thread is inside it can rebuild differently (code rewritten, or
+     * its next page sandboxed since), and a fault there gets a wrong pc (plan.md, "Flushed blocks whose code
+     * changed"). A translation stored at emit is never rebuilt. */
     if (translating) return DR_EMIT_DEFAULT;
     module_data_t *m = dr_lookup_module(tag);
     if (m == NULL) return DR_EMIT_STORE_TRANSLATIONS;
