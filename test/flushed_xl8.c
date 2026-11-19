@@ -8,7 +8,11 @@
  *   span     the block starts on page A (r-x) and falls through into page B (rwx), where it faults. The writer
  *            writes B and runs code there until B passes -ro2sandbox_threshold and comes back sandboxed: a rebuild
  *            from A then stops at the page boundary.
- *   rewrite-same, span-below  controls: the same bytes written back, or B written fewer times than the threshold.
+ *   module   as rewrite, in the executable's own text (a module image, where the client does not store translations
+ *            and the block is rebuilt): one page per round, between pages that stay r-x so that no page passes the
+ *            threshold. A rebuild that cannot translate the fault stops the process instead of resuming at pc 0.
+ *   rewrite-same, span-below, module-same  controls: the same bytes written back, or B written fewer times than the
+ *            threshold.
  * A round counts as checked when the writer finished before the store did. Prints "ok" and exits 0 when every fault
  * was at the right pc and some rounds were checked. */
 #define _GNU_SOURCE
@@ -24,7 +28,14 @@
 #include <ucontext.h>
 #include <unistd.h>
 
-enum { LEN = 128 << 20, POLL = 1 << 16, PG = 4096, SPAN_ROUNDS = 14, BELOW_ROUNDS = 3 };
+enum { LEN = 128 << 20, POLL = 1 << 16, PG = 4096, SPAN_ROUNDS = 14, BELOW_ROUNDS = 3, MOD_PAGES = 64 };
+
+/* module: MOD_PAGES copies of the rewrite block, each on its own page followed by a page never made writable. */
+__asm__(".pushsection .text.flushed_xl8_module,\"ax\",@progbits\n.balign 4096\nmodule_pages:\n.rept 64\n"
+        ".byte 0x48,0x83,0xc1,0x00,0x90,0x48,0x89,0xc8,0x48,0x89,0xf1,0xf3,0xaa\n"
+        ".rept 4\n.byte 0x48,0x83,0xc0,0x01\n.endr\n.byte 0x8b,0x02,0xc3\n"
+        ".balign 64,0xcc\n.byte 0xc3\n.balign 4096,0xcc\n.skip 4096,0xcc\n.endr\n.popsection");
+extern unsigned char module_pages[];
 
 typedef void (*block_fn)(unsigned char *buf, long len, void *bad, long v);
 
@@ -33,7 +44,7 @@ static unsigned char *volatile expect_pc;
 static unsigned char *code;   /* rewrite: the page; span: page B */
 static atomic_long go, done;
 static atomic_ulong faults;
-static int mode_span, control;
+static int mode_span, mode_module, control;
 
 static void on_segv(int sig, siginfo_t *si, void *ctx) {
     (void)sig;
@@ -63,6 +74,14 @@ static unsigned char *make_rewrite(void) {
     expect_pc = p;
     p = put(p, "\x8b\x02\xc3", 3);
     code[64] = 0xc3;
+    return code;
+}
+
+/* module: round R's page of module_pages, made writable; the body is make_rewrite's. */
+static unsigned char *make_module(long r) {
+    code = module_pages + (r - 1) * 2 * PG;
+    if (mprotect(code, PG, PROT_READ | PROT_WRITE | PROT_EXEC)) exit(2);
+    expect_pc = code + 29;
     return code;
 }
 
@@ -123,12 +142,12 @@ int main(int argc, char **argv) {
     long r = 0;
     do {
         r++;
-        block_fn f = (block_fn)(mode_span ? make_span() : make_rewrite());
+        block_fn f = (block_fn)(mode_module ? make_module(r) : mode_span ? make_span() : make_rewrite());
         atomic_store(&go, r);
         f(buf, LEN, bad_page, r % 255 + 1);
         while (atomic_load(&done) < r) {}
         clock_gettime(CLOCK_MONOTONIC, &t);
-    } while (t.tv_sec - t0.tv_sec < secs);
+    } while (t.tv_sec - t0.tv_sec < secs && !(mode_module && r == MOD_PAGES));
     atomic_store(&go, -1);
     pthread_join(w, 0);
     /* A late writer lets the block finish first, or a rewrite land before the block was built: no fault then. */
