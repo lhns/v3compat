@@ -1,6 +1,6 @@
 /* vfork_kill [runs] [zero]: a vfork child is SIGKILLed at a random point from its creation on, so some die before their
- * thread setup or while holding a lock of the translator's; the rest exec /bin/true. The parent must go on: create
- * a thread, vfork again, exit. zero kills at once, mostly before the child's thread setup. Same output natively and
+ * thread setup or while holding a lock of the translator's; the rest exec /bin/true. The parent must go on: set a
+ * handler, create a thread, vfork again, exit. zero kills at once, mostly before the child's thread setup. Same output natively and
  * translated: "PASS" as the last line. */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -86,6 +86,12 @@ int main(int argc, char **argv) {
     __atomic_store_n(&child_tid, -1, __ATOMIC_RELEASE);
     pthread_join(k, 0);
     printf("ok %d killed, %d exec'ed\n", by_kill, by_exec);
+
+    /* A handler change waits for children that have not copied the handlers yet: a dead one must not count. */
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = SIG_IGN;
+    if (sigaction(SIGUSR2, &sa, 0)) { printf("FAIL sigaction after the kills\n"); bad = 1; }
 
     if (pthread_create(&t, 0, nothing, 0) || pthread_join(t, 0)) { printf("FAIL thread after the kills\n"); bad = 1; }
     pid_t c = vfork();

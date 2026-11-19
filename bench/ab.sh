@@ -9,7 +9,7 @@ grep -m1 'model name' /proc/cpuinfo; nproc
 digest() { grep -vE '^(round|total|micro) ' "$1" | sed -E 's/[0-9]+\.[0-9]+ (s|ms)//g' | sha256sum | cut -c1-12; }
 one() { # rep cfg workload cmd...
   local r=$1 c=$2 w=$3; shift 3
-  /usr/bin/time -f '%e' -o /tmp/p-time timeout 900 "$@" >/tmp/p-out 2>/tmp/p-err; local rc=$?
+  /usr/bin/time -f '%e' -o /tmp/p-time timeout -k 10 900 "$@" >/tmp/p-out 2>/tmp/p-err; local rc=$?
   echo "RESULT $w $c rep=$r rc=$rc wall=$(tail -1 /tmp/p-time) digest=$(digest /tmp/p-out)"
   grep -E '^(round|total|micro) ' /tmp/p-out | sed "s/^/DETAIL $w $c rep=$r /"
   [ $rc != 0 ] && { echo "STDERR-HEAD $w $c rep=$r"; head -c 600 /tmp/p-err | head -8; }
