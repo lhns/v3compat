@@ -188,7 +188,8 @@ file-backed modules; a static hello is 0.02 s under the client, so startup is pe
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
-Statuses: 86 refused instruction, 87 the launcher refused the program, 125 launcher failure, 126 and 127 as in a shell;
+Statuses: 86 refused instruction, 87 the launcher refused the program, 89 a vfork child was killed holding a lock of
+DynamoRIO's (the fork, below), 125 launcher failure, 126 and 127 as in a shell;
 app statuses and signals pass through. An exec refused under the client fails with an errno and a message on stderr.
 
 Measured on Ivy Bridge under Docker's default seccomp, no ptrace, each child running `lzcnt` and checking DynamoRIO is mapped:
@@ -517,9 +518,68 @@ unsandboxed. Evidence **[measured]**:
   failures, 20 reruns each, base against fix: `client.detach_test` 0 and 1, and 20 and 20 on another runner;
   `linux.signal_pre_syscall` 5 and 6; `tool.drcachesim.instr-only-trace` 4 and 4; `client.attach_test` 3 and 2.
 
+**A vfork child SIGKILLed while DynamoRIO runs in it, made safe in the fork** (branch `fix-vfork-kill`,
+[lhns/dynamorio#22](https://github.com/lhns/dynamorio/pull/22), merged as `6185c7a`: the tree of `4a1ec1a`, which the
+runs below measured). A vfork child runs DynamoRIO's thread init and code in its parent's memory, and DynamoRIO's locks
+do not survive their owner. A child killed in its init still held `thread_initexit_lock`, and its parent then waited for
+it in `cleanup_after_vfork_child_death()`. A child killed after the lock but before its init finished left a half-built
+thread, whose exit paths the parent ran (`trace_abort`, `instrument_thread_exit_event`, a heap free of NULL: status 255)
+**[measured]**.
+Now:
+- The parent takes `thread_initexit_lock` for the child before the syscall. The child inits under it and gives it back, or
+  the parent unlocks it if the child died first.
+- A child killed before its init finished loses only its record; the rest is leaked.
+- While a child runs, the locks taken on its dstack are counted. If it died holding one, the parent prints
+  `<vfork child N was killed holding a DynamoRIO lock: ending the process>` and the process exits with status 89.
+  Such a lock stays held and its data may be half updated, so no code can run safely, DynamoRIO's exit included.
+- A vfork-like clone that fails, or a child killed before it copies the signal handlers, no longer leaves
+  `num_unstarted_children` raised. Stock DynamoRIO raises it for a clone without `CLONE_SIGHAND` and only the child drops
+  it, so the parent's next `sigaction()` and its thread exit spun on it forever **[measured]**. Parent and child now share
+  a claim on it, as on the uninitialized-thread count.
+
+What a dead child held, from a lab-only ledger of its locks (runs 44298025874, 44301006173) **[measured]**:
+- Most children die before their thread setup and hold nothing.
+- Of 109 children that died in their thread init with the fix, 55 held nothing else. The others held `global_alloc_lock`,
+  `heap_unit_lock` or the vm-areas lock, in `heap_create_unit()` and the global heap allocations of the dcontext and the
+  thread record. Removing those holds means building the child's thread state before the clone: not done.
+
+`test/vfork_kill.c` is now the ctest `vfork-kill` (`test/vfork_kill.sh`); after the kills it also sets a handler. It
+passes on PASS or the status-89 ending at 50 kills, and one of five 3-kill runs must PASS. Base `5693e56` against the fix
+`4a1ec1a`, interleaved (run 44454291109) **[measured]**:
+- 300 kills a run, 24 runs an arm, Xeon 6975P-C: at random points base fails 24 of 24 under the client (17 hangs,
+  7 crashes in `common_heap_free()`, status 255) and 24 of 24 on DynamoRIO alone (hangs); at once 21 and 20 of 24. The fix
+  hangs or crashes 0 of 96. It ends with status 89 in 23 and 24 of 24 at random points (client, DynamoRIO alone) and in
+  11 and 12 at once; the rest PASS.
+- 5 kills, 36 runs an arm, Xeon 8573C and 6975P-C: base fails 15 and 13 of 36 at random points (client, DynamoRIO
+  alone), 4 and 8 at once. The fix fails 0 of 144, ending with status 89 in 5, 7, 2 and 1.
+- The ctest's script, 20 runs each: base 16 of 20 fail, the fix 0 of 20.
+- Natively 0 bad in each.
+
+`test/vfork_fail.c` is the ctest `vfork-fail`: vfork-like syscalls that fail (`clone` with `CLONE_THREAD` and no
+`CLONE_SIGHAND`, `clone3` with a bad exit signal, `vfork` at `RLIMIT_NPROC` 0), each followed by a thread and a vfork,
+100 times. Base hangs in its first `sigaction()`: 7 of 7 under the client and 7 of 7 on DynamoRIO alone (runs 44449463519,
+44452094924, 44454291109); `85bf692` too, 2 of 2 each. The fix: 0 of 105 under the client and 0 of 105 on DynamoRIO alone,
+Xeon 6975P-C and EPYC 7763 (runs 44452094924, 44454291109). Natively 0 of 7 bad **[measured]**.
+
+Speed: `bench/ab.sh 10`, base against the fix, interleaved, on Xeon 6975P-C and three EPYC 9V74 (run 44454291109).
+Every workload's median is within 1% on each runner (`java -version` within 9%, either way), with outputs identical to
+native: the lock counting costs nothing measurable **[measured]**.
+
+No change elsewhere **[measured]**:
+- `vfork_exit_dyn 20` under the client on EPYC 7763, base against `85bf692`: 0 and 0 of 2,500 (runs 44325044680,
+  44356176489, 44373592856). `sigchld_exit` with fork children 1 and 0 of 255, with vfork children 0 and 0 of 255. Not
+  rerun on `4a1ec1a`: no EPYC 7763 came up.
+- The stress set on `4a1ec1a` (run 44454291109): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the
+  client and 0 of 1,020 on DynamoRIO alone, short 0 of 4,500.
+- The vfork, sigchld, clone3 and thread ctests all pass (47 of 47).
+- Fork suite against its base, release and debug, two runners each (run 44452639132): the same failures on both after
+  reruns. One-side failures over 20 reruns, base against fix: `client.attach_test` 2 and 6,
+  `tool.drcachesim.windows-simple` 7 and 5, `tool.drcachesim.builtin-prefetch-basic-counts` 3 and 1,
+  `tool.drcacheoff.synch_attach` 0 and 4 (base failed it in its first pass).
+
 **`close_range` over a huge range, fixed in the fork** (branch `fix-close-range-scan`,
-[lhns/dynamorio#23](https://github.com/lhns/dynamorio/pull/23)). DynamoRIO's pre-handler looked up every fd of the
-range in its fd and signalfd tables **[source]**. CPython's `close_fds` (the `subprocess` default) ends the range at
+[lhns/dynamorio#23](https://github.com/lhns/dynamorio/pull/23), pinned at its merge `2dad0c3`). DynamoRIO's pre-handler
+looked up every fd of the range in its fd and signalfd tables **[source]**. CPython's `close_fds` (the `subprocess` default) ends the range at
 `INT_MAX`, glibc's `closefrom()` at `~0U`, so one `subprocess.run(["true"])` took about a minute, the vfork child busy
 in that loop while the parent waited in `vfork`. It now visits only DynamoRIO's own fds and the std fds. Evidence
 **[measured]**:
@@ -533,6 +593,8 @@ in that loop while the parent waited in `vfork`. It now visits only DynamoRIO's 
   but `client.detach_test` on one debug runner, 20 of 20 failing on both when repeated.
 - Stress set (run 44507982244): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020
   alone, short 0 of 4,500 (Xeon 6975P-C, EPYC 9V74 and 7763).
+The numbers above were measured on `3ae7f84`. The PR head `c047585` added an errno sign fix and a 32-bit range fix
+on top: v3compat ctests 303 of 303 on it (lab run 44538367127).
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
@@ -586,15 +648,11 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 
 - **Whole-process time.** 5.9-7.4 s for the compute query on Ivy Bridge until Phase 3. The mixed workload is about 11x on
   AMD (1.67x with no client) and needs more forms inline.
-- **A vfork child SIGKILLed while DynamoRIO runs in it** hangs or crashes its parent. `test/vfork_kill.c` (lab only) kills
-  300 children a run **[measured]**. At random points from their creation on, 10 runs each: under the client 10 of 10 bad
-  on base (8 hangs, 2 crashes) and 10 of 10 on the first fix commit (9, 1); on DynamoRIO alone 10 of 10 hang on both. At
-  once, on the final commit: 8 of 10 under the client (7, 1), 10 of 10 on DynamoRIO alone. Native 0 of 10 in each. The hung
-  parent waits in `cleanup_after_vfork_child_death()` for `thread_initexit_lock` **[measured]**, which the dead child held
-  through its thread init; DynamoRIO's locks do not survive their owner, so fixing it means robust locks **[source]**. The
-  crashes are in `common_heap_free()` while the parent cleans up the dead child, likely its half-built thread state
-  **[estimate]**. A child dying of a signal otherwise no longer hangs the parent (`test/vfork_sig.c`): 9 of 9 before,
-  0 of 300 after, at most 1% (95%) **[measured]**.
+- **A vfork child SIGKILLed holding a DynamoRIO lock ends the process** with status 89 instead of letting it run on
+  (fork entry above). It no longer hangs or crashes. Under the client most runs of `vfork_kill` with 300 kills at random
+  points end this way (23 of 24); at 5 kills 5 of 36 **[measured]**. The children die in the heap and vm-areas locks of their thread
+  init and of building blocks. Letting the parent run on needs the child's thread state built before the clone, or robust
+  locks. Not counted, so not caught: a child killed in its signal handler, or in DynamoRIO's exit path.
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
