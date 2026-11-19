@@ -530,7 +530,8 @@ in that loop while the parent waited in `vfork`. It now visits only DynamoRIO's 
   0.11-0.15 s after, under the client and alone. `test/close_range.c` (ctest `close-range`) past 90 s in 6 of 6 before,
   0.05-0.07 s after.
 - Fork suite against its base `6185c7a`, release and debug (run 44507970821): the same failures on both after reruns.
-- Stress set (run 44507982244): pending.
+- Stress set (run 44507982244): duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020
+  alone, short 0 of 4,500 (Xeon 6975P-C, EPYC 9V74 and 7763).
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
