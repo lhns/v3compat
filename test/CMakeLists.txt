@@ -311,6 +311,12 @@ foreach(m fork vfork)
 endforeach()
 v3test(sigchld-exit-native stdout-has PASS exit 0 -- $<TARGET_FILE:sigchld_exit> 300)
 
+# close_range up to INT_MAX or ~0U (CPython's close_fds, closefrom()): DynamoRIO visited every fd in the range.
+add_executable(close_range close_range.c)
+v3test(close-range stdout-has "PASS exec" exit 0 -- ${RUN} -- $<TARGET_FILE:close_range>)
+set_tests_properties(close-range PROPERTIES TIMEOUT 30)
+v3test(close-range-native stdout-has "PASS exec" exit 0 -- $<TARGET_FILE:close_range>)
+
 add_executable(swapper swapper.c)
 add_test(NAME exec-identity COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/exec_identity.sh" ${INST}/bin/v3compat-run ${B})
 add_test(NAME launcher-failures COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/launcher.sh" ${INST} $<TARGET_FILE:hello_dyn> ${B})
