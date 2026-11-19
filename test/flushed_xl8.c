@@ -80,7 +80,7 @@ static unsigned char *make_rewrite(void) {
 /* module: round R's page of module_pages, made writable; the body is make_rewrite's. */
 static unsigned char *make_module(long r) {
     code = module_pages + (r - 1) * 2 * PG;
-    if (mprotect(code, PG, PROT_READ | PROT_WRITE | PROT_EXEC)) exit(2);
+    if (mprotect(code, PG, PROT_READ | PROT_WRITE | PROT_EXEC)) { perror("mprotect"); exit(2); }
     expect_pc = code + 29;
     return code;
 }
