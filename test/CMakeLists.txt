@@ -264,8 +264,7 @@ foreach(k dyn static spie)
 endforeach()
 v3test(vfork-sig-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_sig_static>)
 
-# A process ending while a thread waits in vfork must not wait for the child. (vfork_kill, a child killed at any
-# point, is lab only: a child killed holding a DynamoRIO lock hangs its parent, docs/plan.md.)
+# A process ending while a thread waits in vfork must not wait for the child.
 foreach(k dyn static spie)
   v3test(vfork-exit-${k} stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:vfork_exit_${k}> 3)
   set_tests_properties(vfork-exit-${k} PROPERTIES TIMEOUT 300)
@@ -273,6 +272,16 @@ endforeach()
 v3test(vfork-exit-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_exit_static> 3)
 add_test(NAME vfork-exit-load COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/vfork_exit_load.sh" ${RUN} $<TARGET_FILE:vfork_exit_dyn> 60)
 set_tests_properties(vfork-exit-load PROPERTIES TIMEOUT 200)
+# vfork children SIGKILLed at any point, in their thread init too: the parent goes on, or ends cleanly if one
+# died holding a DynamoRIO lock, never hangs or crashes.
+add_test(NAME vfork-kill COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/vfork_kill.sh" ${RUN} $<TARGET_FILE:vfork_kill_dyn> 50)
+set_tests_properties(vfork-kill PROPERTIES TIMEOUT 60)
+# vfork-like syscalls that fail: the lock DynamoRIO takes for a vfork child must be given back without one.
+add_executable(vfork_fail vfork_fail.c)
+target_link_libraries(vfork_fail PRIVATE pthread)
+v3test(vfork-fail stdout-has PASS exit 0 -- ${RUN} -- $<TARGET_FILE:vfork_fail>)
+v3test(vfork-fail-native stdout-has PASS exit 0 -- $<TARGET_FILE:vfork_fail>)
+set_tests_properties(vfork-fail vfork-fail-native PROPERTIES TIMEOUT 60)
 
 # clone3 with CLONE_CLEAR_SIGHAND, as glibc's posix_spawn uses it; the native run shows the test's expectations hold.
 foreach(k dyn static spie)
