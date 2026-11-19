@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     int runs = argc > 1 ? atoi(argv[1]) : 300, zero = argc > 2 && !strcmp(argv[2], "zero"), by_kill = 0, by_exec = 0, bad = 0, st;
     pthread_t k, t;
     if (pthread_create(&k, 0, killer, 0)) return 2;
-    srand(1);
+    srand(getpid()); /* vfork_kill.sh retries a run: each must draw new delays. */
     for (int i = 0; i < runs; i++) {
         /* Most kills land in the first few tens of microseconds. */
         delay = zero ? 0 : rand() % 4 ? rand() % 2000 : rand() % 200000;
