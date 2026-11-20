@@ -3,7 +3,7 @@
 . lab/loop.sh
 grep -m1 "model name" /proc/cpuinfo
 RUN="build/inst/bin/v3compat-run --"
-DRRUN="$(ls -d ~/.cache/v3compat/dr-*/)bin64/drrun"
+DRRUN="$HOME/.cache/v3compat/dr-$(sed -n 's/^set(V3COMPAT_DR_COMMIT \([0-9a-f]*\))/\1/p' cmake/FetchDynamoRIO.cmake)/bin64/drrun"
 RS=build/test/regstress
 mkdir -p lab-out/core; sudo sysctl -q kernel.core_pattern="$PWD/lab-out/core/core.%p"; ulimit -c unlimited
 case "$1" in

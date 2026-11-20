@@ -238,6 +238,13 @@ add_executable(flushed_fault flushed_fault.c)
 target_link_options(flushed_fault PRIVATE -pthread)
 v3test(flushed-fault stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_fault> 10)
 v3test(flushed-fault-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_fault> 2)
+# A fault in a flushed block whose code was rewritten, or whose next page switched to sandboxing, since it was built.
+add_executable(flushed_xl8 flushed_xl8.c)
+target_link_options(flushed_xl8 PRIVATE -pthread)
+v3test(flushed-rewrite stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_xl8> rewrite 5)
+v3test(flushed-span stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_xl8> span 5)
+v3test(flushed-rewrite-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_xl8> rewrite 1)
+v3test(flushed-span-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_xl8> span 1)
 # Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
 add_executable(jitgrowth jitgrowth.c)
 target_link_options(jitgrowth PRIVATE -pthread)
