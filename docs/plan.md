@@ -597,9 +597,10 @@ The numbers above were measured on `3ae7f84`. The PR head `c047585` added an err
 on top: v3compat ctests 303 of 303 on it (lab run 44538367127).
 
 **Flushed blocks whose code changed, fixed in the client with a fork fix** (branch `fix-xl8-flushed-stored`, fork
-branch `fix-xl8-stored-xl8`, [lhns/dynamorio#25](https://github.com/lhns/dynamorio/pull/25)). The sandboxed-rebuild fix
-above (#21) left two cases where a fault in a flushed block is translated against a rebuild that does not match the
-emitted code, and the handler sees pc 0 **[measured]**: the block's code was rewritten after the flush (a JIT patching
+branch `fix-xl8-stored-xl8`, [lhns/dynamorio#25](https://github.com/lhns/dynamorio/pull/25), merged as `e240b86`;
+pinned at `6f2265b`, which also has the self-write fix below and #26). The sandboxed-rebuild fix above (#21) left two
+cases where a fault in a flushed block is translated against a rebuild that does not match the emitted code, and the
+handler sees pc 0 **[measured]**: the block's code was rewritten after the flush (a JIT patching
 a method it retires), or its fall-through crosses into a page sandboxed since, where the rebuild stops. The client now
 returns `DR_EMIT_STORE_TRANSLATIONS` for blocks outside module images, so their translation is recorded at emit and
 never rebuilt from memory **[source]**. DynamoRIO's `-safe_translate_flushed` (record at flush time) deadlocks: the
@@ -622,6 +623,15 @@ its spill, so a rip-relative store mangled through `rax` right after a helper ca
 - Cost, Xeon 6975P-C, 6 reps interleaved (run 44521030426): Java 13.61 to 14.18 s, `java -version` 1.45 to 1.53 s,
   Node 3.54 to 3.60 s, duckdb compute 1.02 to 1.05 s, varied 6.65 to 6.67 s; peak RSS unchanged (run 44456279663).
 - Not covered: module code rewritten in place keeps the rebuild.
+
+**A self-written fragment deleted under a concurrent flush, fixed in the fork** (branch `fix-selfwrite-flush`,
+[lhns/dynamorio#27](https://github.com/lhns/dynamorio/pull/27), merged as `5b38e72`). `fragment_self_write()` deleted
+its private sandboxed fragment while nolinking, so a flusher could unlink the same fragment at once; it now deletes as
+couldbelinking **[source]**. Debug `trace_flush`, link-state asserts (`link.c:1419`, `link.c:1564`): 15 of 1,800 runs
+before on every client, with or without stored translations (run 44623991940); unfixed against fixed in the same jobs
+6 of 600 and 0 of 600 (run 44631011188) **[measured]**. On the fix: stress set 0 bad, ctest and the cache CI script
+pass (runs 44640659456, 44667210784), fork suite the same failures on both after reruns (run 44640616063). Not shown:
+that this race is the rare release crash in `common_heap_alloc()` (Open items).
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
@@ -687,8 +697,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
   crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **A `flushed-fault` crash with stored translations, not attributed:** 2 of about 2,600 runs on the fix crashed in
-  `common_heap_alloc()` popping a free list (same pc both times; EPYC 9V45 and 9V74, run 44521030426), 0 of about 2,500
+- **A `flushed-fault` crash in `common_heap_alloc()`, not attributed** (maybe the self-write race fixed in
+  lhns/dynamorio#27, not shown): 2 of about 2,600 runs with stored translations crashed there popping a free list (same pc both times; EPYC 9V45 and 9V74, run 44521030426), 0 of about 2,500
   on base. A rerun of 1,000 a side found none on either (run 44595406053), nor did 60 on a debug build (run 44591850156).
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
   only, run 44463418374): the rebuild of the written block recovers the pc but not the state. With the stored
