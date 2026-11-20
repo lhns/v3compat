@@ -698,8 +698,10 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
   crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
 - **A `flushed-fault` crash in `common_heap_alloc()`, not attributed** (maybe the self-write race fixed in
-  lhns/dynamorio#27, not shown): 2 of about 2,600 runs with stored translations crashed there popping a free list (same pc both times; EPYC 9V45 and 9V74, run 44521030426), 0 of about 2,500
-  on base. A rerun of 1,000 a side found none on either (run 44595406053), nor did 60 on a debug build (run 44591850156).
+  lhns/dynamorio#27, not shown): 2 of about 2,600 runs with stored translations crashed there popping a free list
+  (same pc both times; EPYC 9V45 and 9V74, run 44521030426), 0 of about 2,500 on base. A rerun of 1,000 a side found
+  none on either (run 44595406053), nor did 60 on a debug build (run 44591850156). One more in CI cache-verify on
+  `a99c8c3` (run 44601640507).
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
   only, run 44463418374): the rebuild of the written block recovers the pc but not the state. With the stored
   translation the digest is right. Reproducer: `sh test/seq_rwx.sh build/inst/bin/v3compat-run build/test/seq_rwx 10 300`.
