@@ -245,6 +245,15 @@ v3test(flushed-rewrite stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_x
 v3test(flushed-span stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_xl8> span 5)
 v3test(flushed-rewrite-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_xl8> rewrite 1)
 v3test(flushed-span-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_xl8> span 1)
+# Module code rewritten in place keeps the rebuild: a fault it cannot translate stops the process (DynamoRIO's status 40)
+# instead of reaching the handler at pc 0. The control writes the same bytes back, which the rebuild translates.
+v3test(flushed-module stdout-has "deleted fragment" exit 40 -- sh -c "exec ${RUN} -- $<TARGET_FILE:flushed_xl8> module 5 2>&1")
+v3test(flushed-module-same stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_xl8> module-same 5)
+v3test(flushed-module-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_xl8> module 1)
+# A call through NULL faults at pc 0 natively too: the handler must still get it.
+add_executable(null_call null_call.c)
+v3test(null-call stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:null_call>)
+v3test(null-call-native stdout-has ok exit 0 -- $<TARGET_FILE:null_call>)
 # Code generated and unmapped must be freed while another thread waits; the control has DynamoRIO's default back.
 add_executable(jitgrowth jitgrowth.c)
 target_link_options(jitgrowth PRIVATE -pthread)
