@@ -65,9 +65,9 @@ done
 # 3. duckdb compute cold, whole-process; less select 42 of the same round; and warm.
 for r in $(seq 10); do
   [ "$(left)" -gt 600 ] || break
-  wall compute.cold $RUN "${QC[@]}"; c=$(tail -1 $RAW | cut -d' ' -f2)
-  wall select42.cold.pair $RUN "${Q42[@]}"; s=$(tail -1 $RAW | cut -d' ' -f2)
-  rec "compute.less_startup $(echo "$c - $s" | bc) rc=0"
+  wall compute.cold $RUN "${QC[@]}"; read -r _ c rc1 < <(tail -1 $RAW)
+  wall select42.cold.pair $RUN "${Q42[@]}"; read -r _ s rc2 < <(tail -1 $RAW)
+  [ "$rc1 $rc2" = "rc=0 rc=0" ] && rec "compute.less_startup $(echo "$c - $s" | bc) rc=0"
   V3COMPAT_CACHE=$C wall compute.warm $RUN "${QC[@]}"
 done
 
@@ -90,8 +90,11 @@ for line in open(raw):
     p = line.split()
     if len(p) >= 2 and not line.startswith(("ladder", "signal.fail")):
         try:
-            vals.setdefault(p[0], []).append(float(p[1]))
-            if len(p) > 2 and p[2] != "rc=0": other.append(line.strip())
+            v = float(p[1])
+            if len(p) > 2 and p[2] != "rc=0":  # a failed run's time is not a measurement
+                other.append(line.strip())
+            else:
+                vals.setdefault(p[0], []).append(v)
             continue
         except ValueError:
             pass
