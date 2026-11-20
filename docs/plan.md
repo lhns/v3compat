@@ -638,8 +638,7 @@ Evidence **[measured]**:
   with status 40 and the message, both arms (run 44623652835). `module` natively and `module-same` under the client
   and alone pass 60 of 60 on both pins.
 - Unchanged, 60 of 60 on both pins: `null_call` (ctests `null-call`, `null-call-native`) under the client and alone,
-  `flushed_xl8 rewrite`, `rewrite-same` and `span` under the client; `flushed-fault` 60 of 60 under the client and
-  alone, no refusal.
+  `flushed_xl8 rewrite` and `span` under the client; `flushed-fault` 60 of 60 under the client and alone, no refusal.
 - No refusal elsewhere: Bench's `arrays` with a safepoint every ms 0 of 200 bad under the client and 0 of 200 alone
   (run 44623652835); javac 0 of 8 under the client, an empty client and alone; stress set 0 bad and no refusal
   (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone, short 0 of 4,500;
