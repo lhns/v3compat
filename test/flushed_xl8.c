@@ -28,10 +28,14 @@
 #include <ucontext.h>
 #include <unistd.h>
 
-enum { LEN = 128 << 20, POLL = 1 << 16, PG = 4096, SPAN_ROUNDS = 14, BELOW_ROUNDS = 3, MOD_PAGES = 64 };
+enum { LEN = 128 << 20, POLL = 1 << 16, PG = 4096, SPAN_ROUNDS = 14, BELOW_ROUNDS = 3 };
+#define MOD_PAGES 64
+#define STR_(x) #x
+#define STR(x) STR_(x)
 
 /* module: MOD_PAGES copies of the rewrite block, each on its own page followed by a page never made writable. */
-__asm__(".pushsection .text.flushed_xl8_module,\"ax\",@progbits\n.balign 4096\nmodule_pages:\n.rept 64\n"
+__asm__(".pushsection .text.flushed_xl8_module,\"ax\",@progbits\n.balign 4096\nmodule_pages:\n"
+        ".rept " STR(MOD_PAGES) "\n"
         ".byte 0x48,0x83,0xc1,0x00,0x90,0x48,0x89,0xc8,0x48,0x89,0xf1,0xf3,0xaa\n"
         ".rept 4\n.byte 0x48,0x83,0xc0,0x01\n.endr\n.byte 0x8b,0x02,0xc3\n"
         ".balign 64,0xcc\n.byte 0xc3\n.balign 4096,0xcc\n.skip 4096,0xcc\n.endr\n.popsection");
