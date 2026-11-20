@@ -655,6 +655,14 @@ before on every client, with or without stored translations (run 44623991940); u
 pass (runs 44640659456, 44667210784), fork suite the same failures on both after reruns (run 44640616063). Not shown:
 that this race is the rare release crash in `common_heap_alloc()` (Open items).
 
+**The translation cache on a debug build, fixed in the fork** (branch `pcache-options-lock`,
+[lhns/dynamorio#28](https://github.com/lhns/dynamorio/pull/28), merged as `cc4fdfd`, the pin). Debug only, release
+unchanged **[source]**: `-pcache_dir` was read without `options_lock` (every run with the cache stopped at
+`pcache.c:484`), and a training run never freed its entries (debug's leak check at exit). The option is now read under
+the lock, and the entries are freed at exit in debug builds. Debug builds, `2dad0c3` against the fix, five programs
+each trained then verified, 20 rounds: 200 of 200 runs stopped before, 0 of 200 bad after; release ctest and the cache
+CI script pass on the fix (run 44705364504) **[measured]**.
+
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
   without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
