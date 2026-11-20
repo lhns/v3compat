@@ -1,11 +1,12 @@
 #!/bin/bash
-# startup.sh REPS: where startup goes (translation cache design). A ladder native / DynamoRIO alone / empty client /
-# the client / the client without traces, interleaved per rep; then block counts and untimed perf profiles.
+# startup.sh REPS [WORKLOADS]: where startup goes (translation cache design). A ladder native / DynamoRIO alone /
+# empty client / the client / the client without traces, interleaved per rep; then block counts and untimed perf
+# profiles.
 set -u
 cd "$(dirname "$0")/.." || exit 1  # the repo root, where build/ and ./duckdb are
 REPS=${1:-10}
 grep -m1 'model name' /proc/cpuinfo; nproc
-DR=$(ls -d ~/.cache/v3compat/dr-*[0-9a-f]/ | head -1)
+DR=$HOME/.cache/v3compat/dr-$(sed -n 's/^set(V3COMPAT_DR_COMMIT \([0-9a-f]*\))/\1/p' cmake/FetchDynamoRIO.cmake)/
 for c in nullclient countclient; do
   cmake -S lab/$c -B /tmp/$c-b -DDynamoRIO_DIR=${DR}cmake >/dev/null && cmake --build /tmp/$c-b >/dev/null || exit 1
 done
@@ -18,21 +19,22 @@ declare -A W=([hello-static]="build/test/hello_static" [hello-dyn]="build/test/h
 declare -A C=([native]="" [dr]="${DR}bin64/drrun $DRO --" [null]="${DR}bin64/drrun $DRO -c /tmp/nullclient-b/libnull.so --"
               [client]="$RUN --" [client-nt]="env V3COMPAT_DR_OPTS=-disable_traces $RUN --"
               [dr-nt]="${DR}bin64/drrun $DRO -disable_traces --" [null-nt]="${DR}bin64/drrun $DRO -disable_traces -c /tmp/nullclient-b/libnull.so --")
-order="hello-static hello-dyn duck42 duckcomp node0"
+order=${2:-"hello-static hello-dyn duck42 duckcomp node0"}
 for r in $(seq $REPS); do
   for w in $order; do for c in native dr dr-nt null null-nt client client-nt; do
-    eval "/usr/bin/time -f '%e %U %S %F %R' -o /tmp/t timeout 300 ${C[$c]} ${W[$w]}" >/dev/null 2>/tmp/e; rc=$?
+    eval "/usr/bin/time -f '%e %U %S %F %R' -o /tmp/t timeout -k 10 300 ${C[$c]} ${W[$w]}" >/dev/null 2>/tmp/e; rc=$?
     echo "RESULT $w $c rep=$r rc=$rc wall,user,sys,majflt,minflt=$(tail -1 /tmp/t)"
   done; done
 done
 # Counts (untimed): blocks built in file-backed modules against other memory, traces.
 for w in $order; do
-  eval "${DR}bin64/drrun $DRO -c /tmp/countclient-b/libcount.so -- ${W[$w]}" >/dev/null 2>/tmp/e
+  eval "timeout -k 10 300 ${DR}bin64/drrun $DRO -c /tmp/countclient-b/libcount.so -- ${W[$w]}" >/dev/null 2>/tmp/e
   echo "RESULT count $w $(grep COUNT /tmp/e)"
-  eval "${DR}bin64/drrun $DRO -disable_traces -c /tmp/countclient-b/libcount.so -- ${W[$w]}" >/dev/null 2>/tmp/e
+  eval "timeout -k 10 300 ${DR}bin64/drrun $DRO -disable_traces -c /tmp/countclient-b/libcount.so -- ${W[$w]}" >/dev/null 2>/tmp/e
   echo "RESULT count-nt $w $(grep COUNT /tmp/e)"
 done
-# Profiles (untimed).
+# Profiles (untimed); PROFILE=0 skips them (no perf or sudo, as in a pod).
+[ "${PROFILE:-1}" = 0 ] && exit 0
 sudo apt-get install -y -qq linux-tools-common linux-tools-$(uname -r) >/dev/null 2>&1 || sudo apt-get install -y -qq linux-tools-generic >/dev/null 2>&1
 sudo sysctl -q kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
 PERF=$(ls /usr/lib/linux-tools/*/perf 2>/dev/null | tail -1); PERF=${PERF:-perf}
