@@ -82,9 +82,9 @@ done
 rec "signal.runs $n"; rec "signal.bad $bad"
 
 LOAD1=$(cat /proc/loadavg)
-python3 - "$RAW" "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)" "$LOAD0" "$LOAD1" <<'PY'
+python3 - "$RAW" "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)" "$LOAD0" "$LOAD1" "$(nproc) $(cat /sys/fs/cgroup/cpu.max 2>/dev/null)" <<'PY'
 import json, statistics, sys
-raw, model, l0, l1 = sys.argv[1:5]
+raw, model, l0, l1, cpus = sys.argv[1:6]
 vals, other = {}, []
 for line in open(raw):
     p = line.split()
@@ -96,7 +96,7 @@ for line in open(raw):
         except ValueError:
             pass
     other.append(line.strip())
-out = {"cpu": model.strip(), "loadavg_before": l0, "loadavg_after": l1,
+out = {"cpu": model.strip(), "nproc_cpu_max": cpus, "loadavg_before": l0, "loadavg_after": l1,
        "stats": {k: {"n": len(v), "median": statistics.median(v), "min": min(v), "max": max(v)}
                  for k, v in sorted(vals.items())},
        "other": other}
