@@ -188,9 +188,10 @@ file-backed modules; a static hello is 0.02 s under the client, so startup is pe
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
-Statuses: 86 refused instruction, 87 the launcher refused the program, 89 a vfork child was killed holding a lock of
-DynamoRIO's (the fork, below), 125 launcher failure, 126 and 127 as in a shell;
-app statuses and signals pass through. An exec refused under the client fails with an errno and a message on stderr.
+Statuses: 40 DynamoRIO cannot handle a signal (a fault it cannot translate, the fork, below), 86 refused instruction,
+87 the launcher refused the program, 89 a vfork child was killed holding a lock of DynamoRIO's (the fork, below), 125
+launcher failure, 126 and 127 as in a shell; app statuses and signals pass through. An exec refused under the client
+fails with an errno and a message on stderr.
 
 Measured on Ivy Bridge under Docker's default seccomp, no ptrace, each child running `lzcnt` and checking DynamoRIO is mapped:
 
@@ -621,7 +622,29 @@ its spill, so a rip-relative store mangled through `rax` right after a helper ca
   reruns (run 44518216908).
 - Cost, Xeon 6975P-C, 6 reps interleaved (run 44521030426): Java 13.61 to 14.18 s, `java -version` 1.45 to 1.53 s,
   Node 3.54 to 3.60 s, duckdb compute 1.02 to 1.05 s, varied 6.65 to 6.67 s; peak RSS unchanged (run 44456279663).
-- Not covered: module code rewritten in place keeps the rebuild.
+- Module code rewritten in place keeps the rebuild; a fault there that it cannot translate now stops the process (entry
+  below).
+
+**A fault in a deleted fragment that cannot be translated stops the process, in the fork** (branch
+`refuse-untranslatable-fault`, fork branch `refuse-untranslatable-fault`; on top of #25 and #72). A synchronous fault
+in a fragment marked `FRAG_WAS_DELETED` is translated by rebuilding the block from app code. When that translation
+fails, the app's handler got pc 0. `record_pending_signal()` now ends the process there through #18's path, status 40
+and "fault in deleted fragment <tag> whose context cannot be translated, address <si_addr>". It triggers only on a
+failed translation, never on pc 0 (a call through NULL faults at pc 0 natively), and only for a fault the code cache
+raised itself: signals sent with `kill`, asynchronous ones and thread suspension are unchanged **[source]**.
+Evidence **[measured]**:
+- `flushed_xl8 module` (ctest `flushed-module`, module text rewritten in place, one page a round): on #72's pin 60 of 60
+  runs reach the handler at pc 0, under the client and on DynamoRIO alone (run 44623706548); with the fix 60 of 60 stop
+  with status 40 and the message, both arms (run 44623652835). `module` natively and `module-same` under the client
+  and alone pass 60 of 60 on both pins.
+- Unchanged, 60 of 60 on both pins: `null_call` (ctests `null-call`, `null-call-native`) under the client and alone,
+  `flushed_xl8 rewrite`, `rewrite-same` and `span` under the client; `flushed-fault` 60 of 60 under the client and
+  alone, no refusal.
+- No refusal elsewhere: Bench's `arrays` with a safepoint every ms 0 of 200 bad under the client and 0 of 200 alone
+  (run 44623652835); javac 0 of 8 under the client, an empty client and alone; stress set 0 bad and no refusal
+  (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone, short 0 of 4,500;
+  same run). ctests pass but `setuid`, which a lab job cannot run (build tree unreadable to uid 65534). Fork suite
+  against #25's head the same failures on both after reruns (run 44623052966).
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
