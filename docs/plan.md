@@ -627,17 +627,17 @@ its spill, so a rip-relative store mangled through `rax` right after a helper ca
   below).
 
 **A fault in a deleted fragment that cannot be translated stops the process, in the fork** (branch
-`refuse-untranslatable-fault`, fork branch `refuse-untranslatable-fault`; on top of #25 and #72). A synchronous fault
-in a fragment marked `FRAG_WAS_DELETED` is translated by rebuilding the block from app code. When that translation
-fails, the app's handler got pc 0. `record_pending_signal()` now ends the process there through #18's path, status 40
-and "fault in deleted fragment <tag> whose context cannot be translated, address <si_addr>". It triggers only on a
-failed translation, never on pc 0 (a call through NULL faults at pc 0 natively), and only for a fault the code cache
-raised itself: signals sent with `kill`, asynchronous ones and thread suspension are unchanged **[source]**.
-Evidence **[measured]**:
-- `flushed_xl8 module` (ctest `flushed-module`, module text rewritten in place, one page a round): on #72's pin 60 of 60
-  runs reach the handler at pc 0, under the client and on DynamoRIO alone (run 44623706548); with the fix 60 of 60 stop
-  with status 40 and the message, both arms (run 44623652835). `module` natively and `module-same` under the client
-  and alone pass 60 of 60 on both pins.
+`refuse-untranslatable-fault`, [lhns/dynamorio#26](https://github.com/lhns/dynamorio/pull/26), merged as `6f2265b`, the
+pin; measured on its branch commit `dc6ffab`). A synchronous fault in a fragment marked `FRAG_WAS_DELETED` is translated
+by rebuilding the block from app code. When that translation fails, the app's handler got pc 0.
+`record_pending_signal()` now ends the process there through #18's path, status 40 and "fault in deleted fragment <tag>
+whose context cannot be translated, address <si_addr>". It triggers only on a failed translation, never on pc 0 (a call
+through NULL faults at pc 0 natively), and only for a fault the code cache raised itself: signals sent with `kill`,
+asynchronous ones and thread suspension are unchanged **[source]**. Evidence **[measured]**:
+- `flushed_xl8 module` (ctest `flushed-module`, module text rewritten in place, one page a round): before, 60 of 60 runs
+  reach the handler at pc 0 (`69fddab`), under the client and on DynamoRIO alone (run 44623706548); with the fix 60 of
+  60 stop with status 40 and the message, both arms (run 44623652835). `module` natively and `module-same` under the
+  client and alone pass 60 of 60 on both pins.
 - Unchanged, 60 of 60 on both pins: `null_call` (ctests `null-call`, `null-call-native`) under the client and alone,
   `flushed_xl8 rewrite` and `span` under the client; `flushed-fault` 60 of 60 under the client and alone, no refusal.
 - No refusal elsewhere: Bench's `arrays` with a safepoint every ms 0 of 200 bad under the client and 0 of 200 alone
