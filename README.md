@@ -46,6 +46,9 @@ cmake --build build --target package-tarball # v3compat-<version>-linux-x86_64.t
 build/inst/bin/v3compat-run [--] prog args...
 ```
 
+Releases carry that tarball, built by `.github/workflows/release.yml` on a `v*` tag, with a `.sha256` file; the workflow
+checks that every ELF in it needs nothing outside the bundle.
+
 - `V3COMPAT_NATIVE=1` runs `prog` without DynamoRIO. Without it the program always runs under DynamoRIO, even
   on a CPU that has AVX2.
 - `V3COMPAT_DR_OPTS="..."` adds DynamoRIO options; defaults live in `launcher/v3compat-run.c`.

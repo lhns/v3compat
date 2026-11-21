@@ -1,0 +1,83 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  pull_request:
+    paths: ['.github/workflows/release.yml', 'CMakeLists.txt']
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # gh release create; only reached on a tag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: Dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev
+      - name: Version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="0.0.0-$(git rev-parse --short=12 HEAD)"; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          cmake -S . -B build -DV3COMPAT_VERSION="$VERSION"
+          cmake --build build -j
+          cmake --build build --target package-tarball
+          cd build
+          sha256sum "v3compat-$VERSION-linux-x86_64.tar.gz" | tee "v3compat-$VERSION-linux-x86_64.tar.gz.sha256"
+      - name: Self-containment
+        # No ELF in the bundle may name an interpreter or need a library that is not a file of the bundle.
+        run: |
+          set -eu
+          mkdir check && tar xzf "build/v3compat-$VERSION-linux-x86_64.tar.gz" -C check
+          cd check/*/
+          fail=0
+          {
+            echo '| file | type | interp | needed |'
+            echo '| --- | --- | --- | --- |'
+            find . -type f | sort | while read -r f; do
+              readelf -hW "$f" >/dev/null 2>&1 || continue
+              type=$(readelf -hW "$f" | sed -n 's/^ *Type: *\([A-Z]*\).*/\1/p')
+              interp=$(readelf -lW "$f" | sed -n 's/.*Requesting program interpreter: \([^]]*\)\].*/\1/p')
+              needed=$(readelf -dW "$f" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' ')
+              echo "| $f | $type | ${interp:--} | ${needed:--} |"
+            done
+          } | tee /tmp/table.md
+          { echo '### Self-containment'; cat /tmp/table.md; } >> "$GITHUB_STEP_SUMMARY"
+          for f in $(find . -type f); do
+            readelf -hW "$f" >/dev/null 2>&1 || continue
+            if readelf -lW "$f" | grep -q 'INTERP'; then echo "FAIL $f has PT_INTERP"; fail=1; fi
+            for n in $(readelf -dW "$f" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+              if [ -z "$(find . -type f -name "$n")" ]; then echo "FAIL $f needs $n, not in the bundle"; fail=1; fi
+            done
+          done
+          exit $fail
+      - name: Smoke
+        run: |
+          d=$(mktemp -d)
+          tar xzf "build/v3compat-$VERSION-linux-x86_64.tar.gz" -C "$d" --strip-components=1
+          "$d/bin/v3compat-run" -- /bin/true
+          "$d/bin/v3compat-run" -- /bin/sh -c 'grep -q libdynamorio /proc/self/maps'
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "build/v3compat-$VERSION-linux-x86_64.tar.gz" "build/v3compat-$VERSION-linux-x86_64.tar.gz.sha256" \
+            --title "$GITHUB_REF_NAME" --notes "Built from $GITHUB_SHA by .github/workflows/release.yml."
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          name: v3compat-bundle
+          path: |
+            build/v3compat-*-linux-x86_64.tar.gz
+            build/v3compat-*-linux-x86_64.tar.gz.sha256
