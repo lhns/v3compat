@@ -734,8 +734,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   thread. On the pin `cc4fdfd`, which has lhns/dynamorio#27: 2 of 5,000 5-second runs under the launcher, Xeon 6975P-C
   1 of 3,750 and EPYC 9V45 1 of 250; 0 of 500 on 7763, 250 on 9V74 and 250 on 8573C (run 44958240141) **[measured]**.
   Before, on `0ed70e8` with stored translations: 1 of 400 on 9V74 (run 44521030426), 1 of 2 on 9V45 (run 44518144852),
-  0 of 1,000 (run 44595406053); once in CI cache-verify on `a99c8c3` (run 44601640507). The lead under test is the flusher
-  freeing a nolinking thread's trace IR (`trace_abort()`) while that thread runs DynamoRIO code (lab `lab-heap-hazard`).
+  0 of 1,000 (run 44595406053); once in CI cache-verify on `a99c8c3` (run 44601640507). Not the flusher's use of a running
+  thread's heap (its trace IR, `trace_abort()`): a lab-only fork branch widening that window and the handler's own heap
+  use crashed 0 of 593 runs, 0 of 586 with `-disable_traces`, against 0 of 600 plain (run 44969439123) **[measured]**.
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
   only, run 44463418374): the rebuild of the written block recovers the pc but not the state. With the stored
   translation the digest is right. Reproducer: `sh test/seq_rwx.sh build/inst/bin/v3compat-run build/test/seq_rwx 10 300`.
@@ -745,10 +746,11 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   limit (owner, 2026-11-21): debug builds only.
 - **`-safe_translate_flushed` deadlocks** in every flush of a written page (above); do not use it.
 - **A crash under `-sandbox_writable`** (proposed: a limit of `-sandbox_writable` only, which the launcher does not set).
-  Bench's `arrays` kernel with a safepoint every ms, status 255, on `cc4fdfd`: 5 of 1,700 runs with `-sandbox_writable`
-  (Xeon 6975P-C 4 of 900, EPYC 9V45 1 of 200, 0 of 300 each on 9V74 and 8573C), 0 of 1,700 with the launcher's options
-  (run 44958240141) **[measured]**; 1 of 400 on `af12842` (run 44132089263). The crashing thread had jumped into code
-  cache DynamoRIO had released: its pc in the reserved, unmapped code range, an app return address on top of its stack.
+  Bench's `arrays` kernel with a safepoint every ms on `cc4fdfd`: 6 of 1,900 runs with `-sandbox_writable` (status 255:
+  Xeon 6975P-C 4 of 900, EPYC 9V45 1 of 200; a SIGSEGV in HotSpot's C2 compiler, status 134: EPYC 7763 1 of 200; 0 of
+  300 each on 9V74 and 8573C), 0 of 1,900 with the launcher's options (run 44958240141, one job unfinished)
+  **[measured]**; 1 of 400 on `af12842` (run 44132089263). The status 255 crash jumped into code cache DynamoRIO had
+  released: its pc in the reserved, unmapped code range, an app return address on top of its stack.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
