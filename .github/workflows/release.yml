@@ -40,25 +40,23 @@ jobs:
           mkdir check && tar xzf "build/v3compat-$VERSION-linux-x86_64.tar.gz" -C check
           cd check/*/
           fail=0
-          {
-            echo '| file | type | interp | needed |'
-            echo '| --- | --- | --- | --- |'
-            find . -type f | sort | while read -r f; do
-              readelf -hW "$f" >/dev/null 2>&1 || continue
-              type=$(readelf -hW "$f" | sed -n 's/^ *Type: *\([A-Z]*\).*/\1/p')
-              interp=$(readelf -lW "$f" | sed -n 's/.*Requesting program interpreter: \([^]]*\)\].*/\1/p')
-              needed=$(readelf -dW "$f" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' ')
-              echo "| $f | $type | ${interp:--} | ${needed:--} |"
-            done
-          } | tee /tmp/table.md
-          { echo '### Self-containment'; cat /tmp/table.md; } >> "$GITHUB_STEP_SUMMARY"
-          for f in $(find . -type f); do
+          printf '| file | type | interp | needed |\n| --- | --- | --- | --- |\n' > /tmp/table.md
+          # Not a pipe into while: fail must survive the loop.
+          find . -type f | sort > /tmp/files
+          while read -r f; do
             readelf -hW "$f" >/dev/null 2>&1 || continue
-            if readelf -lW "$f" | grep -q 'INTERP'; then echo "FAIL $f has PT_INTERP"; fail=1; fi
-            for n in $(readelf -dW "$f" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+            type=$(readelf -hW "$f" | sed -n 's/^ *Type: *\([A-Z]*\).*/\1/p')
+            phdrs=$(readelf -lW "$f")
+            interp=$(printf '%s\n' "$phdrs" | sed -n 's/.*Requesting program interpreter: \([^]]*\)\].*/\1/p')
+            needed=$(readelf -dW "$f" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' ')
+            echo "| $f | $type | ${interp:--} | ${needed:--} |" >> /tmp/table.md
+            if printf '%s\n' "$phdrs" | grep -q 'INTERP'; then echo "FAIL $f has PT_INTERP"; fail=1; fi
+            for n in $needed; do
               if [ -z "$(find . -type f -name "$n")" ]; then echo "FAIL $f needs $n, not in the bundle"; fail=1; fi
             done
-          done
+          done < /tmp/files
+          cat /tmp/table.md
+          { echo '### Self-containment'; cat /tmp/table.md; } >> "$GITHUB_STEP_SUMMARY"
           exit $fail
       - name: Smoke
         run: |
