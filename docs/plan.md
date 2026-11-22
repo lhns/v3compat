@@ -746,7 +746,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   writes (`flushed_xl8 span-below`), on base's client too (run 44473283052). Release builds do not check it. A production
   limit (owner, 2026-11-21): debug builds only.
 - **`-safe_translate_flushed` deadlocks** in every flush of a written page (above); do not use it.
-- **A crash under `-sandbox_writable`** (proposed: a limit of `-sandbox_writable` only, which the launcher does not set).
+- **A crash under `-sandbox_writable`**, being investigated; the owner wants it fixed (2026-11-22). `-sandbox_writable`
+  is treated as an amplifier, not as proof the crash needs it: 0 of 1,900 with the launcher's options only bounds the
+  rate there below about 0.16%.
   Bench's `arrays` kernel with a safepoint every ms on `cc4fdfd`: 6 of 1,900 runs with `-sandbox_writable` (status 255:
   Xeon 6975P-C 4 of 900, EPYC 9V45 1 of 200; a SIGSEGV in HotSpot's C2 compiler, status 134: EPYC 7763 1 of 200; 0 of
   300 each on 9V74 and 8573C), 0 of 1,900 with the launcher's options (run 44958240141, one job unfinished)
