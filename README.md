@@ -32,7 +32,7 @@ copies instructions the CPU has and expands or calls helpers for the rest. Detai
 - Stress on Ivy Bridge: the reset and stress results above come from AVX2 runners. On Ivy Bridge only the A/B ran
   (signal injection 0 of 282, plan "Ivy Bridge A/B").
 - Anything on a CPU other than Ivy Bridge without AVX2.
-- The OCI wrapper in [v3compat-runtime](https://github.com/lhns/v3compat-runtime) still wraps Intel SDE, not `v3compat-run`; the integration is not done. No production use.
+- The OCI wrapper in [v3compat-runtime](https://github.com/lhns/v3compat-runtime) runs `v3compat-run` (v3compat-runtime #3). No production use.
 
 ## Build and run
 
