@@ -734,9 +734,10 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   thread. On the pin `cc4fdfd`, which has lhns/dynamorio#27: 2 of 5,000 5-second runs under the launcher, Xeon 6975P-C
   1 of 3,750 and EPYC 9V45 1 of 250; 0 of 500 on 7763, 250 on 9V74 and 250 on 8573C (run 44958240141) **[measured]**.
   Before, on `0ed70e8` with stored translations: 1 of 400 on 9V74 (run 44521030426), 1 of 2 on 9V45 (run 44518144852),
-  0 of 1,000 (run 44595406053); once in CI cache-verify on `a99c8c3` (run 44601640507). Not the flusher's use of a running
-  thread's heap (its trace IR, `trace_abort()`): a lab-only fork branch widening that window and the handler's own heap
-  use crashed 0 of 593 runs, 0 of 586 with `-disable_traces`, against 0 of 600 plain (run 44969439123) **[measured]**.
+  0 of 1,000 (run 44595406053); once in CI cache-verify on `a99c8c3` (run 44601640507). Not reproduced under a widened window
+  on the flusher's use of a running thread's heap and the handler's own heap use: 0 of 593 runs, 0 of 586 with
+  `-disable_traces`, 0 of 600 plain (lab-only fork branch, run 44969439123) **[measured]**; the delay's execution was not
+  counted, and it sat before the heap operation, not inside the free-list update.
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
   only, run 44463418374): the rebuild of the written block recovers the pc but not the state. With the stored
   translation the digest is right. Reproducer: `sh test/seq_rwx.sh build/inst/bin/v3compat-run build/test/seq_rwx 10 300`.
