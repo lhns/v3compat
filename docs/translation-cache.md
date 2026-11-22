@@ -24,9 +24,10 @@ the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
     traces off for startup.
 
   If Ivy Bridge scales like the runners (a cold start there is 5.1 s), a warm start there is about 1.3 s. That still
-  misses Phase 3's gate of 0.5 s, so the cache alone does not get there.
-- **Smallest useful first step, done:** the lab-only prototype and then Phase 2 ([Phases](#phases)). Not done: the
-  owner's startup ladder on Ivy Bridge.
+  misses Phase 3's original gate of 0.5 s, so the cache alone does not get there; the gate is now 2 s on Ivy Bridge (plan, Phases).
+- **Smallest useful first step, done:** the lab-only prototype and then Phase 2 ([Phases](#phases)). On Ivy Bridge (plan, "Ivy Bridge
+  A/B") warm `select 42` is 2.91 s against 4.58 s cold, 36% below; the ladder cannot separate DynamoRIO from the
+  client there, as duckdb needs the client to run at all.
 
 ## Where startup goes
 
@@ -397,5 +398,6 @@ Each phase ends at a go/no-go for the owner.
 ## Decisions for the owner
 
 Decided. Phases 1 and 2 were funded and merged with the fork's cache subsystem (v3compat #56). Placement, writer and
-integrity are in ADR 0006's amendment of 2026-11-17. Still open: the Ivy Bridge ladder (Phase 0), which says whether
-the cache gets near Phase 3's startup gate there.
+integrity are in ADR 0006's amendment of 2026-11-17. The Ivy Bridge A/B (plan) answers Phase 0: warm
+`select 42` 2.91 s there, so the cache does not reach the 0.5 s gate. The owner approved a revised gate (2026-11-22): warm
+under 2 s on Ivy Bridge and at least 40% below cold; see the plan's Phases.

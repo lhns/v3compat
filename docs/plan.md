@@ -175,7 +175,7 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
   duckdb varied 8.32 to 6.67 s). #40, merged (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
   duckdb varied 10.63 to 10.09 s on EPYC 7763). #39, merged (lean helper call, ADR 0007 (4)): a frame helper 27.7 to 23.5 ns
-  (Xeon 8370C), 20.8 to 17.5 (EPYC 9V74). None measured on Ivy Bridge.
+  (Xeon 8370C), 20.8 to 17.5 (EPYC 9V74). Ivy Bridge per-op costs since: below.
 
 ### Startup breakdown (2026-11-12)
 
@@ -185,6 +185,36 @@ client 0.89 s (0.65 s), client 1.09 s (0.80 s). It builds 77k blocks and 3.4k tr
 file-backed modules; a static hello is 0.02 s under the client, so startup is per-block work, about 14 µs a block.
 `node -e 0`: 61k blocks, 94% in modules. DynamoRIO's `-persist` without a client: duckdb 1.6-3.0 s using its cache against
 0.47 s without; with a client it writes nothing.
+
+### Ivy Bridge A/B (2026-11-22)
+
+`lab/ivy-ab.sh 90` at `0c8b457` in a pod on `kube-worker-04` (Intel Xeon E3-12xx v2, a VM; 4-CPU quota, 20 vCPUs
+visible; node load average 14-26 during the run). Medians of 10 interleaved rounds, min-max in brackets
+**[measured]**:
+
+| | Cold | Warm cache |
+|---|---|---|
+| duckdb `select 42` | 4.58 s (4.30-7.06) | 2.91 s (1.69-3.67), 36% below cold |
+| Compute query, whole process | 8.98 s (6.42-12.06) | 5.42 s (5.04-6.68) |
+| Compute query less the same round's `select 42` | 1.93 s (0.20-4.34) | |
+
+- **Per op, ns** (inline / `V3COMPAT_HELPERS_ONLY=1`): lane-wise vector forms 4.5-5.0 / 77-93 (`vpaddq` 4.8 / 79,
+  `vpshufd` 4.9 / 93); `andn`, `lzcnt`, `tzcnt`, MOVBE load 2.7 / 395-427; `bzhi` 3.6 / 428; `rorx`, `shlx`, `shrx`,
+  `sarx`, `mulx` 5.3-5.8 / 378-528; frame helpers (`vpsllvq`, `vpunpcklqdq`) 81-95; FMA through the helper `ss` 141,
+  `sd` 180, `ps`/`pd` xmm 291/223, ymm 358/317. Helpers cost 4-5x the runners' figures; inline forms about 2x.
+- **Signal injection** (`regstress 8 3 sig jit` and `xlsig`, alternating): 0 of 282 bad.
+- **Ladder** (3 reps): DynamoRIO alone and the empty client cannot run duckdb here (SIGILL, status 132), so Ivy Bridge
+  cannot split startup into DynamoRIO and client as the runners did. Under the client, `select 42` 5.4-5.8 s cold,
+  4.4-4.9 s with `-disable_traces`; a static hello 0.11 s, so startup is per-block work here too.
+- **Noise:** the quota throttled the pod (24k periods, 2.3 ks), but a second job without a CPU limit was slower
+  (`select 42` cold 7.63 s, warm 4.04 s, compute cold 8.73 s), so contention on the node dominates, not the quota.
+  Treat these as upper bounds; the compute-less-startup difference is too noisy to gate on.
+
+**Targets, approved by the owner (2026-11-22)** and in the Phases table: Phase 2, every inline
+form under 6 ns per op on Ivy Bridge (met: 2.7-5.8) and frame helpers under 100 ns (met: 77-95); compute under 2 s
+excluding startup, from at least 20 rounds on a quiet node (1.93 s here, noisy); signal injection 0 bad in at least
+1,000 runs (0 of 282 here). Phase 3, warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same
+job (2.91 s, 36% now); 0.5 s is out of reach with this cache design. Memory and bad-entry gates unchanged.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -691,9 +721,11 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | Dense cost under 5 ns per op; compute under 1.5 s; signal injection clean | In progress: inline scalar (#33), vector (#35) and cross-lane (#40) forms and the lean helper call (#39) merged |
-| **3. Startup** | Warm `select 42` under 0.5 s; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.34-0.63 s on runners, 39-43% below cold ([design](translation-cache.md)) |
-| **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
+| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, from at least 20 rounds on a quiet node; signal injection 0 bad in at least 1,000 runs | In progress: inline scalar (#33), vector (#35) and cross-lane (#40) forms and the lean helper call (#39) merged |
+| **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.34-0.63 s on runners, 39-43% below cold ([design](translation-cache.md)) |
+| **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
+
+No release until the open crashes are fixed (owner, 2026-11-22).
 
 ## Known flakes
 
