@@ -63,10 +63,11 @@ install(TARGETS v3compat-run RUNTIME DESTINATION bin)
 install(PROGRAMS "${V3COMPAT_DR_ROOT}/lib64/release/libdynamorio.so" DESTINATION ${DR_RUNTIME_DIR}/lib64/release)
 install(FILES LICENSE DESTINATION share/doc/v3compat)
 install(FILES "${V3COMPAT_DR_ROOT}/License.txt" DESTINATION share/doc/v3compat RENAME LICENSE.dynamorio)
+install(FILES "${AVXEMU_SRC}/LICENSE" DESTINATION share/doc/v3compat RENAME LICENSE.avxemu)
 install(FILES README.md DESTINATION share/doc/v3compat)
 
 # Release-style tarball: `cmake --build . --target package-tarball`.
-set(V3COMPAT_VERSION 0.0.0)
+set(V3COMPAT_VERSION 0.0.0 CACHE STRING "Version in the tarball name; releases pass the tag")
 set(_stage "${CMAKE_BINARY_DIR}/stage/v3compat-${V3COMPAT_VERSION}-linux-x86_64")
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/stage")
 add_custom_target(package-tarball
