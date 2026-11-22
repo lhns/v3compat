@@ -723,7 +723,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
 | **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, from at least 20 rounds on a quiet node; signal injection 0 bad in at least 1,000 runs | In progress: inline scalar (#33), vector (#35) and cross-lane (#40) forms and the lean helper call (#39) merged |
 | **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.34-0.63 s on runners, 39-43% below cold ([design](translation-cache.md)) |
-| **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | Not started |
+| **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
 
 No release until the open crashes are fixed (owner, 2026-11-22).
 
