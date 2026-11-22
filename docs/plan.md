@@ -719,7 +719,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   (fork entry above). It no longer hangs or crashes. Under the client most runs of `vfork_kill` with 300 kills at random
   points end this way (23 of 24); at 5 kills 5 of 36 **[measured]**. The children die in the heap and vm-areas locks of their thread
   init and of building blocks. Letting the parent run on needs the child's thread state built before the clone, or robust
-  locks. Not counted, so not caught: a child killed in its signal handler, or in DynamoRIO's exit path.
+  locks. Not counted, so not caught: a child killed in its signal handler, or in DynamoRIO's exit path. A production
+  limit (owner, 2026-11-21).
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
@@ -727,19 +728,27 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
   crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **A `flushed-fault` crash in `common_heap_alloc()`, not attributed** (maybe the self-write race fixed in
-  lhns/dynamorio#27, not shown): 2 of about 2,600 runs with stored translations crashed there popping a free list
-  (same pc both times; EPYC 9V45 and 9V74, run 44521030426), 0 of about 2,500 on base. A rerun of 1,000 a side found
-  none on either (run 44595406053), nor did 60 on a debug build (run 44591850156). One more in CI cache-verify on
-  `a99c8c3` (run 44601640507).
+- **A crash in `common_heap_alloc()` under `flushed-fault`, not attributed; it blocks production** (owner, 2026-11-21).
+  A thread building a block pops its private heap's 24-byte free list and finds an IR operand there (`REG_kind`,
+  `OPSZ_8`) instead of a pointer: a freed operand array was written after its free, freed twice, or freed by another
+  thread. On the pin `cc4fdfd`, which has lhns/dynamorio#27: 2 of 5,000 5-second runs under the launcher, Xeon 6975P-C
+  1 of 3,750 and EPYC 9V45 1 of 250; 0 of 500 on 7763, 250 on 9V74 and 250 on 8573C (run 44958240141) **[measured]**.
+  Before, on `0ed70e8` with stored translations: 1 of 400 on 9V74 (run 44521030426), 1 of 2 on 9V45 (run 44518144852),
+  0 of 1,000 (run 44595406053); once in CI cache-verify on `a99c8c3` (run 44601640507). The lead under test is the flusher
+  freeing a nolinking thread's trace IR (`trace_abort()`) while that thread runs DynamoRIO code (lab `lab-heap-hazard`).
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
   only, run 44463418374): the rebuild of the written block recovers the pc but not the state. With the stored
   translation the digest is right. Reproducer: `sh test/seq_rwx.sh build/inst/bin/v3compat-run build/test/seq_rwx 10 300`.
+  A production limit (owner, 2026-11-21): it fails closed, the process stops instead of running on a wrong state.
 - **A debug-build assert, `vmareas.c:8965` (`area_contains_frag_pc`)** on a block that falls through into a page the app
-  writes (`flushed_xl8 span-below`), on base's client too (run 44473283052). Release builds do not check it.
+  writes (`flushed_xl8 span-below`), on base's client too (run 44473283052). Release builds do not check it. A production
+  limit (owner, 2026-11-21): debug builds only.
 - **`-safe_translate_flushed` deadlocks** in every flush of a written page (above); do not use it.
-- **A crash under `-sandbox_writable`:** Bench's `arrays` kernel with frequent safepoints crashed 1 of 400 runs with
-  status 255 ("v3compat internal crash", a SIGSEGV DynamoRIO attributes to the client, Xeon 6975P-C, run 44132089263). Not investigated.
+- **A crash under `-sandbox_writable`** (proposed: a limit of `-sandbox_writable` only, which the launcher does not set).
+  Bench's `arrays` kernel with a safepoint every ms, status 255, on `cc4fdfd`: 5 of 1,700 runs with `-sandbox_writable`
+  (Xeon 6975P-C 4 of 900, EPYC 9V45 1 of 200, 0 of 300 each on 9V74 and 8573C), 0 of 1,700 with the launcher's options
+  (run 44958240141) **[measured]**; 1 of 400 on `af12842` (run 44132089263). The crashing thread had jumped into code
+  cache DynamoRIO had released: its pc in the reserved, unmapped code range, an app return address on top of its stack.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
