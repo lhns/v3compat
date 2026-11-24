@@ -47,7 +47,7 @@ What is there:
 | Script | Does |
 |---|---|
 | `bench/ab.sh REPS` | Base against the branch, interleaved per rep: `bench_bmi` ns/op, duckdb compute and varied, `java -version`, Java `bench/Bench.java`, Node `bench/jit.js`; output digests against native |
-| `bench/jit.js`, `bench/Bench.java` | JIT workloads that print per-round times (warmup apart from steady state) and a checksum |
+| `bench/jit.js`, `bench/Bench.java` | JIT workloads that print per-round times (warmup apart from steady state) and a checksum; Bench takes `ROUNDS SCALE` and runs every kernel |
 | `bench/fma.c` | ns/op of each FMA form (vpsllvq as the helper-call control) and dgemm/sgemm/Horner kernels with checksums |
 | `lab/stress.sh KIND RUNS` | The stress set (`duck`, `sig`, `regc`, `regd`, `short`) and process-level labs: `exit` (a process ending while a thread waits in `vfork`), `cap` (thread creation failing or churning at exit), `bigclient` (1,000 threads at exit), `xl` (signals sent with `kill` at emulated instructions), `segv` (the torn exit, 9V45 only); `lab/loop.sh` classifies each run |
 | `lab/pcache.sh MODE` | The translation cache ([design](translation-cache.md)): `time N` cold against warm per workload, `twolayout`, `stress KIND N` in verify mode, `ctest` plain, training and verify, `srab N` the cost of `-stable_reach`, `diag`, `xlsig N` |
