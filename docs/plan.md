@@ -683,15 +683,33 @@ couldbelinking **[source]**. Debug `trace_flush`, link-state asserts (`link.c:14
 before on every client, with or without stored translations (run 44623991940); unfixed against fixed in the same jobs
 6 of 600 and 0 of 600 (run 44631011188) **[measured]**. On the fix: stress set 0 bad, ctest and the cache CI script
 pass (runs 44640659456, 44667210784), fork suite the same failures on both after reruns (run 44640616063). Not shown:
-that this race is the rare release crash in `common_heap_alloc()` (Open items).
+that this race is the rare release crash in `common_heap_alloc()` (fixed by #29, below).
 
 **The translation cache on a debug build, fixed in the fork** (branch `pcache-options-lock`,
-[lhns/dynamorio#28](https://github.com/lhns/dynamorio/pull/28), merged as `cc4fdfd`, the pin). Debug only, release
+[lhns/dynamorio#28](https://github.com/lhns/dynamorio/pull/28), merged as `cc4fdfd`). Debug only, release
 unchanged **[source]**: `-pcache_dir` was read without `options_lock` (every run with the cache stopped at
 `pcache.c:484`), and a training run never freed its entries (debug's leak check at exit). The option is now read under
 the lock, and the entries are freed at exit in debug builds. Debug builds, `2dad0c3` against the fix, five programs
 each trained then verified, 20 rounds: 200 of 200 runs stopped before, 0 of 200 bad after; release ctest and the cache
 CI script pass on the fix (run 44705364504) **[measured]**.
+
+**The `common_heap_alloc()` free-list race, fixed in the fork** (branch `fix-trace-abort-foreign`,
+[lhns/dynamorio#29](https://github.com/lhns/dynamorio/pull/29), merged as `78cab55`, the pin). A flusher unlinking a
+nolinking thread called `trace_abort()` on that thread's dcontext and freed its trace IR to the thread's local heap,
+while the thread, in its signal handler, decoded the faulting instruction there in `compute_memory_target()` without a
+lock **[source]**. The decode now uses a stack `instr_noalloc_t`, and `trace_abort()` on another thread's dcontext leaves
+the IR on a deferred list that the owner frees once couldbelinking. Evidence **[measured]**:
+- A lab-only sentinel (a busy word per thread heap, both sides' sites): 7 overlaps in about 15,000 base runs, all this
+  pair, both threads in their signal handlers (runs 44975041455, 44977626374, 45083392505).
+- Base against fix, interleaved, `flushed_fault` 5 s under the launcher: with the sentinel, overlaps 1 of 4,999 against
+  0 of 5,000 and cross-thread small-block heap operations 6.1e8 against 2,331 (run 45128633686); release builds,
+  crashes 2 of 7,500 against 0 of 7,500 (run 45128649212).
+- The proof rests on the overlap count and the cross-thread reduction; the crash counts only agree (0 of 7,500 at
+  base's rate happens about 13% of the time). The overlap is not shown to be what corrupts the list: lab hooks suppress
+  the crash (0 in about 35,000 runs), so a widened window could not amplify it.
+- Stress set 0 bad (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone,
+  short 0 of 4,500; run 45128658033); `vfork-fail` the same on both (run 45155001222); fork suite the same failures on
+  both after reruns (run 45128668341).
 
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
@@ -760,16 +778,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
   crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
-- **A crash in `common_heap_alloc()` under `flushed-fault`, not attributed; it blocks production** (owner, 2026-11-21).
-  A thread building a block pops its private heap's 24-byte free list and finds an IR operand there (`REG_kind`,
-  `OPSZ_8`) instead of a pointer: a freed operand array was written after its free, freed twice, or freed by another
-  thread. On the pin `cc4fdfd`, which has lhns/dynamorio#27: 2 of 5,000 5-second runs under the launcher, Xeon 6975P-C
-  1 of 3,750 and EPYC 9V45 1 of 250; 0 of 500 on 7763, 250 on 9V74 and 250 on 8573C (run 44958240141) **[measured]**.
-  Before, on `0ed70e8` with stored translations: 1 of 400 on 9V74 (run 44521030426), 1 of 2 on 9V45 (run 44518144852),
-  0 of 1,000 (run 44595406053); once in CI cache-verify on `a99c8c3` (run 44601640507). Not reproduced under a widened window
-  on the flusher's use of a running thread's heap and the handler's own heap use: 0 of 593 runs, 0 of 586 with
-  `-disable_traces`, 0 of 600 plain (lab-only fork branch, run 44969439123) **[measured]**; the delay's execution was not
-  counted, and it sat before the heap operation, not inside the free-list update.
+- **The `common_heap_alloc()` crash under `flushed-fault` is fixed in the fork** (#29, the pin; fork entry above). It
+  blocked production (owner, 2026-11-21); the fix's proof rests on the overlap count, not on crash counts.
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
   only, run 44463418374): the rebuild of the written block recovers the pc but not the state. With the stored
   translation the digest is right. Reproducer: `sh test/seq_rwx.sh build/inst/bin/v3compat-run build/test/seq_rwx 10 300`.
