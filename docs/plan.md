@@ -803,7 +803,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   address 0x10 with the pc translated into libjvm (`PhaseChaitin::post_allocate_copy_removal`, a block start), while no
   C2 compile was running **[measured]**. Not reproduced since: 0 of 5,520 runs each on `78cab555` and on the crash-2
   fix (`7d564c8`), EPYC 7763 0 of 246 each; status 255 20 of 5,520 on `78cab555`, 0 of 5,520 with the fix; no fault
-  handed to the JVM was translated outside its writable code (run 45316428832) **[measured]**. The wrong-value checks
+  handed to the JVM was translated outside its writable code, and 0 wrong checksums against native on either
+  side (run 45316428832) **[measured]**. The wrong-value checks
   of run 44958240141 (`lab/gate.sh`), run 44623652835 (`lab/refuse.sh`) and the crash-2 Java labs (`lab/c2.sh`: runs
   44981720678, 45085965895, 45154535396, 45404346417) checked nothing: they compared `^value` lines, which main's
   Bench does not print. Compare its `checksum` line instead.
