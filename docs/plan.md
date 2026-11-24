@@ -670,7 +670,8 @@ asynchronous ones and thread suspension are unchanged **[source]**. Evidence **[
   client and alone pass 60 of 60 on both pins.
 - Unchanged, 60 of 60 on both pins: `null_call` (ctests `null-call`, `null-call-native`) under the client and alone,
   `flushed_xl8 rewrite` and `span` under the client; `flushed-fault` 60 of 60 under the client and alone, no refusal.
-- No refusal elsewhere: Bench's `arrays` with a safepoint every ms 0 of 200 bad under the client and 0 of 200 alone
+- No refusal elsewhere: main's Bench (every kernel, default safepoints; values not checked, see the
+  `-sandbox_writable` crash under Open items) 0 of 200 crashed or refused under the client and 0 of 200 alone
   (run 44623652835); javac 0 of 8 under the client, an empty client and alone; stress set 0 bad and no refusal
   (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone, short 0 of 4,500;
   same run). ctests pass but `setuid`, which a lab job cannot run (build tree unreadable to uid 65534). Fork suite
@@ -791,11 +792,21 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
 - **A crash under `-sandbox_writable`**, being investigated; the owner wants it fixed (2026-11-22). `-sandbox_writable`
   is treated as an amplifier, not as proof the crash needs it: 0 of 1,900 with the launcher's options only bounds the
   rate there below about 0.16%.
-  Bench's `arrays` kernel with a safepoint every ms on `cc4fdfd`: 6 of 1,900 runs with `-sandbox_writable` (status 255:
-  Xeon 6975P-C 4 of 900, EPYC 9V45 1 of 200; a SIGSEGV in HotSpot's C2 compiler, status 134: EPYC 7763 1 of 200; 0 of
-  300 each on 9V74 and 8573C), 0 of 1,900 with the launcher's options (run 44958240141, one job unfinished)
-  **[measured]**; 1 of 400 on `af12842` (run 44132089263). The status 255 crash jumped into code cache DynamoRIO had
-  released: its pc in the reserved, unmapped code range, an app return address on top of its stack.
+  Main's Bench (every kernel, default safepoints: it ignores the `arrays sp` arguments, which only the earlier lab
+  branches' Bench read) on `cc4fdfd`: 6 of 1,900 runs with `-sandbox_writable` (status 255: Xeon 6975P-C 4 of 900,
+  EPYC 9V45 1 of 200; status 134: EPYC 7763 1 of 200; 0 of 300 each on 9V74 and 8573C), 0 of 1,900 with the
+  launcher's options (run 44958240141, one job unfinished) **[measured]**; 1 of 400 on `af12842` (run 44132089263).
+  The status 255 crash jumped into code cache DynamoRIO had released: its pc in the reserved, unmapped code range, an
+  app return address on top of its stack.
+  The status 134 abort was not in C2: its thread is `main`, in Java, entering `Math.max`'s C1 code from the i2c
+  adapter right as C2 made that entry not entrant (its first bytes a new `jmp`). DynamoRIO handed the JVM a fault at
+  address 0x10 with the pc translated into libjvm (`PhaseChaitin::post_allocate_copy_removal`, a block start), while no
+  C2 compile was running **[measured]**. Not reproduced since: 0 of 5,520 runs each on `78cab555` and on the crash-2
+  fix (`7d564c8`), EPYC 7763 0 of 246 each; status 255 20 of 5,520 on `78cab555`, 0 of 5,520 with the fix; no fault
+  handed to the JVM was translated outside its writable code (run 45316428832) **[measured]**. The wrong-value checks
+  of run 44958240141 (`lab/gate.sh`), run 44623652835 (`lab/refuse.sh`) and the crash-2 Java labs (`lab/c2.sh`: runs
+  44981720678, 45085965895, 45154535396, 45404346417) checked nothing: they compared `^value` lines, which main's
+  Bench does not print. Compare its `checksum` line instead.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
