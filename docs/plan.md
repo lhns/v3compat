@@ -862,8 +862,13 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   69.37 to 68.64 s, 67.40 to 67.08 s (0.5-1.1%; `mprotect` 158-162k to 61k); Node 3.58-3.67 s and duckdb compute
   1.05-1.08 s unchanged, `java -version` 1.43-1.58 s either way. That is the ceiling for any fork change that keeps the
   protection, so neither a default change nor a fork change is worth losing it: closed, the opt-in stays; FMA through hardware arithmetic with an exactness guard, if
-  a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
-  helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers
+  a workload needs it. After #40 the helper calls left, counted per form in the helpers on main `45be5ab` (lab
+  `lab-perf-helper-count`, run 45598694690, EPYC 7763 and 9V74, same forms and counts on both, every output equal
+  native) **[measured]**: duckdb varied 1.50M frame calls (`vpsllvq` ymm 750k, `vpunpcklqdq` ymm from memory 747k, FMA
+  450, `vpackssdw` 4) and 25 mcontext (`blsr`, `blsmsk`); javac 39k (`vphaddd` ymm 38.6k, FMA 245); Node 2, `java
+  -version` 22, duckdb compute 5; Java's Bench 65.5M, all `vfmadd231sd` (`Math.fma`). Outside FMA that is at most about
+  0.13 s of duckdb varied's 165 s on Ivy Bridge at 85 ns a call, below what a whole-process A/B resolves, so nothing
+  more is inlined for these workloads: closed until a workload shows a dense form. Java's `Math.fma` is the one dense user. Runner numbers
   understate helper cost 2-4x against Ivy Bridge; an Ivy
   Bridge A/B can run on the cluster's `kube-worker-04` and is not required before a speed PR merges.
 
