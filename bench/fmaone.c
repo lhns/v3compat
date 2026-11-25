@@ -37,6 +37,21 @@ static double now(void) {
                            "xmm9", "cc", "memory");                                                 \
     }
 
+#define LOOPZ(name, body)                                                                            \
+    static void name(uint64_t n) {                                                                  \
+        static const double one[4] = {1, 1, 1, 1}, s8[4] = {1.0000001, 1.0000001, 1.0000001, 0.0}, \
+                            s9[4] = {0.9999999, 0.9999999, 0.9999999, 0.0};                     \
+        __asm__ volatile("vmovupd %1, %%ymm0\n vmovapd %%ymm0, %%ymm1\n vmovapd %%ymm0, %%ymm2\n"    \
+                         "vmovapd %%ymm0, %%ymm3\n vmovapd %%ymm0, %%ymm4\n vmovapd %%ymm0, %%ymm5\n" \
+                         "vmovapd %%ymm0, %%ymm6\n vmovapd %%ymm0, %%ymm7\n"                         \
+                         "vmovupd %2, %%ymm8\n vmovupd %3, %%ymm9\n"                                 \
+                         "1:\n" X8(body) "dec %0\n jnz 1b\n vzeroupper\n"                             \
+                         : "+r"(n)                                                                  \
+                         : "m"(one), "m"(s8), "m"(s9)                                               \
+                         : "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8",    \
+                           "xmm9", "cc", "memory");                                                 \
+    }
+
 LOOP(m_vaddpd_y, R8("vaddpd", "ymm"))
 LOOP(m_fma_ss, R8("vfmadd231ss", "xmm"))
 LOOP(m_fma_sd, R8("vfmadd231sd", "xmm"))
@@ -44,6 +59,8 @@ LOOP(m_fma_ps_x, R8("vfmadd231ps", "xmm"))
 LOOP(m_fma_pd_x, R8("vfmadd231pd", "xmm"))
 LOOP(m_fma_ps_y, R8("vfmadd231ps", "ymm"))
 LOOP(m_fma_pd_y, R8("vfmadd231pd", "ymm"))
+LOOPZ(m_fma_pd_y_z, R8("vfmadd231pd", "ymm"))
+LOOPZ(m_fma_ps_y_z, R8("vfmadd231ps", "ymm"))
 LOOP(m_vpsllvq_y, R8("vpsllvq", "ymm"))   // a frame helper with no FP: the call's own cost
 
 static double ns_per_op(void (*f)(uint64_t)) {
@@ -103,7 +120,7 @@ static uint64_t hash(const void *p, size_t n) {
 int main(int argc, char **argv) {
     static const struct { const char *name; void (*f)(uint64_t); } rows[] = {
         {"vaddpd_ymm", m_vaddpd_y}, {"vpsllvq_ymm", m_vpsllvq_y}, {"ss", m_fma_ss}, {"sd", m_fma_sd},
-        {"ps_xmm", m_fma_ps_x}, {"pd_xmm", m_fma_pd_x}, {"ps_ymm", m_fma_ps_y}, {"pd_ymm", m_fma_pd_y}};
+        {"ps_xmm", m_fma_ps_x}, {"pd_xmm", m_fma_pd_x}, {"ps_ymm", m_fma_ps_y}, {"pd_ymm", m_fma_pd_y}, {"pd_ymm_z", m_fma_pd_y_z}, {"ps_ymm_z", m_fma_ps_y_z}};
     for (int a = 1; a < argc; a++)
         for (size_t i = 0; i < sizeof rows / sizeof rows[0]; i++)
             if (!strcmp(argv[a], rows[i].name)) printf("%s %.2f ", rows[i].name, ns_per_op(rows[i].f));
