@@ -106,7 +106,6 @@ int main(int argc, char **argv) {
         {"ps_xmm", m_fma_ps_x}, {"pd_xmm", m_fma_pd_x}, {"ps_ymm", m_fma_ps_y}, {"pd_ymm", m_fma_pd_y}};
     for (int a = 1; a < argc; a++)
         for (size_t i = 0; i < sizeof rows / sizeof rows[0]; i++)
-            if (!strcmp(argv[a], rows[i].name)) printf("%s %.2f
-", rows[i].name, ns_per_op(rows[i].f));
+            if (!strcmp(argv[a], rows[i].name)) printf("%s %.2f ", rows[i].name, ns_per_op(rows[i].f));
     return 0;
 }
