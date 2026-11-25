@@ -712,6 +712,28 @@ the IR on a deferred list that the owner frees once couldbelinking. Evidence **[
   short 0 of 4,500; run 45128658033); `vfork-fail` the same on both (run 45155001222); fork suite the same failures on
   both after reruns (run 45128668341).
 
+**A sandboxed block emitted from bytes it never decoded, fixed in the fork** (branch `fix-selfmod-race`,
+[lhns/dynamorio#30](https://github.com/lhns/dynamorio/pull/30), merged as `45bfae0`, the pin). A sandboxed block was decoded from app memory, its raw
+bytes copied from app memory again at emit, its selfmod copy and end taken from further reads **[source]**. HotSpot
+patching a method's verified entry with a `jmp` in between gave a block whose first body instruction was the app's
+`jmp rel32`, run from the code cache: the status 255 crash at a pc in DynamoRIO's unallocated reservation. A block for
+the cache is now decoded, emitted and compared from one read of its code; a write racing the build fails its first
+sandbox check. Evidence **[measured]**:
+- A lab-only detector (deleted code quarantined as int3, faults in vmcode classified): 17 of 17 crashes a just-rebuilt
+  block's direct `jmp` with the app's displacement, none in quarantined code (run 44981720678).
+- `test/selfmod_race.c` (ctests `selfmod-race-*`): a function's first instruction flipped between `mov` and a far `jmp`
+  while another thread calls it. Base fails 120 of 120 in each mode under the client and alone, `-sandbox_writable` and
+  defaults; native 0 of 120 (run 45083497260). Base passes with `-ro2sandbox_threshold 0` and with a jump never
+  rewritten (0 of 40 each, run 45128646748); the fix passes every mode (run 45304034650).
+- Main's Bench, base detector against detector plus fix, interleaved (run 45404346417, 24 of 30 jobs complete; the rest
+  hit the time limit on EPYC 7763 and Xeon 8370C): base 0, 0, 1 and 2 crashes in 960 runs each with
+  `-sandbox_writable`, the launcher's options, DynamoRIO alone and `-disable_traces`, the fix 0 in each; the reproducer
+  960 of 960 against 0 of 960, under the client and alone. Values: 0 wrong checksums in 5,520 runs each side with
+  `-sandbox_writable` (run 45316428832, above; its fix side carried lab-only prints); the `c2.sh` labs checked none.
+- Stress set 0 bad (duckdb 0 of 240, signal 0 of 1,300, reg/flags 0 of 1,020 under the client and 0 of 1,020 alone,
+  short 0 of 4,500), ctest passes, speed within 1% (run 45304034650); fork suite the same failures on both after reruns
+  (run 45304027039). Measured on `cc4fdfd`; the PR is that tree rebased onto #29.
+
 **Closed by the fork's signal fixes**, rerun on pin `af12842` (run 44109231119 and 44111380142) **[measured]**:
 - A signal to a thread in its first instructions (`test/thread_start_sig.c`) killed the process 300 of 300 under DynamoRIO, with or
   without the client (run 43418236984): now 0 of 600 in each of native, DynamoRIO alone and the client. Consistent with
@@ -789,15 +811,15 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   writes (`flushed_xl8 span-below`), on base's client too (run 44473283052). Release builds do not check it. A production
   limit (owner, 2026-11-21): debug builds only.
 - **`-safe_translate_flushed` deadlocks** in every flush of a written page (above); do not use it.
-- **A crash under `-sandbox_writable`**, being investigated; the owner wants it fixed (2026-11-22). `-sandbox_writable`
+- **A crash under `-sandbox_writable`**: its status 255 crash is fixed in the fork (#30, the pin; fork entry above). The owner wants it fixed (2026-11-22). `-sandbox_writable`
   is treated as an amplifier, not as proof the crash needs it: 0 of 1,900 with the launcher's options only bounds the
   rate there below about 0.16%.
   Main's Bench (every kernel, default safepoints: it ignores the `arrays sp` arguments, which only the earlier lab
   branches' Bench read) on `cc4fdfd`: 6 of 1,900 runs with `-sandbox_writable` (status 255: Xeon 6975P-C 4 of 900,
   EPYC 9V45 1 of 200; status 134: EPYC 7763 1 of 200; 0 of 300 each on 9V74 and 8573C), 0 of 1,900 with the
   launcher's options (run 44958240141, one job unfinished) **[measured]**; 1 of 400 on `af12842` (run 44132089263).
-  The status 255 crash jumped into code cache DynamoRIO had released: its pc in the reserved, unmapped code range, an
-  app return address on top of its stack.
+  The status 255 crash ran the app's own `jmp rel32` from the code cache: its pc in DynamoRIO's never-allocated code
+  reservation, an app return address on top of its stack (the race, fork entry above).
   The status 134 abort was not in C2: its thread is `main`, in Java, entering `Math.max`'s C1 code from the i2c
   adapter right as C2 made that entry not entrant (its first bytes a new `jmp`). DynamoRIO handed the JVM a fault at
   address 0x10 with the pc translated into libjvm (`PhaseChaitin::post_allocate_copy_removal`, a block start), while no
@@ -808,6 +830,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   of run 44958240141 (`lab/gate.sh`), run 44623652835 (`lab/refuse.sh`) and the crash-2 Java labs (`lab/c2.sh`: runs
   44981720678, 45085965895, 45154535396, 45404346417) checked nothing: they compared `^value` lines, which main's
   Bench does not print. Compare its `checksum` line instead.
+  The status 134 abort is most likely the same decode/emit race (confidence medium-high): its fault at address 0x10 is
+  the race's RCX-spill-slot fingerprint, and the fix fails the race test 0 of 12,000 times (run 45416571599)
+  **[measured]**. Java's 134 itself was not reproduced; a 134 of that shape on the fix would falsify this.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the

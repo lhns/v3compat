@@ -238,6 +238,22 @@ add_executable(flushed_fault flushed_fault.c)
 target_link_options(flushed_fault PRIVATE -pthread)
 v3test(flushed-fault stdout-has ok exit 0 -- ${RUN} -- $<TARGET_FILE:flushed_fault> 10)
 v3test(flushed-fault-native stdout-has ok exit 0 -- $<TARGET_FILE:flushed_fault> 2)
+# A sandboxed block rebuilt while another thread rewrites its first instruction (crash 2): sandboxed from the
+# start and once written (DR's default), under the client and on DynamoRIO alone.
+add_executable(selfmod_race selfmod_race.c)
+target_link_options(selfmod_race PRIVATE -pthread)
+foreach(m default sandbox)
+  set(_o "V3COMPAT_DR_OPTS=")
+  set(_d "")
+  if(m STREQUAL sandbox)
+    set(_o "V3COMPAT_DR_OPTS=-sandbox_writable")
+    set(_d -sandbox_writable)
+  endif()
+  v3test(selfmod-race-${m} stdout-has ok exit 0 -- env ${_o} ${RUN} -- $<TARGET_FILE:selfmod_race> 10)
+  v3test(selfmod-race-${m}-alone stdout-has ok exit 0 -- "${V3COMPAT_DR_ROOT}/bin64/drrun" -no_enable_reset
+         -no_ignore_syscalls ${_d} -- $<TARGET_FILE:selfmod_race> 10)
+endforeach()
+v3test(selfmod-race-native stdout-has ok exit 0 -- $<TARGET_FILE:selfmod_race> 2)
 # A fault in a flushed block whose code was rewritten, or whose next page switched to sandboxing, since it was built.
 add_executable(flushed_xl8 flushed_xl8.c)
 target_link_options(flushed_xl8 PRIVATE -pthread)
