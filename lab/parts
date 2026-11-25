@@ -1,6 +1,13 @@
 # One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
 # /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
 ab bash bench/ab.sh 6
+ab-fma1 bash lab/fmaab.sh 8
+ab-fma2 bash lab/fmaab.sh 8
+ab-fma3 bash lab/fmaab.sh 8
+ab-one1 bash lab/fmaone.sh 6
+ab-one2 bash lab/fmaone.sh 6
+ab-one3 bash lab/fmaone.sh 6
+sem bash lab/ctest.sh
 duck bash lab/stress.sh duck 240
 siga bash lab/stress.sh sig 434
 sigb bash lab/stress.sh sig 433
