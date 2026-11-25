@@ -713,7 +713,7 @@ the IR on a deferred list that the owner frees once couldbelinking. Evidence **[
   both after reruns (run 45128668341).
 
 **A sandboxed block emitted from bytes it never decoded, fixed in the fork** (branch `fix-selfmod-race`,
-[lhns/dynamorio#30](https://github.com/lhns/dynamorio/pull/30)). A sandboxed block was decoded from app memory, its raw
+[lhns/dynamorio#30](https://github.com/lhns/dynamorio/pull/30), merged as `45bfae0`, the pin). A sandboxed block was decoded from app memory, its raw
 bytes copied from app memory again at emit, its selfmod copy and end taken from further reads **[source]**. HotSpot
 patching a method's verified entry with a `jmp` in between gave a block whose first body instruction was the app's
 `jmp rel32`, run from the code cache: the status 255 crash at a pc in DynamoRIO's unallocated reservation. A block for
@@ -811,8 +811,7 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   writes (`flushed_xl8 span-below`), on base's client too (run 44473283052). Release builds do not check it. A production
   limit (owner, 2026-11-21): debug builds only.
 - **`-safe_translate_flushed` deadlocks** in every flush of a written page (above); do not use it.
-- **A crash under `-sandbox_writable`**: its status 255 crash is fixed in the fork (#30, fork entry above); the pin
-  moves once #30 is merged. The owner wants it fixed (2026-11-22). `-sandbox_writable`
+- **A crash under `-sandbox_writable`**: its status 255 crash is fixed in the fork (#30, the pin; fork entry above). The owner wants it fixed (2026-11-22). `-sandbox_writable`
   is treated as an amplifier, not as proof the crash needs it: 0 of 1,900 with the launcher's options only bounds the
   rate there below about 0.16%.
   Main's Bench (every kernel, default safepoints: it ignores the `arrays sp` arguments, which only the earlier lab
