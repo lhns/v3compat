@@ -364,7 +364,7 @@ writer, the launcher option and the read-only mount, key on the client's build r
 install path never hits today), and take integrity from fs-verity or a signed manifest: the checksums here only guard
 against corruption, and a file truncated while mapped would still fault.
 
-**Decided for Phase 3** (ADR 0006, amendment 2026-11-17): a per-node directory, one file per image digest, filled
+**Decided for Phase 3** (ADR 0006, amendment 2026-11-17): a per-node directory holding one directory per image digest (mounted read-only at `/v3compat-cache`, one `<program>.pcache` per program), filled
 by a training Job on the target CPU class.
 - The key contains CPUID and XCR0, so only a node of the class can write entries that hit there. Per-image layers
   built in CI, or a shared network volume, gain nothing.
