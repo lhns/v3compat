@@ -15,7 +15,7 @@ find_package(DynamoRIO REQUIRED)
 # lhns/avxemu's emulation core. avxemu defines the archive (sources and flags, cmake/helpers.cmake);
 # its guard script checks it (test/CMakeLists.txt).
 include(FetchContent)
-set(AVXEMU_COMMIT fa3cf57293749c36ba8c6801227d98c2075b9f40)
+set(AVXEMU_COMMIT ad14dec471b996af2ef764e75912a8daa661c043)
 FetchContent_Declare(avxemu GIT_REPOSITORY https://github.com/lhns/avxemu GIT_TAG ${AVXEMU_COMMIT}
                      SOURCE_SUBDIR no-cmake-project)
 FetchContent_MakeAvailable(avxemu)
