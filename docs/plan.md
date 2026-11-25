@@ -819,8 +819,8 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   branches' Bench read) on `cc4fdfd`: 6 of 1,900 runs with `-sandbox_writable` (status 255: Xeon 6975P-C 4 of 900,
   EPYC 9V45 1 of 200; status 134: EPYC 7763 1 of 200; 0 of 300 each on 9V74 and 8573C), 0 of 1,900 with the
   launcher's options (run 44958240141, one job unfinished) **[measured]**; 1 of 400 on `af12842` (run 44132089263).
-  The status 255 crash jumped into code cache DynamoRIO had released: its pc in the reserved, unmapped code range, an
-  app return address on top of its stack.
+  The status 255 crash ran the app's own `jmp rel32` from the code cache: its pc in DynamoRIO's never-allocated code
+  reservation, an app return address on top of its stack (the race, fork entry above).
   The status 134 abort was not in C2: its thread is `main`, in Java, entering `Math.max`'s C1 code from the i2c
   adapter right as C2 made that entry not entrant (its first bytes a new `jmp`). DynamoRIO handed the JVM a fault at
   address 0x10 with the pc translated into libjvm (`PhaseChaitin::post_allocate_copy_removal`, a block start), while no
@@ -831,6 +831,9 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   of run 44958240141 (`lab/gate.sh`), run 44623652835 (`lab/refuse.sh`) and the crash-2 Java labs (`lab/c2.sh`: runs
   44981720678, 45085965895, 45154535396, 45404346417) checked nothing: they compared `^value` lines, which main's
   Bench does not print. Compare its `checksum` line instead.
+  The status 134 abort is most likely the same decode/emit race (confidence medium-high): its fault at address 0x10 is
+  the race's RCX-spill-slot fingerprint, and the fix fails the race test 0 of 12,000 times (run 45416571599)
+  **[measured]**. Java's 134 itself was not reproduced; a 134 of that shape on the fix would falsify this.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
   but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
   a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the

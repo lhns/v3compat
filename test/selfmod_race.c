@@ -1,8 +1,9 @@
-/* selfmod_race SECONDS: one thread calls a function on a writable code page while another flips its first
+/* selfmod_race SECONDS [fixed]: one thread calls a function on a writable code page while another flips its first
  * instruction between "mov eax, 1" and a jump to a far function that returns 2, as a JIT patches a method's entry.
  * Each flip makes a sandboxed block rebuild. A rebuild that decoded the old bytes but emitted the new ones ran the
  * app's jump displacement from the code cache, landing far off in DynamoRIO's reservation (crash 2). Every call must
- * return 1 or 2. Prints "ok" and exits 0 when they did and both kinds were seen. */
+ * return 1 or 2. Prints "ok" and exits 0 when they did and both kinds were seen. With "fixed" the function stays the
+ * jump and another byte of its page is written: the same blocks with no race, which pass on base too. */
 #define _GNU_SOURCE
 #include <pthread.h>
 #include <stdatomic.h>
@@ -12,6 +13,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <unistd.h>
 
 /* The jump target's distance: far enough that the misplaced displacement leaves the cache's live memory. */
 #define FAR 0x30000000L
