@@ -26,3 +26,7 @@ The cache lives on each node of a CPU class, in a root-owned directory, one file
 pinned to that class writes it; containers mount it read-only. A Job writes to a staging path and a separate step
 renames the file into the tree, so one image's run cannot write another image's entries. Integrity starts with a
 hash manifest; fs-verity can replace it where the node's filesystem supports it.
+
+## Amendment 2026-11-25
+The per-image cache is a directory per image digest, mounted read-only at `/v3compat-cache`, holding one
+`<program>.pcache` file per program (the launcher reads `DIR/<program>.pcache`). This replaces "one file per image digest".
