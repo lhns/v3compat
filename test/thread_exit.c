@@ -14,6 +14,7 @@
 
 static int cap;
 static volatile int live, created, failed;
+static pthread_attr_t detached;
 static void *worker(void *arg);
 
 /* Takes a slot for a new thread and starts it; arg says whether it may start one more. */
@@ -21,9 +22,10 @@ static int start(void *arg) {
     pthread_t t;
     int ok = 0;
     if (__atomic_add_fetch(&live, 1, __ATOMIC_RELAXED) <= cap) {
-        ok = pthread_create(&t, 0, worker, arg) == 0;
+        /* Created detached: glibc's pthread_detach() reads the thread's descriptor after marking it detached,
+         * and a thread exiting meanwhile frees it (and its stack) itself, so the read can fault, natively too. */
+        ok = pthread_create(&t, &detached, worker, arg) == 0;
         __atomic_add_fetch(ok ? &created : &failed, 1, __ATOMIC_RELAXED);
-        if (ok) pthread_detach(t);
     }
     if (!ok) __atomic_sub_fetch(&live, 1, __ATOMIC_RELAXED);
     return ok;
@@ -50,6 +52,7 @@ int main(int argc, char **argv) {
     int ms = argc > 2 ? atoi(argv[2]) : 300;
     struct timespec d = {ms / 1000, (ms % 1000) * 1000000L};
     int vfork_only = argc > 3 && !strcmp(argv[3], "vfork"), nproc = argc > 3 && !strcmp(argv[3], "nproc");
+    if (pthread_attr_init(&detached) || pthread_attr_setdetachstate(&detached, PTHREAD_CREATE_DETACHED)) return 2;
     for (int i = 0; i < 4 && !vfork_only; i++)
         if (pthread_create(&t, 0, spawner, 0)) return 2;
     if (nproc || vfork_only) {
