@@ -1,3 +1,14 @@
 # One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
 # /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-rates bash lab/rates.sh
+ab-fma1 bash lab/fmaab.sh 8
+ab-fma2 bash lab/fmaab.sh 8
+ab-fma3 bash lab/fmaab.sh 8
+ab-fma4 bash lab/fmaab.sh 8
+ab-fma5 bash lab/fmaab.sh 8
+ab-fma6 bash lab/fmaab.sh 8
+ab-fma7 bash lab/fmaab.sh 8
+ab-fma8 bash lab/fmaab.sh 8
+ab-fma9 bash lab/fmaab.sh 8
+ab-fma10 bash lab/fmaab.sh 8
+ab-fma11 bash lab/fmaab.sh 8
+ab-fma12 bash lab/fmaab.sh 8
