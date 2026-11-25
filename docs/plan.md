@@ -360,17 +360,18 @@ No change elsewhere: duckdb 0 of 240, signal stress 0 of 390, reg/flags stress 0
 DynamoRIO alone, the short loop 0 of 4,500.
 
 **`thread_exit`'s own SIGSEGV, fixed in the test** (CI run 45602512220, `thread-exit` status 0x8b). The test detached each
-thread after creating it. glibc's `pthread_detach()` marks the thread detached and then reads its descriptor; a thread
-exiting in between sees itself detached and frees its descriptor and stack, so the read faults **[source]**. Natively the
-core is in `pthread_detach()` at that read. Under the client the cores show a new thread whose stack, TLS included, is
-already unmapped or a guard page, faulting in DynamoRIO's thread init (`privload_tls_init()`); the kernel kills the
-process without a DynamoRIO report. Before, `thread_exit 64 300` on 20 runners (lab `lab-thread-exit-rate`, run
-45678003753, EPYC 7763, 9V45, 9V74, Xeon 6975P-C) **[measured]**: natively 23 of 10,000 runs, under the client 40 of
-30,000, with an empty client 9 of 20,000, DynamoRIO alone 1 of 10,000; 1,000 threads under the client 6 of 4,000.
-Threads are now created detached. Old and new test interleaved in each job (lab `lab-thread-exit-fix`, run 45703039909,
-16 jobs, EPYC 9V45, 9V74, Xeon 6975P-C, 8573C) **[measured]**: natively 92 of 24,000 against 0 of 24,000, under the
-client 35 of 24,000 against 0 of 24,000 (at most 0.0125%, 95%); with the fix the empty client 0 of 8,000 and 1,000
-threads 0 of 3,200.
+thread after creating it. glibc 2.39's `pthread_detach()` marks the thread detached and then reads its descriptor; a
+thread exiting in between sees itself detached and frees its descriptor and stack, which is unmapped once the stack cache
+(40 MB) is full **[source]**. The native cores fault at that read **[measured]**. Under the client the process dies
+before the main thread prints, a new thread faulting in DynamoRIO's thread init (`privload_tls_init()`'s safe read of
+the app TLS), with no DynamoRIO report and no thread in libc; that the race causes it is inferred from the fix. Before,
+`thread_exit 64 300` on 20 runners (lab `lab-thread-exit-rate`, run 45678003753, EPYC 7763, 9V45, 9V74, Xeon 6975P-C)
+**[measured]**: natively 23 of 10,000 runs, under the client 39 of 30,000, with an empty client 9 of 20,000, DynamoRIO
+alone 1 of 10,000; 1,000 threads under the client 5 of 4,000. Threads are now created detached. Old and new test
+interleaved in each job (lab `lab-thread-exit-fix`, run 45703039909, 16 jobs, EPYC 9V45, 9V74, Xeon 6975P-C, 8573C)
+**[measured]**: natively 92 of 24,000 against 0 of 24,000, under the client 35 of 24,000 against 0 of 24,000 (at most
+0.0125%, 95%); with the fix the empty client 0 of 8,000 and 1,000 threads 0 of 3,200. A rarer crash during the exit is
+not this race (Open items).
 
 **Signals sent by `kill`, fixed in the fork** (branch `fix-kill-signal-hold`). DynamoRIO holds an asynchronous signal to
 the end of the fragment it interrupted, but not one it may not always delay (SIGXCPU, SIGSEGV, SIGABRT and others): sent by
@@ -831,6 +832,12 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   limit (owner, 2026-11-21).
 - **One `regstress sig jit` SIGSEGV** under the client in CI on the rebased fork (0.28 s in, no core), not reproduced:
   0 of 1,000 on it and 0 of 1,000 on `8029afd`, on EPYC 7763, 9V45, 9V74 and Xeon 8573C, 6973P **[measured]**.
+- **A SIGSEGV during the exit while threads start**, not reproduced on demand: after `thread_exit`'s main thread printed,
+  under the client, 1 of 30,000 runs at 64 threads and 1 of 4,000 at 1,000 (run 45678003753) **[measured]**. Both cores
+  show a new thread in `privload_tls_init()` whose safe read of the app TLS faulted at the page past its stack, a fault
+  DynamoRIO normally catches, killing the process. Likely cause, not verified: the exiting thread had restored SIGSEGV's
+  default action (`signal_info_exit_sigaction()`) while that thread was still in its init. 0 in 27,200 runs since the
+  test fix does not bound a rate this low.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
