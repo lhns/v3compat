@@ -24,10 +24,67 @@ typedef struct {
     uint64 stack;     /* top of this thread's helper stack */
     uint64 thunk;     /* lean_thunk, called through here so the code cache needs no reach to it */
     uint64 desc;      /* the frame helper's descriptor (vec_call) */
+    uint64 lab;       /* LAB ONLY: translation-site index for the helper counter */
 } tls_t;
 #define TLS_SLOTS (sizeof(tls_t) / sizeof(void *))
 
 static reg_id_t tls_seg;
+
+/* ---- LAB ONLY (V3COMPAT_LAB_HCOUNT): count helper calls per (kind, descriptor, DR opcode, width, memory source) ---- */
+#define LAB_SITES (1u << 18)
+typedef struct { uint64 desc; uint32_t opc; uint8_t kind, wide, mem; } lab_site_t;
+static lab_site_t lab_sites[LAB_SITES];
+static uint64 lab_counts[LAB_SITES];
+static uint32_t lab_nsites = 1;   /* site 0 is the overflow bucket */
+
+static uint32_t lab_site(int kind, uint64 desc, int opc, bool wide, bool mem) {
+    uint32_t i = __atomic_fetch_add(&lab_nsites, 1, __ATOMIC_RELAXED);
+    if (i >= LAB_SITES) return 0;
+    lab_sites[i] = (lab_site_t){desc, (uint32_t)opc, (uint8_t)kind, wide, mem};
+    return i;
+}
+static void lab_count(uint32_t i) { __atomic_fetch_add(&lab_counts[i < LAB_SITES ? i : 0], 1, __ATOMIC_RELAXED); }
+
+static bool lab_has_mem(instr_t *in) {
+    for (int i = 0; i < instr_num_srcs(in); i++)
+        if (opnd_is_memory_reference(instr_get_src(in, i))) return true;
+    return false;
+}
+
+#define LAB_AGG 8192
+static void lab_report(void) {
+    static lab_site_t k[LAB_AGG];
+    static uint64 n[LAB_AGG];
+    static uint8_t used[LAB_AGG];
+    int pid = (int)dr_get_process_id();
+    uint32_t top = lab_nsites < LAB_SITES ? lab_nsites : LAB_SITES;
+    for (uint32_t i = 0; i < top; i++) {
+        if (lab_counts[i] == 0) continue;
+        lab_site_t *s = &lab_sites[i];
+        uint64 h = (s->desc * 0x9E3779B97F4A7C15ull) ^ ((uint64)s->opc << 20) ^ ((uint64)s->kind << 4) ^ ((uint64)s->wide << 2) ^ s->mem;
+        uint32_t j = (uint32_t)(h >> 7) % LAB_AGG;
+        for (int tries = 0; tries < LAB_AGG; tries++, j = (j + 1) % LAB_AGG) {
+            if (!used[j]) { used[j] = 1; k[j] = *s; n[j] = 0; }
+            if (k[j].desc == s->desc && k[j].opc == s->opc && k[j].kind == s->kind && k[j].wide == s->wide && k[j].mem == s->mem) {
+                n[j] += lab_counts[i];
+                break;
+            }
+        }
+    }
+    for (int j = 0; j < LAB_AGG; j++) {
+        if (!used[j]) continue;
+        uint64 d = k[j].desc;
+        if (k[j].kind == 0)
+            dr_fprintf(STDERR, "HCOUNT pid=%d kind=frame op=%d type=%d imm=%d flags=%x opc=%s wide=%d mem=%d count=%llu\n", pid,
+                       (int)(d & 0xff), (int)((d >> 8) & 3), (int)((d >> 16) & 0xff), (unsigned)((d >> 24) & 0xff),
+                       decode_opcode_name(k[j].opc), k[j].wide, k[j].mem, (unsigned long long)n[j]);
+        else
+            dr_fprintf(STDERR, "HCOUNT pid=%d kind=mcontext op=%d type=%d imm=%d flags=%x opc=%s wide=%d mem=%d count=%llu\n", pid,
+                       (int)(d & 0xff), (int)((d >> 8) & 0xff), (int)((d >> 48) & 0xff), 0,
+                       decode_opcode_name(k[j].opc), k[j].wide, k[j].mem, (unsigned long long)n[j]);
+    }
+    if (lab_nsites > LAB_SITES) dr_fprintf(STDERR, "HCOUNT pid=%d overflow sites=%u\n", pid, lab_nsites);
+}
 static uint tls_offs;
 static int tls_idx;
 static bool helpers_only;
@@ -474,7 +531,7 @@ static void vec_call(uint64 d) {
 }
 
 /* The lean call's callee: the descriptor comes through TLS, as the thunk passes nothing. */
-__attribute__((visibility("hidden"), used)) void lean_entry(void) { vec_call(my_tls()->desc); }
+__attribute__((visibility("hidden"), used)) void lean_entry(void) { lab_count((uint32_t)my_tls()->lab); vec_call(my_tls()->desc); }
 
 /*
  * Frame helpers' call (ADR 0007): the fragment stores rsp in SAVE_SP, switches to this thread's helper stack
@@ -510,10 +567,11 @@ __asm__(".text\n"
 extern char lean_thunk[] __attribute__((visibility("hidden")));
 
 /* rsp is the only application state that differs inside this sequence; event_restore has it from SAVE_SP. */
-static void insert_lean_call(emit_t *e, uint32_t desc) {
+static void insert_lean_call(emit_t *e, uint32_t desc, uint32_t lab) {
     put(e, INSTR_CREATE_mov_st(e->dc, SAVE_SP, reg(DR_REG_RSP)));
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RSP), tls_opnd(offsetof(tls_t, stack), OPSZ_8)));
     put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, desc), OPSZ_4), OPND_CREATE_INT32((int)desc)));
+    put(e, INSTR_CREATE_mov_st(e->dc, tls_opnd(offsetof(tls_t, lab), OPSZ_4), OPND_CREATE_INT32((int)lab)));
     put(e, INSTR_CREATE_call_ind(e->dc, tls_opnd(offsetof(tls_t, thunk), OPSZ_8)));
     put(e, INSTR_CREATE_mov_ld(e->dc, reg(DR_REG_RSP), SAVE_SP));
 }
@@ -615,7 +673,7 @@ static bool expand_vec(emit_t *e, instr_t *in, const form_t *f) {
     if (ic >= 0) stage(e, r[ic], offsetof(tls_t, c), false);
     if (f->kind == K_FMA) put(e, INSTR_CREATE_vmovdqu(e->dc, FRAME(c), reg(ymm_of(d))));
     uint32_t desc = (uint32_t)f->op | ((uint32_t)f->type << 8) | (imm << 16) | (fl << 24);
-    insert_lean_call(e, desc);
+    insert_lean_call(e, desc, lab_site(0, desc, instr_get_opcode(in), f->kind == K_MSK ? !(fl & D_NARROW) : ydst, lab_has_mem(in)));
     if (fl & D_MXCSR) insert_pending_check(e);
     /* Commit: one write. A VEX.128 load zeroes the destination's upper half. */
     if (f->kind == K_MSK)
@@ -653,7 +711,8 @@ static void write_gpr(reg_id_t r, int opsize, uint64 v, dr_mcontext_t *mc) {
 }
 
 /* d: op | opsize<<8 | s1<<16 | s2<<24 | dst<<32 | dst2<<40 | imm<<48 */
-static void bmi_call(uint64 d) {
+static void bmi_call(uint64 d, uint64 site) {
+    lab_count((uint32_t)site);
     void *dc = dr_get_current_drcontext();
     dr_mcontext_t mc;
     mc.size = sizeof mc;
@@ -758,7 +817,7 @@ static void expand_bmi(emit_t *e, instr_t *in, const form_t *f) {
     dr_insert_clean_call_ex(e->dc, e->bb, e->where, (void *)bmi_call,
                             DR_CLEANCALL_ALWAYS_OUT_OF_LINE | DR_CLEANCALL_READS_APP_CONTEXT |
                                 DR_CLEANCALL_WRITES_APP_CONTEXT,
-                            1, OPND_CREATE_INT64(d));
+                            2, OPND_CREATE_INT64(d), OPND_CREATE_INT32((int)lab_site(1, d, opc, opsize == 64, lab_has_mem(in))));
 }
 
 /* ---- Scalar BMI inline: GPR scratch saved in raw TLS, one faulting load first, one commit ---- */
@@ -1486,6 +1545,7 @@ bool expand_init(bool helpers_only_) {
 }
 
 void expand_exit(void) {
+    lab_report();
     drmgr_unregister_restore_state_ex_event(event_restore);
     drmgr_unregister_thread_init_event(event_thread_init);
     drmgr_unregister_thread_exit_event(event_thread_exit);
