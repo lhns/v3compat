@@ -1,7 +1,2 @@
-# the same fma A/B on more runners (the runner CPU is not chosen)
+ab-one1 bash lab/fmaone.sh 6
 ab-fma1 bash lab/fmaab.sh 8
-ab-fma2 bash lab/fmaab.sh 8
-ab-fma3 bash lab/fmaab.sh 8
-ab-fma4 bash lab/fmaab.sh 8
-ab-fma5 bash lab/fmaab.sh 8
-ab-fma6 bash lab/fmaab.sh 8
