@@ -787,7 +787,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache lab and test only ([design](translation-cache.md)). Ivy Bridge: warm `select 42` 1.76-1.92 s, 51-52% below cold, 64-115 MB, with `-disable_traces` only; 2.8-2.9 s with traces on ([gate run](#ivy-bridge-gate-run-2026-11-25)). Traces off pending the owner |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
 
-No release until the open crashes are fixed (owner, 2026-11-22).
+No release until the open crashes were fixed (owner, 2026-11-22); both are (#29, #81). The first release, 0.1.0, is prepared
+in [CHANGELOG.md](../CHANGELOG.md) and cut by the owner.
 
 ## Known flakes
 
