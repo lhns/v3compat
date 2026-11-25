@@ -216,6 +216,27 @@ excluding startup, from at least 20 rounds on a quiet node (1.93 s here, noisy);
 1,000 runs (0 of 282 here). Phase 3, warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same
 job (2.91 s, 36% now); 0.5 s is out of reach with this cache design. Memory and bad-entry gates unchanged.
 
+### Ivy Bridge gate run (2026-11-25)
+
+`lab/ivy-ab.sh` at `7a7e580` (main `e9997b9`, DynamoRIO pin `45bfae0f`), the pod shape above, two Jobs on
+`kube-worker-04`; node load average 10.9-48.2. `select 42`, medians of 10 interleaved rounds, min-max in brackets, first
+Job / second Job **[measured]**:
+
+| Options | Cold | Warm cache | Warm below cold | Peak RSS cold / warm |
+|---|---|---|---|---|
+| Default | 4.62 s (4.30-5.94) / 4.94 s (4.43-6.18) | 2.80 s (2.60-3.34) / 2.88 s (2.47-3.62) | 39% / 42% | 64 / 77 MB; 75 / 115 MB |
+| `-disable_traces` | 3.56 s (3.32-4.21) / 4.04 s (3.36-4.87) | 1.76 s (1.37-2.02) / 1.92 s (1.46-2.45) | 51% / 52% | 80 / 86 MB; 91 / 106 MB |
+
+- **Phase 3:** met only with traces off (warm 1.76 and 1.92 s, 51-52% below cold with the same options; 61-62%
+  against default cold). With traces on warm stays at 2.8-2.9 s. Each warm arm has its own cache, trained under its
+  options; every warm arm hit 77.1k of 77.2k lookups, 0 corrupt. Traces cost about 1 s of the cold start here, which
+  the cache does not cover. Peak memory 64-115 MB, under 180 MB. Whether the gate may be met with traces off is the
+  owner's call (about 3% on long runs, runners).
+- **Phase 2 compute: not measured.** The node's 1-minute load never fell below the fixed threshold of 6.0 (20 vCPUs)
+  in 95 minutes of waiting (10.9-48.2, about 02:05-03:40 UTC; the cluster's GitHub runners dominate), so no round ran.
+  A quiet window needs the node's other load stopped.
+- **Signal injection:** 0 bad of 1,000 (500 `regstress 8 3 sig jit`, 500 `xlsig`), second Job. Phase 2's gate is met.
+
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
 Statuses: 40 DynamoRIO cannot handle a signal (a fault it cannot translate, the fork, below), 86 refused instruction,
@@ -762,8 +783,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, from at least 20 rounds on a quiet node; signal injection 0 bad in at least 1,000 runs | In progress: inline scalar (#33), vector (#35) and cross-lane (#40) forms and the lean helper call (#39) merged |
-| **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache built through its Phase 2, lab and test only: warm `select 42` 0.34-0.63 s on runners, 39-43% below cold ([design](translation-cache.md)) |
+| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, from at least 20 rounds on a quiet node; signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute not measured, the node was never quiet ([gate run](#ivy-bridge-gate-run-2026-11-25)) |
+| **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache lab and test only ([design](translation-cache.md)). Ivy Bridge: warm `select 42` 1.76-1.92 s, 51-52% below cold, 64-115 MB, with `-disable_traces` only; 2.8-2.9 s with traces on ([gate run](#ivy-bridge-gate-run-2026-11-25)). Traces off pending the owner |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
 
 No release until the open crashes are fixed (owner, 2026-11-22).
