@@ -51,7 +51,7 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 |---|---|---|
 | Hot lane-wise AVX2: add, sub, compare, min, max, `vpmullw`/`vpmulld`/`vpmuludq`, `vpshufb`, shifts; `vpmovzx`/`vpmovsx`, `vpbroadcast` (register source; also to xmm), `vpabs`; `vpermd`/`vpermps`, `vpermq`/`vpermpd`, `vpshufd`/`vpshufhw`/`vpshuflw`, `vpmovmskb` | Inline, two 128-bit halves | 2-5 ns **[measured]**; 2.2 ns for `vpcmpeqd`, `vpmovzxbq`, `vpbroadcastb`, `vpabsd` on EPYC 9V45 |
 | Forms AVX1 has under another opcode, including ymm `vpand`/`vpor`/`vpxor`/`vpandn` | Native substitution | Native (`vpand` 0.06 ns **[measured]**) |
-| Other vector forms (`vpsllv*`, `vpunpck*`, `vpack*`, ...), FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more |
+| Other vector forms (`vpsllv*`, `vpunpck*`, `vpack*`, ...), FMA | Helper through a raw-TLS frame, no mcontext | 80-90 ns **[measured]**; FMA more, packed FMA less since lhns/avxemu#14 (below) |
 | `rorx`, `andn`, `mulx`, `shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`, MOVBE loads and stores | Inline | 0.6-1.7 ns **[measured]** for the shifts, `bzhi`, `tzcnt`, `lzcnt` (Xeon 8573C; 80-85 ns as helpers) |
 | `bextr`, `blsi`/`blsr`/`blsmsk`, `pdep`, `pext` | Helper through the mcontext | 320-400 ns **[measured]** |
 | AVX2 gathers | Inline, unrolled per element: one real load each, the mask and destination written back per element; also under `V3COMPAT_HELPERS_ONLY=1` | Not measured |
@@ -171,6 +171,13 @@ digests equal native wherever a run succeeded, main before the inline PRs **[mea
   `sd` 68 to 42, `ps`/`pd` xmm 279 to 72 and 136 to 60, `ps`/`pd` ymm 351 to 91 and 171 to 78; dgemm 0.78 to 0.39 s, sgemm
   0.79 to 0.26 s, Horner 0.19 to 0.11 s; Java's `Math.fma` round 593 to 375 ms (9V74), 455 to 270 ms (9V45). The lean
   call (#39) takes scalar FMA another 205 to 90 ns on EPYC 7763. Only `Math.fma` in Java hit it among the workloads (65M).
+- **Packed FMA** (ps/pd, xmm and ymm) now tries a native SSE kernel, taken only for lanes where an error-free check proves
+  the fused result (round to nearest, exceptions masked); other lanes use the exact per-lane code (lhns/avxemu#14).
+  **[measured]** new/base time ratios, interleaved, 8/8 ok per job, checksums equal native (labs `lab-perf-fma-guard2` run
+  45658421034 and `lab-perf-fma-guard2-cpus` runs 45658431583, 45660595105, 45661326327, 45662143567): packed ymm `ps`
+  0.52-0.63, `pd` 0.59-0.71; dgemm 0.49-0.56, sgemm 0.39-0.44; xmm packed 0.59-0.90; scalar `ss`/`sd` and Horner 0.99-1.03
+  (unchanged, so Java's `Math.fma` is unchanged), across Xeon 6975P-C, 8573C, 8370C, EPYC 9V74, 9V45, 7763.
+  `bench/ab.sh 6` (Xeon 6973P-C) unchanged within noise. Not measured on Ivy Bridge.
 - **Inline PRs**, one job each against main: #33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to
   0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms). #35, merged (vector forms: about 14 to 2.2 ns,
   duckdb varied 8.32 to 6.67 s). #40, merged (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns,
