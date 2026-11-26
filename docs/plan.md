@@ -6,7 +6,7 @@ Ivy Bridge, at close to native speed.
 **Status:** Phase 1 met (its compute target excludes startup); Phase 2, speed, in progress. Emulation, the launcher and
 exec follow run on DynamoRIO built from our fork. Whole-process time, startup included, is still far from native; see
 "Open items". Decisions are in the [ADRs](adr/README.md); this file holds the current state and the numbers behind it.
-How to build, test and run labs: [howto.md](howto.md).
+How to build, test and run labs: [howto.md](howto.md). Taking over: [handover.md](handover.md).
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
@@ -250,6 +250,30 @@ Job / second Job **[measured]**:
 - **Phase 2 compute: not measured.** The lab's own start gate (load below 6.0 on 20 vCPUs) never opened in 95 minutes
   (10.9-48.2); the gate is dropped since (method above).
 - **Signal injection:** 0 bad of 1,000 (500 `regstress 8 3 sig jit`, 500 `xlsig`), second Job. Phase 2's gate is met.
+
+### Ivy Bridge traces A/B (2026-11-26)
+
+`lab/ivy-ab.sh` (#89) at `7a914713`, Job `ivy-traces` in namespace `v3compat-lab-ivy` on `kube-worker-04`, `THREADS=4`.
+Option sets interleaved: d default, nt `-disable_traces`, th `-trace_threshold 1000`. Node load average 15-36 from
+unrelated workloads throughout. Warm-cache hits equal across sets (about 77.26k-77.37k, 0 corrupt), so not a cache
+artefact. All rc 0; the varied and java digests are equal across sets. The lab prints no javac digest: a gap
+**[measured]**.
+
+- **Compute query**, 20 rounds, the query's own time, p25 / min / median s: d 2.03 / 1.50 / 2.43, nt 2.21 / 1.86 / 2.49,
+  th 2.10 / 1.30 / 2.67. The sets are within noise. The Phase 2 gate (low end under 2 s, p25 or minimum): p25 is not met
+  by any set, the minimum is under 2 s for d and th.
+- **Long workloads**, mean of 3 rounds, CPU s (per round) / wall s:
+
+| | d | nt | th |
+|---|---|---|---|
+| javac | 704.7 (636, 786, 692) / 644.5 | 468.6 (440, 523, 442) / 437.6 | 679.0 (709, 699, 629) / 565.6 |
+| java | 144.6 (117, 180, 137) / 107.7 | 105.3 (101, 102, 112) / 84.9 | 181.2 (212, 173, 158) / 113.9 |
+| varied | 87.2 (77, 85, 100) / 38.8 | 83.4 (83, 86, 81) / 31.6 | 109.0 (95, 108, 125) / 47.0 |
+
+- **Reading:** nt used the least CPU in every round of javac and java, about 33% and 27% below d; varied is within
+  noise; th is no better than d. That contradicts "about 3% wall and 6% CPU" on a long mixed workload (runners, above
+  and README). Three rounds under load: the sign is clear, the size is not. The default is unchanged: the owner decides.
+- **Signal injection** (nt, 1,000 runs): pending, 50 of 1,000 with 0 bad when written.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 
@@ -811,7 +835,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, the low end of at least 20 interleaved rounds (method above the gate run); signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute not measured, the node was never quiet ([gate run](#ivy-bridge-gate-run-2026-11-25)) |
+| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, the low end of at least 20 interleaved rounds (method above the gate run); signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute p25 2.0-2.2 s, minimum 1.3-1.9 s on a loaded node ([traces A/B](#ivy-bridge-traces-ab-2026-11-26)); the 2026-11-25 run never got a quiet node |
 | **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache lab and test only ([design](translation-cache.md)). Ivy Bridge: warm `select 42` 1.76-1.92 s, 51-52% below cold, 64-115 MB, with `-disable_traces` only; 2.8-2.9 s with traces on ([gate run](#ivy-bridge-gate-run-2026-11-25)). Traces off pending the owner |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
 
@@ -852,6 +876,18 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   DynamoRIO normally catches, killing the process. Likely cause, not verified: the exiting thread had restored SIGSEGV's
   default action (`signal_info_exit_sigaction()`) while that thread was still in its init. 0 in 27,200 runs since the
   test fix does not bound a rate this low.
+  **Mechanism confirmed** (`lab/tex.sh 4 25` on a lab branch, 8 jobs each, `diag` run 45805324695 on fork `f8a41066` with
+  markers, `amp` run 45805304984 on fork main `45bfae0f`) **[measured]**: `execute_default_action()` resets SIGSEGV
+  to SIG_DFL while the process dies from an app fault; a thread starting then faults in DynamoRIO's init safe read and the
+  kernel kills it, making it the core dumper (markers: `default_action sig=11`, `sigaction SIGSEGV handler=0x0`, `reexec
+  exit begin`, `init safe read ... after SIGSEGV reset`; artifact `lab-tex01`, `keep/client.pre.1.txt`). It needs a
+  process already dying from an app fault; the client's normal exit is clean. Client with the fixed (detached) test:
+  800 of 800 pass in both runs. Client with the old `pthread_detach` test: 15 of 6,400 fail with 139 in `diag` (11 in
+  `safe_read` code 1 or 2, 4 in `main_signal_handler` code 128 `SI_KERNEL`, no markers) and 6 of 6,400 in `amp` (3 and 3).
+  The code 128 failures, about a quarter to a half, are unexplained. Fix (keep SIGSEGV safe during the default action):
+  the owner's call, not done.
+- **Bare DynamoRIO and the empty client hang** (60 s timeout, rc 137) in about 12-15% of control runs and 13% of old-test
+  runs in those jobs; the v3compat client never did **[measured]**.
 - **The fork's** signal, lock and exit changes are ours to maintain. Known limits: a signal can be delayed past a syscall in
   a shared fragment; the nudge relink is unchanged; a thread can hold a stale pointer to a flushed fragment. The lock change
   affects every thread running during exit and is the one most worth review.
