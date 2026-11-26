@@ -36,10 +36,11 @@ flowchart TB
         lg_k1["○ fix"]
         lg_k2[/"○ experiment"/]
         lg_k3("○ design")
-        lg_k4["○ tooling"]
-        lg_k5>"⚠ defect"]
-        lg_k6{{"○ decision (open, not<br/>drawn)"}}
-        lg_k7{{"✔ decision (decided)"}}
+        lg_k4["○ gate"]
+        lg_k5["○ tooling"]
+        lg_k6>"⚠ defect"]
+        lg_k7{{"○ decision (open, not<br/>drawn)"}}
+        lg_k8{{"✔ decision (decided)"}}
     end
     subgraph lg_edge["Arrow (in the trees every arrow points down, forward in time)"]
         direction LR
@@ -77,12 +78,12 @@ flowchart TB
     class lg_s5,lg_s6 dead
     class lg_s7 inprog
     class lg_s8 waiting
-    class lg_s9,lg_k0,lg_k1,lg_k2,lg_k3,lg_k4,lg_e0a,lg_e0b,lg_e1a,lg_e1b,lg_e2a,lg_e2b next
+    class lg_s9,lg_k0,lg_k1,lg_k2,lg_k3,lg_k4,lg_k5,lg_e0a,lg_e0b,lg_e1a,lg_e1b,lg_e2a,lg_e2b next
     class lg_s10 blocked
     class lg_s11 parked
-    class lg_s12,lg_k5 finding
-    class lg_k6 gate
-    class lg_k7 decided
+    class lg_s12,lg_k6 finding
+    class lg_k7 gate
+    class lg_k8 decided
 ```
 
 Owner calls are the purple shape. A decided owner call is drawn in the overview only, never in the track trees; an open one is listed under *Waiting on the owner*. The prefix on an overview box is its track. A prerequisite implied by a longer chain is not drawn; the node tables keep every edge.
@@ -91,9 +92,9 @@ Owner calls are the purple shape. A decided owner call is drawn in the overview 
 ## Ratings
 
 <!-- BEGIN GENERATED: ratings -->
-0 of 66 rated nodes are confirmed by the owner.
+0 of 67 rated nodes are confirmed by the owner.
 
-Not yet confirmed: `emu-preload`, `emu-gathers`, `emu-intel-nan`, `emu-mxcsr`, `client-forms`, `client-allowlist`, `client-seg-operands`, `client-block-end`, `client-seq-rwx`, `client-store-xl8`, `client-safe-translate-flushed`, `fork-signal-hang`, `fork-thread-private`, `fork-cache-reset`, `fork-ignore-syscalls`, `fork-vfork-signal`, `fork-signal-unlink`, `fork-map32bit`, `fork-torn-exit`, `fork-vfork-exit`, `fork-thread-create-fail`, `fork-kill-signal`, `fork-rebase`, `fork-vfork-exit-race`, `fork-trace-teardown`, `fork-ibl-race`, `fork-trace-emit`, `fork-sig-thread-start`, `fork-sigxcpu`, `fork-selfmod-xl8`, `fork-exit-sigmask`, `fork-safe-spot`, `fork-flushed-sandboxed`, `fork-vfork-kill`, `fork-close-range`, `fork-refuse-untranslatable`, `fork-selfwrite-flush`, `fork-heap-race`, `fork-selfmod-race`, `launch-static`, `launch-refused-exec`, `cache-phase2`, `cache-debug-fix`, `perf-startup-options`, `perf-memo-classify`, `perf-persist`, `perf-speed-inline`, `perf-inline-scalar`, `perf-inline-vec`, `perf-inline-xmm`, `perf-lean-call`, `perf-gencode-prot`, `perf-procmap`, `perf-protect-mask`, `perf-fma-scalar`, `perf-fma-packed`, `runtime-sde`, `runtime-v3compat-run`, `prod-release`, `lab-phase0`, `lab-ivy-ab`, `lab-ivy-gate`, `lab-ivy-traces`, `lab-thread-exit-test`, `client-kernel-module`, `perf-fast-decode`.
+Not yet confirmed: `emu-preload`, `emu-gathers`, `emu-intel-nan`, `emu-mxcsr`, `client-forms`, `client-allowlist`, `client-seg-operands`, `client-block-end`, `client-seq-rwx`, `client-store-xl8`, `client-safe-translate-flushed`, `fork-signal-hang`, `fork-thread-private`, `fork-cache-reset`, `fork-ignore-syscalls`, `fork-vfork-signal`, `fork-signal-unlink`, `fork-map32bit`, `fork-torn-exit`, `fork-vfork-exit`, `fork-thread-create-fail`, `fork-kill-signal`, `fork-rebase`, `fork-vfork-exit-race`, `fork-trace-teardown`, `fork-ibl-race`, `fork-trace-emit`, `fork-sig-thread-start`, `fork-sigxcpu`, `fork-selfmod-xl8`, `fork-exit-sigmask`, `fork-safe-spot`, `fork-flushed-sandboxed`, `fork-vfork-kill`, `fork-close-range`, `fork-refuse-untranslatable`, `fork-selfwrite-flush`, `fork-heap-race`, `fork-selfmod-race`, `launch-static`, `launch-refused-exec`, `cache-phase2`, `cache-debug-fix`, `perf-startup-options`, `perf-memo-classify`, `perf-persist`, `perf-speed-inline`, `perf-inline-scalar`, `perf-inline-vec`, `perf-inline-xmm`, `perf-lean-call`, `perf-gencode-prot`, `perf-procmap`, `perf-protect-mask`, `perf-fma-scalar`, `perf-fma-packed`, `runtime-sde`, `runtime-v3compat-run`, `prod-release`, `lab-phase0`, `lab-ivy-ab`, `lab-ivy-gate`, `lab-ivy-traces`, `lab-thread-exit-test`, `client-kernel-module`, `perf-fast-decode`, `client-phase1-gate`.
 <!-- END GENERATED: ratings -->
 
 ## Overview
@@ -102,28 +103,70 @@ Not yet confirmed: `emu-preload`, `emu-gathers`, `emu-intel-nan`, `emu-mxcsr`, `
 ```mermaid
 flowchart TB
     subgraph bd_0["Nov 2026"]
+        client_design("client · ✔ Translator<br/>on DynamoRIO, not<br/>patching")
         lab_phase0[/"lab · ✔ Phase 0: is<br/>DynamoRIO enough"/]
         client_allowlist["client · ✔ Refuse<br/>instructions not on a<br/>list"]
-        perf_inline_scalar["perf · ✔ Inline BMI<br/>shifts and bit counts"]
+        client_phase1_gate["client · ✔ Phase 1:<br/>correct, not yet fast"]
+        prod_order_of_work{{"prod · ✔ Order: JVM<br/>crashes first"}}
+        cache_placement{{"cache · ✔ Where the<br/>cache lives"}}
+        lab_ivy_ab[/"lab · ✔ First Ivy<br/>Bridge A/B run"/]
+        prod_limits{{"prod · ✔ Accept three<br/>production limits"}}
+        prod_stability_gate{{"prod · ✔ No release<br/>until crashes fixed"}}
+        lab_targets{{"lab · ✔ Approve Phase<br/>2 and 3 targets"}}
+        fork_heap_race["fork · ✔ Heap free-<br/>list race in DynamoRIO"]
         fork_selfmod_race["fork · ✔ JIT patch<br/>raced block building"]
         prod_release["prod · ✔ Release 0.1.0"]
-        fork_exit_sigsegv>"fork · ⚠ SIGSEGV at<br/>exit while threads<br/>start"]
+        lab_ivy_gate[/"lab · ✔ Ivy Bridge<br/>gate run"/]
+        lab_ivy_traces[/"lab · ✔ Traces A/B on<br/>Ivy Bridge"/]
     end
     subgraph bd_1["Now (in progress)"]
-        lab_ivy_traces_signal[/"lab · ▶ Signal runs<br/>with traces off"/]
+        prod_canary["prod · ⏳ Cluster<br/>canary (k0s-flux<br/>#35;1835)"]
+        perf_phase2_gate["perf · ⏳ Phase 2: fast<br/>on Ivy Bridge"]
     end
     subgraph bd_2["Later (blocked or parked)"]
-        prod_canary["prod · ⛔ Cluster<br/>canary (k0s-flux<br/>#35;1835)"]
+        cache_phase3_gate["cache · ⛔ Phase 3:<br/>fast warm start"]
+        prod_passthrough["prod · ⛔ Native<br/>passthrough on AVX2<br/>nodes"]
+        prod_two_weeks["prod · ⛔ Phase 4: two<br/>weeks like native"]
     end
-    lab_phase0 ~~~ fork_selfmod_race
-    client_allowlist ~~~ fork_selfmod_race
-    perf_inline_scalar ~~~ fork_selfmod_race
+    client_design ~~~ lab_phase0
+    client_design ~~~ client_allowlist
+    lab_phase0 ~~~ client_phase1_gate
+    client_allowlist ~~~ prod_order_of_work
+    client_allowlist ~~~ cache_placement
+    client_phase1_gate ~~~ lab_ivy_ab
+    prod_order_of_work ~~~ prod_limits
+    cache_placement ~~~ prod_stability_gate
+    lab_ivy_ab ~~~ lab_targets
+    prod_limits ~~~ fork_heap_race
+    prod_stability_gate ~~~ fork_heap_race
+    lab_targets ~~~ fork_selfmod_race
+    fork_heap_race ~~~ fork_selfmod_race
     fork_selfmod_race ~~~ prod_release
-    fork_selfmod_race ~~~ fork_exit_sigsegv
-    prod_release ~~~ lab_ivy_traces_signal
-    fork_exit_sigsegv ~~~ lab_ivy_traces_signal
-    lab_ivy_traces_signal ~~~ prod_canary
+    fork_selfmod_race ~~~ lab_ivy_gate
+    fork_selfmod_race ~~~ lab_ivy_traces
+    prod_release ~~~ prod_canary
+    lab_ivy_gate ~~~ perf_phase2_gate
+    lab_ivy_traces ~~~ perf_phase2_gate
+    prod_canary ~~~ cache_phase3_gate
+    perf_phase2_gate ~~~ prod_passthrough
+    cache_phase3_gate ~~~ prod_two_weeks
+    prod_passthrough ~~~ prod_two_weeks
+    client_design --> lab_phase0
+    client_allowlist --> client_phase1_gate
+    lab_phase0 --> prod_order_of_work
+    lab_ivy_ab --> lab_targets
+    prod_stability_gate --> fork_heap_race
+    fork_heap_race --> fork_selfmod_race
     fork_selfmod_race --> prod_release
+    prod_limits --> prod_release
+    lab_targets --> lab_ivy_gate
+    fork_selfmod_race --> lab_ivy_gate
+    cache_placement --> prod_canary
+    lab_ivy_gate --> prod_canary
+    lab_ivy_traces --> perf_phase2_gate
+    lab_ivy_traces --> cache_phase3_gate
+    prod_canary --> prod_passthrough
+    prod_passthrough --> prod_two_weeks
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -138,12 +181,13 @@ flowchart TB
     classDef decided fill:#ece0f7,stroke:#7b3fb5,stroke-dasharray:2 2,color:#111
     classDef finding fill:#ffe0b2,stroke:#d84315,stroke-width:2px,color:#111
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
-    class client_allowlist,prod_release succ
-    class fork_selfmod_race,perf_inline_scalar vsucc
-    class fork_exit_sigsegv finding
-    class prod_canary blocked
-    class lab_phase0 mixed
-    class lab_ivy_traces_signal inprog
+    class client_design unrated
+    class client_allowlist,prod_release,client_phase1_gate succ
+    class fork_heap_race,fork_selfmod_race vsucc
+    class cache_placement,prod_order_of_work,prod_limits,prod_stability_gate,lab_targets decided
+    class prod_canary,perf_phase2_gate waiting
+    class prod_two_weeks,cache_phase3_gate,prod_passthrough blocked
+    class lab_phase0,lab_ivy_ab,lab_ivy_gate,lab_ivy_traces mixed
 ```
 <!-- END GENERATED: overview -->
 
@@ -154,28 +198,63 @@ flowchart TB
 |---|---|---|
 | Retire leftover semantic test pieces | ○ next | The owner decides whether to keep test/misc_forms.c, retire avxemu's Intel reference file, and run the full imm8 semantic-hw as a nightly job. |
 | Rewrite AVXEmu in Rust | ⏸ parked | A Rust rewrite of AVXEmu was set aside: the worst bugs were wrong instruction semantics, which a test suite catches and Rust does not. |
+| Translator on DynamoRIO, not patching | ✔ done · unrated | Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries. |
 | Refuse instructions not on a list | ✔ done · successful | Every instruction shape the translator lets through is on an audited list built from runs on real CPUs; anything else stops the program with status 86 instead of guessing. |
+| Phase 1: correct, not yet fast | ✔ done · successful | Phase 1's go/no-go: lzcnt right in a dlopen'ed library, static children followed, duckdb's output correct, compute under 3 s without startup. |
+| Heap free-list race in DynamoRIO | ✔ done · very-successful | A flushing thread freed another thread's instruction list while that thread decoded into it, corrupting the heap; the rare crash that blocked production. |
 | JIT patch raced block building | ✔ done · very-successful | A JIT patching a method while DynamoRIO copied it gave a block made of two different versions of the code (the status 255 crash); blocks are now built from one read. |
 | SIGSEGV at exit while threads start | ⚠ open | When a process is already dying from a program fault, a thread starting at that moment can crash in DynamoRIO's init; the mechanism is confirmed, the fix is not done. |
 | Keep SIGSEGV safe during exit | ○ next | The owner decides whether the fork should keep SIGSEGV handled while DynamoRIO runs the default action of a fatal signal. |
 | One unreproduced regstress SIGSEGV | ⏸ parked | One signal-stress run crashed in CI on the rebased fork and was not seen again in 2,000 reruns. |
 | Bare DynamoRIO hangs in control runs | ⏸ parked | DynamoRIO without our client, and with an empty client, hangs in about 12-15% of control runs; v3compat's client never did. |
 | Signal behaviour differing from native | ⏸ parked | A lab with realistic signals found differences from native: a vfork child dies of a signal it ignores before exec, Java crashed 3 times in 24 under SIGTERM storms, and any SIGKILLed child ends the process with status 89. Its Python spawn stall was the close_range fix. |
+| Review the fork's exit lock change | ○ next | The plan names the fork's lock change around exit as the change most worth review: it affects every thread running during exit. |
+| Make the cache reset safe | ⏸ parked | On the roadmap but not worked on: fixing DynamoRIO's cache reset so it can be turned on again (flags lost in relocation, crashes under forced resets). |
+| Vfork child state built before clone | ⏸ parked | A killed vfork child holding a DynamoRIO lock ends the process with status 89; letting the parent run on needs the child's thread state built before the clone, or robust locks. |
+| Two untested exec cases | ○ next | Not measured yet: exec with argv[0] set to /proc/self/exe, and /proc/self/exe relative to a directory fd. |
+| Where the cache lives | ✔ done · n/a | The owner agreed: one root-owned cache directory per node and image digest, written by a training Job, mounted read-only. |
 | Canary with or without the cache | ○ next | The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work. |
-| Inline BMI shifts and bit counts | ✔ done · very-successful | Six scalar BMI forms went from about 80 ns as a helper call to about 1 ns inline; Java's bit-twiddling round went from 7 s to 0.1 s. |
+| Phase 3: fast warm start | ⛔ blocked | Phase 3's go/no-go: warm duckdb start under 2 s on Ivy Bridge and 40% below cold, under 180 MB, bad entries rejected; met so far only with traces off. |
+| Cache training Job on the node | ⏳ waiting | A Job on the Ivy Bridge node trains the cache into its own directory, and a root step renames it into the per-image tree; built in k0s-flux #1835, not merged. |
+| Cache as a supported launcher option | ⛔ blocked | V3COMPAT_CACHE is for tests and labs only; Phase 3 makes it the user option the runtime's read-only mount relies on. |
+| Hash manifest for the cache | ⛔ blocked | ADR 0006 starts cache integrity with a hash manifest, fs-verity where the filesystem has it; the runtime checks only ownership so far. |
 | Traces-off cost claim contradicted | ⚠ open | On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted. |
 | Traces on or off by default | ○ next | The owner decides whether -disable_traces becomes the default, which also decides whether Phase 3's startup gate is met. |
+| Phase 2: fast on Ivy Bridge | ⏳ waiting | Phase 2's go/no-go on Ivy Bridge: per-op and signal gates are met; compute's fastest quarter is 2.0-2.2 s and its minimum 1.3-1.9 s against a 2 s gate. |
+| Order: JVM crashes first | ✔ done · n/a | The owner put JVM workloads in scope and ordered the work: the javac and Java crashes, then the ranked performance list, then the OCI wrapper. |
+| Accept three production limits | ✔ done · n/a | The owner accepted three limits for production: a killed vfork child holding a lock ends the process (status 89), one random self-modifying sequence refuses, and one debug-only assert. |
+| No release until crashes fixed | ✔ done · n/a | The owner made the heap crash and the -sandbox_writable crash blockers: no release until both were fixed. |
 | Release 0.1.0 | ✔ done · successful | The first release: a self-contained tarball whose output matched native byte for byte on Ivy Bridge, still about 20x slower than native at startup. |
-| Cluster canary (k0s-flux #1835) | ⛔ blocked | A first real workload on the Ivy Bridge node through the wrapper; held unmerged until the owner decides about the cache. |
-| Two weeks matching native | ⛔ blocked | Phase 4's go/no-go: two weeks of the canary with no divergence from native. |
+| Cluster canary (k0s-flux #1835) | ⏳ waiting | A long-lived translated duckdb on kube-worker-04 and a daily byte-for-byte comparison with native; built in k0s-flux #1835 (installer pinned), held unmerged until the owner decides about the cache. |
+| Phase 4: two weeks like native | ⛔ blocked | Phase 4's go/no-go: two weeks of the canary with no divergence from native. |
+| Native passthrough on AVX2 nodes | ⛔ blocked | Nodes with AVX2 run wrapped containers natively, keyed on a pinned node label; the installer for it is in #1835 but no node carries the label yet. |
+| Correct the changelog's cache line | ○ next | CHANGELOG says the shipped launcher does not use the cache, but it reads V3COMPAT_CACHE; the line needs fixing whatever the canary decision. |
 | Phase 0: is DynamoRIO enough | ✔ done · mixed | DynamoRIO alone was measured on duckdb, zstd, Node and Java: fast enough on long runs, slow to start, so the startup criterion was relaxed with the owner's approval. |
+| First Ivy Bridge A/B run | ✔ done · mixed | The first measurements on the real Ivy Bridge node, in a pod on kube-worker-04; the node is shared and busy, so the numbers are upper bounds. |
+| Approve Phase 2 and 3 targets | ✔ done · n/a | The owner approved the gates: inline forms under 6 ns, helpers under 100 ns, compute under 2 s, 0 bad in 1,000 signal runs, warm startup under 2 s and 40% below cold. |
+| Ivy Bridge gate run | ✔ done · mixed | On Ivy Bridge the signal gate was met (0 bad of 1,000) and the startup gate only with traces off; the compute gate could not run on the busy node. |
+| Traces A/B on Ivy Bridge | ✔ done · mixed | Default, traces off and a higher trace threshold were interleaved on Ivy Bridge: traces off used the least CPU on javac and java; the compute query was within noise. |
 | Signal runs with traces off | ▶ in progress | The traces A/B's last section, 1,000 signal-injection runs with traces off, is running on kube-worker-04. |
+| Check javac output on Ivy Bridge | ○ next | The Ivy Bridge lab compares duckdb and Java outputs across option sets but prints no digest for javac's output, so a wrong compile would go unseen. |
+| Packed FMA kernel on Ivy Bridge | ○ next | The packed-FMA speedup was measured on six runner CPUs but not on Ivy Bridge, where helpers cost 4-5x more. |
 <!-- END GENERATED: plain-words -->
 
 ## Ready now
 
 <!-- BEGIN GENERATED: ready-now -->
-_None._
+**ivy**
+
+- `lab-fma-ivy`: Packed FMA kernel on Ivy Bridge
+
+**gh-runners**
+
+- `launch-exe-cases`: Two untested exec cases
+
+**agent**
+
+- `prod-changelog-cache`: Correct the changelog's cache line
+- `lab-javac-digest`: Check javac output on Ivy Bridge
+- `fork-exit-lock-review`: Review the fork's exit lock change
 <!-- END GENERATED: ready-now -->
 
 ## Running
@@ -189,7 +268,14 @@ _None._
 ## Built, waiting
 
 <!-- BEGIN GENERATED: built-waiting -->
-_None._
+**#1835 held until the owner's cache call**
+
+- `prod-canary`: Cluster canary (k0s-flux #1835)
+- `cache-training-job`: Cache training Job on the node
+
+**the compute gate's reading and the traces default**
+
+- `perf-phase2-gate`: Phase 2: fast on Ivy Bridge
 <!-- END GENERATED: built-waiting -->
 
 ## Waiting on the owner
@@ -205,6 +291,8 @@ _None._
 
 <!-- BEGIN GENERATED: queue -->
 1. `lab-ivy-traces-signal`: Signal runs with traces off
+2. `lab-fma-ivy`: Packed FMA kernel on Ivy Bridge. after the running signal job: one Job at a time on the node
+3. `cache-phase3-gate`: Phase 3: fast warm start
 <!-- END GENERATED: queue -->
 
 ## Timeline
@@ -218,7 +306,7 @@ Generated on 2026-11-26.
 ## Done, by month
 
 <!-- BEGIN GENERATED: done-by-month -->
-<details><summary><b>Nov 2026</b>: 81 done, 9 abandoned</summary>
+<details><summary><b>Nov 2026</b>: 82 done, 9 abandoned</summary>
 
 - `client-design`: Translator on DynamoRIO, not patching (✔ done · unrated). Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries.
   - Apache-2.0 licence; DynamoRIO's LGPL extensions shipped as separate libraries (2026-11-03)
@@ -241,6 +329,7 @@ Generated on 2026-11-26.
 - `launch-exec-error-call`: Refused exec fails with an errno (✔ done · n/a). The owner chose that an exec the client refuses returns an error to the caller instead of ending the process.
 - `launch-refused-exec`: Check and exec one descriptor (✔ done · very-successful). A refused exec returns EPERM or ENOEXEC, and the file is checked and executed through one descriptor, so swapping it in between cannot bypass the check.
 - `launch-static`: Static launcher that follows exec (✔ done · successful). v3compat-run is a static binary that starts DynamoRIO directly and keeps translating across exec, so child programs never run untranslated.
+- `client-phase1-gate`: Phase 1: correct, not yet fast (✔ done · successful). Phase 1's go/no-go: lzcnt right in a dlopen'ed library, static children followed, duckdb's output correct, compute under 3 s without startup.
 - `client-seg-operands`: Segment-relative memory operands (✔ done · successful). Emulated instructions reading thread-local memory (fs:, gs:) used DynamoRIO's segment base and returned zeros; they now use the program's.
   - Share the client's starts helper, PR #16 (2026-11-05)
 - `emu-gathers`: Emulate the AVX2 gathers (✔ done · successful). The 16 gather instructions are expanded inline, one real load per element, so a fault mid-gather leaves the same state as hardware.
@@ -368,12 +457,12 @@ Generated on 2026-11-26.
 Each track has its own page with its tree, node table and per-node details.
 
 - [emu - instruction emulation](roadmap/tracks/emu.md): 8 nodes (5 done, 1 next, 1 parked, 1 abandoned)
-- [client - translator client](roadmap/tracks/client.md): 11 nodes (9 done, 2 abandoned)
-- [fork - DynamoRIO fork](roadmap/tracks/fork.md): 36 nodes (30 done, 1 in progress, 1 next, 3 parked, 1 abandoned)
-- [launch - launcher and exec](roadmap/tracks/launch.md): 3 nodes (3 done)
-- [cache - translation cache](roadmap/tracks/cache.md): 5 nodes (4 done, 1 next)
-- [perf - performance](roadmap/tracks/perf.md): 20 nodes (14 done, 1 in progress, 1 next, 4 abandoned)
+- [client - translator client](roadmap/tracks/client.md): 12 nodes (10 done, 2 abandoned)
+- [fork - DynamoRIO fork](roadmap/tracks/fork.md): 39 nodes (30 done, 1 in progress, 2 next, 5 parked, 1 abandoned)
+- [launch - launcher and exec](roadmap/tracks/launch.md): 4 nodes (3 done, 1 next)
+- [cache - translation cache](roadmap/tracks/cache.md): 9 nodes (4 done, 1 in progress, 1 next, 3 blocked)
+- [perf - performance](roadmap/tracks/perf.md): 21 nodes (14 done, 2 in progress, 1 next, 4 abandoned)
 - [runtime - runtime wrapper](roadmap/tracks/runtime.md): 3 nodes (2 done, 1 abandoned)
-- [prod - production](roadmap/tracks/prod.md): 7 nodes (5 done, 2 blocked)
-- [lab - labs and measurement](roadmap/tracks/lab.md): 10 nodes (9 done, 1 in progress)
+- [prod - production](roadmap/tracks/prod.md): 9 nodes (5 done, 1 in progress, 1 next, 2 blocked)
+- [lab - labs and measurement](roadmap/tracks/lab.md): 12 nodes (9 done, 1 in progress, 2 next)
 <!-- END GENERATED: tracks -->

@@ -43,6 +43,9 @@ flowchart TB
     fork_selfmod_race["✔ JIT patch raced<br/>block building"]
     fork_exit_sigsegv>"⚠ SIGSEGV at exit<br/>while threads start"]
     fork_bare_dr_hang>"⏸ Bare DynamoRIO hangs<br/>in control runs"]
+    fork_exit_lock_review("○ Review the fork's<br/>exit lock change")
+    fork_reset_fix["⏸ Make the cache reset<br/>safe"]
+    fork_vfork_state["⏸ Vfork child state<br/>built before clone"]
     fork_signal_hang ~~~ fork_thread_private
     fork_signal_hang ~~~ fork_build
     fork_thread_private ~~~ fork_clone3
@@ -79,6 +82,9 @@ flowchart TB
     fork_heap_race ~~~ fork_selfmod_race
     fork_heap_race ~~~ fork_exit_sigsegv
     fork_heap_race ~~~ fork_bare_dr_hang
+    fork_selfmod_race ~~~ fork_exit_lock_review
+    fork_exit_sigsegv ~~~ fork_reset_fix
+    fork_bare_dr_hang ~~~ fork_vfork_state
     fork_signal_hang --> fork_thread_private
     fork_signal_hang --> fork_build
     fork_build --> fork_clone3
@@ -111,6 +117,9 @@ flowchart TB
     fork_selfwrite_flush --> fork_heap_race
     fork_refuse_untranslatable --> fork_heap_race
     fork_heap_race --> fork_selfmod_race
+    fork_vfork_kill --> fork_exit_lock_review
+    fork_safe_spot --> fork_reset_fix
+    fork_vfork_kill --> fork_vfork_state
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -130,8 +139,9 @@ flowchart TB
     class fork_build,fork_clone3 unrated
     class fork_cache_reset,fork_vfork_kill mixed
     class fork_rebase,fork_refuse_untranslatable succ
-    class fork_regstress_segv,fork_signal_deviations,fork_bare_dr_hang parked
+    class fork_regstress_segv,fork_signal_deviations,fork_bare_dr_hang,fork_reset_fix,fork_vfork_state parked
     class fork_exit_sigsegv finding
+    class fork_exit_lock_review next
 ```
 <!-- END GENERATED: track-fork -->
 
@@ -176,6 +186,9 @@ flowchart TB
 | `fork-bare-dr-hang` | Bare DynamoRIO hangs in control runs | defect | none | parked | unrated | 2026-11-26 |  | lab-thread-exit-test |  |  |  | docs/plan.md |
 | `fork-commit-call` | Commit to our DynamoRIO fork | decision | none | done | n/a | 2026-11-04 | 2026-11-04 | lab-phase0 |  |  |  | docs/adr/0003-dynamorio-as-the-base.md; session record |
 | `fork-signal-deviations` | Signal behaviour differing from native | defect | none | parked | unrated | 2026-11-19 |  | fork-vfork-kill |  |  |  | session record |
+| `fork-exit-lock-review` | Review the fork's exit lock change | design | agent | next | unrated |  |  | fork-vfork-kill, fork-vfork-exit-race |  |  |  | docs/plan.md |
+| `fork-reset-fix` | Make the cache reset safe | fix | agent | parked | unrated |  |  | prod-triage |  |  |  | docs/plan.md; docs/adr/0010-no-cache-reset.md |
+| `fork-vfork-state` | Vfork child state built before clone | fix | agent | parked | unrated |  |  | prod-limits |  |  |  | docs/plan.md |
 
 ### Details per node
 
@@ -217,6 +230,9 @@ flowchart TB
 | `fork-bare-dr-hang` | Bare DynamoRIO hangs in control runs |  |  | DynamoRIO without our client, and with an empty client, hangs in about 12-15% of control runs; v3compat's client never did. |  |  |  |  |  |
 | `fork-commit-call` | Commit to our DynamoRIO fork |  |  | After Phase 0 the owner accepted the ADRs and committed to DynamoRIO built from our own fork, with nothing posted upstream. |  |  |  |  |  |
 | `fork-signal-deviations` | Signal behaviour differing from native |  |  | A lab with realistic signals found differences from native: a vfork child dies of a signal it ignores before exec, Java crashed 3 times in 24 under SIGTERM storms, and any SIGKILLed child ends the process with status 89. Its Python spawn stall was the close_range fix. | Found in a session lab, not written up in the plan yet. |  |  |  |  |
+| `fork-exit-lock-review` | Review the fork's exit lock change |  |  | The plan names the fork's lock change around exit as the change most worth review: it affects every thread running during exit. | Done when: a written review of the lock change, with any finding as its own node. |  |  |  |  |
+| `fork-reset-fix` | Make the cache reset safe |  |  | On the roadmap but not worked on: fixing DynamoRIO's cache reset so it can be turned on again (flags lost in relocation, crashes under forced resets). | Anything new that relocates a thread needs test/regstress.c. |  |  |  |  |
+| `fork-vfork-state` | Vfork child state built before clone |  |  | A killed vfork child holding a DynamoRIO lock ends the process with status 89; letting the parent run on needs the child's thread state built before the clone, or robust locks. |  |  |  |  |  |
 
 ### Folded items per node
 

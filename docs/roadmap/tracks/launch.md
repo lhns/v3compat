@@ -11,8 +11,11 @@ Scope: the static launcher, exec follow, /proc/self/exe, privilege refusals.
 flowchart TB
     launch_static["✔ Static launcher that<br/>follows exec"]
     launch_refused_exec["✔ Check and exec one<br/>descriptor"]
+    launch_exe_cases[/"○ Two untested exec<br/>cases"/]
     launch_static ~~~ launch_refused_exec
+    launch_refused_exec ~~~ launch_exe_cases
     launch_static --> launch_refused_exec
+    launch_refused_exec --> launch_exe_cases
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -29,6 +32,7 @@ flowchart TB
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
     class launch_static succ
     class launch_refused_exec vsucc
+    class launch_exe_cases next
 ```
 <!-- END GENERATED: track-launch -->
 
@@ -40,6 +44,7 @@ flowchart TB
 | `launch-static` | Static launcher that follows exec | feature | none | done | successful | 2026-11-04 | 2026-11-04 | client-scaffold |  |  |  | PR #6; branch launcher-exec; PR #7; branch readlink-short-buffer; docs/adr/0009-static-launcher-no-drrun.md; docs/plan.md |
 | `launch-exec-error-call` | Refused exec fails with an errno | decision | none | done | n/a | 2026-11-04 | 2026-11-04 | launch-static |  |  |  | PR #9; docs/adr/0009-static-launcher-no-drrun.md |
 | `launch-refused-exec` | Check and exec one descriptor | fix | none | done | very-successful | 2026-11-04 | 2026-11-04 | launch-exec-error-call |  |  | Now 0 of 120 each | PR #9; branch refused-exec-returns-error |
+| `launch-exe-cases` | Two untested exec cases | experiment | gh-runners | next | unrated |  |  | launch-refused-exec |  |  |  | docs/plan.md |
 
 ### Details per node
 
@@ -48,4 +53,5 @@ flowchart TB
 | `launch-static` | Static launcher that follows exec | On Ivy Bridge, under Docker's default seccomp: ctest passes except `docker`, skipped as the dev container has no docker. |  | v3compat-run is a static binary that starts DynamoRIO directly and keeps translating across exec, so child programs never run untranslated. |  |  |  |  |  |
 | `launch-exec-error-call` | Refused exec fails with an errno |  |  | The owner chose that an exec the client refuses returns an error to the caller instead of ending the process. |  |  |  |  |  |
 | `launch-refused-exec` | Check and exec one descriptor | On the previous code a refused file ran in 17 of 80 (swap), 8 of 80 (script swap) and 27 of 80 (unreadable flip, untranslated) runs on a host without AVX2. Now 0 of 120 each. | Now 0 of 120 each | A refused exec returns EPERM or ENOEXEC, and the file is checked and executed through one descriptor, so swapping it in between cannot bypass the check. |  |  |  |  |  |
+| `launch-exe-cases` | Two untested exec cases |  |  | Not measured yet: exec with argv[0] set to /proc/self/exe, and /proc/self/exe relative to a directory fd. | Done when: both cases are in a ctest and match native. |  |  |  |  |
 <!-- END GENERATED: table-launch -->
