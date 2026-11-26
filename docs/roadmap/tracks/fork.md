@@ -140,7 +140,7 @@ flowchart TB
 <!-- BEGIN GENERATED: table-fork -->
 | id | title | kind | lane | state | outcome | start | end | depends_on | replaced_by | qualified_by | headline | evidence |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `fork-signal-hang` | Two signalled threads looped forever | fix | none | done | very-successful | 2026-11-03 | 2026-11-04 |  |  |  | 356/1000 | docs/plan.md; commit f01f7fc |
+| `fork-signal-hang` | Two signalled threads looped forever | fix | none | done | very-successful | 2026-11-03 | 2026-11-04 |  |  |  | 0/1000 | docs/plan.md; commit f01f7fc |
 | `fork-thread-private` | Thread-private caches as a fallback | experiment | none | abandoned | dead-end | 2026-11-03 | 2026-11-04 | fork-signal-hang |  |  |  | docs/plan.md; commit f01f7fc |
 | `fork-build` | Build DynamoRIO from our fork | tooling | none | done | unrated | 2026-11-04 | 2026-11-04 | client-scaffold, fork-signal-hang, fork-commit-call |  |  |  | PR #2; branch dr-fork-source; docs/adr/0003-dynamorio-as-the-base.md |
 | `fork-clone3` | Spawned child lost its signal handlers | fix | none | done | unrated | 2026-11-04 | 2026-11-04 | fork-build |  |  |  | PR #10; branch clone3-root-cause |
@@ -168,7 +168,7 @@ flowchart TB
 | `fork-close-range` | Closing all fds took a minute | fix | none | done | very-successful | 2026-11-19 | 2026-11-19 | fork-rebase |  |  | 0.11-0.15 s after | PR #70; branch fix-close-range; lhns/dynamorio#23; docs/plan.md |
 | `fork-refuse-untranslatable` | Stop on untranslatable faults | fix | none | done | successful | 2026-11-20 | 2026-11-20 | client-store-xl8 |  | lab-noop-value-checks |  | PR #73; branch refuse-untranslatable-fault; lhns/dynamorio#26; docs/plan.md |
 | `fork-selfwrite-flush` | Self-written fragment deleted twice | fix | none | done | very-successful | 2026-11-20 | 2026-11-20 | fork-flushed-sandboxed |  |  | 6 of 600 and 0 of 600 | lhns/dynamorio#27; docs/plan.md; commit c8c6e30 |
-| `fork-heap-race` | Heap free-list race in DynamoRIO | fix | none | done | very-successful | 2026-11-24 | 2026-11-24 | fork-selfwrite-flush, prod-stability-gate |  |  | 0 of 7,500 | PR #79; branch pin-trace-abort-foreign; lhns/dynamorio#29; docs/plan.md |
+| `fork-heap-race` | Heap free-list race in DynamoRIO | fix | none | done | very-successful | 2026-11-24 | 2026-11-24 | fork-selfwrite-flush, prod-stability-gate |  |  | 6.1e8 against 2,331 | PR #79; branch pin-trace-abort-foreign; lhns/dynamorio#29; docs/plan.md |
 | `fork-selfmod-race` | JIT patch raced block building | fix | none | done | very-successful | 2026-11-25 | 2026-11-25 | fork-heap-race, prod-stability-gate |  |  | 960 of 960 against 0 of 960 | PR #81; commit e9997b92; lhns/dynamorio#30; docs/plan.md |
 | `fork-exit-sigsegv` | SIGSEGV at exit while threads start | defect | none | in-progress | unrated | 2026-11-25 |  | lab-thread-exit-test |  |  |  | docs/plan.md; commit 8e97372; branch lab-te-exit-amp; branch lab-te-exit-diag |
 | `fork-exit-fix` | Keep SIGSEGV safe during exit | decision | owner | next | n/a |  |  | fork-exit-sigsegv |  |  |  | docs/handover.md; docs/plan.md |
@@ -181,7 +181,7 @@ flowchart TB
 
 | id | title | verdict | headline | in plain words | notes | confirmed | waiting on | queue order | order reason |
 |---|---|---|---|---|---|---|---|---|---|
-| `fork-signal-hang` | Two signalled threads looped forever | Go tight loop + GC \| 356/1000 \| 0/1000 | 356/1000 | Two threads signalled in one shared code fragment looped forever under stock DynamoRIO, in Go programs and C alike; fixed in the fork before v3compat started. |  |  |  |  |  |
+| `fork-signal-hang` | Two signalled threads looped forever | Go tight loop + GC \| 356/1000 \| 0/1000 | 0/1000 | Two threads signalled in one shared code fragment looped forever under stock DynamoRIO, in Go programs and C alike; fixed in the fork before v3compat started. |  |  |  |  |  |
 | `fork-thread-private` | Thread-private caches as a fallback | `-thread_private` is not a fallback: it hung too. |  | Giving each thread its own code cache did not avoid the signal hang. |  |  |  |  |  |
 | `fork-build` | Build DynamoRIO from our fork |  |  | DynamoRIO is built from source from lhns/dynamorio at a pinned commit; fixes go to the fork only, never upstream. |  |  |  |  |  |
 | `fork-clone3` | Spawned child lost its signal handlers |  |  | glibc's posix_spawn cleared DynamoRIO's own signal handlers in the child, which then died; the fork now clears only the program's. |  |  |  |  |  |
@@ -209,14 +209,14 @@ flowchart TB
 | `fork-close-range` | Closing all fds took a minute | Main's pin `5693e56` against the fix, interleaved, 3 reps, EPYC 7763 (run 44507982244): 37.7-41.1 s before, 0.11-0.15 s after, under the client and alone. | 0.11-0.15 s after | Python's subprocess closes every fd up to INT_MAX, and DynamoRIO checked each one, so one subprocess call took about a minute. |  |  |  |  |  |
 | `fork-refuse-untranslatable` | Stop on untranslatable faults | with the fix 60 of 60 stop with status 40 and the message, both arms (run 44623652835). |  | A fault in deleted code whose state cannot be recovered now stops the process with status 40 instead of handing the program pc 0. |  |  |  |  |  |
 | `fork-selfwrite-flush` | Self-written fragment deleted twice | unfixed against fixed in the same jobs 6 of 600 and 0 of 600 (run 44631011188) | 6 of 600 and 0 of 600 | A fragment that wrote its own code was deleted while a flush could unlink it at the same moment (debug asserts); it is now deleted safely. |  |  |  |  |  |
-| `fork-heap-race` | Heap free-list race in DynamoRIO | release builds, crashes 2 of 7,500 against 0 of 7,500 (run 45128649212). | 0 of 7,500 | A flushing thread freed another thread's instruction list while that thread decoded into it, corrupting the heap; the rare crash that blocked production. | The plan says the proof rests on the overlap count; the crash counts only agree. |  |  |  |  |
+| `fork-heap-race` | Heap free-list race in DynamoRIO | overlaps 1 of 4,999 against 0 of 5,000 and cross-thread small-block heap operations 6.1e8 against 2,331 (run 45128633686) | 6.1e8 against 2,331 | A flushing thread freed another thread's instruction list while that thread decoded into it, corrupting the heap; the rare crash that blocked production. | The plan says the proof rests on the overlap count; the crash counts only agree. |  |  |  |  |
 | `fork-selfmod-race` | JIT patch raced block building | the fix 0 in each; the reproducer 960 of 960 against 0 of 960, under the client and alone. | 960 of 960 against 0 of 960 | A JIT patching a method while DynamoRIO copied it gave a block made of two different versions of the code (the status 255 crash); blocks are now built from one read. |  |  |  |  |  |
 | `fork-exit-sigsegv` | SIGSEGV at exit while threads start |  |  | When a process is already dying from a program fault, a thread starting at that moment can crash in DynamoRIO's init; the mechanism is confirmed, the fix is not done. | Mechanism confirmed in lab runs 45805324695 and 45805304984; the code-128 failures are unexplained. |  | the owner's call on a fork fix |  |  |
 | `fork-exit-fix` | Keep SIGSEGV safe during exit |  |  | The owner decides whether the fork should keep SIGSEGV handled while DynamoRIO runs the default action of a fatal signal. | Open owner decision 3 in docs/handover.md. |  |  |  |  |
 | `fork-regstress-segv` | One unreproduced regstress SIGSEGV |  |  | One signal-stress run crashed in CI on the rebased fork and was not seen again in 2,000 reruns. |  |  |  |  |  |
 | `fork-bare-dr-hang` | Bare DynamoRIO hangs in control runs |  |  | DynamoRIO without our client, and with an empty client, hangs in about 12-15% of control runs; v3compat's client never did. |  |  |  |  |  |
 | `fork-commit-call` | Commit to our DynamoRIO fork |  |  | After Phase 0 the owner accepted the ADRs and committed to DynamoRIO built from our own fork, with nothing posted upstream. |  |  |  |  |  |
-| `fork-signal-deviations` | Signal behaviour differing from native |  |  | A lab with realistic signals found three differences from native that no fix tracks yet: a vfork child dies of a signal it should ignore, Java crashes under SIGTERM storms, and Python spawns crawl under frequent signals. | Found in a session lab, not written up in the plan yet. |  |  |  |  |
+| `fork-signal-deviations` | Signal behaviour differing from native |  |  | A lab with realistic signals found differences from native: a vfork child dies of a signal it ignores before exec, Java crashed 3 times in 24 under SIGTERM storms, and any SIGKILLed child ends the process with status 89. Its Python spawn stall was the close_range fix. | Found in a session lab, not written up in the plan yet. |  |  |  |  |
 
 ### Folded items per node
 
@@ -240,7 +240,6 @@ flowchart TB
   - Owner: the refusal ends with DynamoRIO's status 40, no new code (2026-11-20, session record)
 - `fork-heap-race`: Heap free-list race in DynamoRIO
   - Stability gate counts: the heap crash recurs on cc4fdfd; the flusher lead refuted, PR #78 (2026-11-22, commit 5fc6e004, commit ca5cf9be, commit 7d7b590f, commit 049f57b6, commit 9dd6bb9d)
-  - First lead not reproduced by a widened window (2026-11-22, session record)
   - Fix A narrowed: handing over the whole trace would use freed memory (2026-11-22, session record)
 - `fork-selfmod-race`: JIT patch raced block building
   - Plan corrections: the Bench workload and the status 134 description, PR #80 (2026-11-24, commit 2b0709ef, commit aacbff8f, commit 5c2cd890)

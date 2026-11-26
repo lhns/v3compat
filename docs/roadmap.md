@@ -160,7 +160,7 @@ flowchart TB
 | Keep SIGSEGV safe during exit | ○ next | The owner decides whether the fork should keep SIGSEGV handled while DynamoRIO runs the default action of a fatal signal. |
 | One unreproduced regstress SIGSEGV | ⏸ parked | One signal-stress run crashed in CI on the rebased fork and was not seen again in 2,000 reruns. |
 | Bare DynamoRIO hangs in control runs | ⏸ parked | DynamoRIO without our client, and with an empty client, hangs in about 12-15% of control runs; v3compat's client never did. |
-| Signal behaviour differing from native | ⏸ parked | A lab with realistic signals found three differences from native that no fix tracks yet: a vfork child dies of a signal it should ignore, Java crashes under SIGTERM storms, and Python spawns crawl under frequent signals. |
+| Signal behaviour differing from native | ⏸ parked | A lab with realistic signals found differences from native: a vfork child dies of a signal it ignores before exec, Java crashed 3 times in 24 under SIGTERM storms, and any SIGKILLed child ends the process with status 89. Its Python spawn stall was the close_range fix. |
 | Canary with or without the cache | ○ next | The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work. |
 | Inline BMI shifts and bit counts | ✔ done · very-successful | Six scalar BMI forms went from about 80 ns as a helper call to about 1 ns inline; Java's bit-twiddling round went from 7 s to 0.1 s. |
 | Traces-off cost claim contradicted | ⚠ open | On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted. |
@@ -248,7 +248,6 @@ Generated on 2026-11-26.
   - Helper archive defined by avxemu's cmake/helpers.cmake, PR #66 (2026-11-18)
   - AVXEmu decoder fixes dropped: DynamoRIO decodes (2026-11-04)
   - Nothing else needs to move from v3compat to avxemu (2026-11-13)
-  - Rule: what works without DynamoRIO goes to avxemu first (2026-11-26)
 - `emu-preload`: AVXEmu's in-memory patching (↷ superseded). The earlier approach patched AVX2 instructions in memory; it missed shared libraries, static binaries and JIT code, so only its emulation core was kept.
   - On Ivy Bridge the patching design refused duckdb and zstd at startup (2026-11-03)
 - `fork-cache-reset`: Turn off DynamoRIO's cache reset (✔ done · mixed). About 1 duckdb run in 10 gave wrong results or crashed because a full cache reset moves threads incorrectly; the reset is off and one register bug is fixed.
@@ -335,10 +334,8 @@ Generated on 2026-11-26.
   - SDE plan dropped from the open items: tried before and too slow (2026-11-17)
 - `runtime-v3compat-run`: Wrapper runs v3compat-run, not SDE (✔ done · successful). The OCI wrapper puts v3compat-run in front of the container's process and refuses to start the container if translation cannot be set up.
   - Plan: Ivy Bridge A/B results, approved targets, ADR 0004 amendments (passthrough, fail closed), PR #77 (2026-11-22)
-  - Owner: fail closed on nodes without x86-64-v3, amending ADR 0004 (2026-11-22)
 - `fork-heap-race`: Heap free-list race in DynamoRIO (✔ done · very-successful). A flushing thread freed another thread's instruction list while that thread decoded into it, corrupting the heap; the rare crash that blocked production.
   - Stability gate counts: the heap crash recurs on cc4fdfd; the flusher lead refuted, PR #78 (2026-11-22)
-  - First lead not reproduced by a widened window (2026-11-22)
   - Fix A narrowed: handing over the whole trace would use freed memory (2026-11-22)
 - `lab-noop-value-checks`: Value checks that checked nothing (✔ fixed). Several Java labs compared output lines main's benchmark does not print, so their '0 wrong values' checked nothing; the plan was corrected.
 - `fork-selfmod-race`: JIT patch raced block building (✔ done · very-successful). A JIT patching a method while DynamoRIO copied it gave a block made of two different versions of the code (the status 255 crash); blocks are now built from one read.

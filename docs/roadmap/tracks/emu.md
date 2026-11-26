@@ -83,7 +83,6 @@ flowchart TB
   - Helper archive defined by avxemu's cmake/helpers.cmake, PR #66 (2026-11-18, commit ebbf7c14, commit 5fa60eeb, commit 52216de1)
   - AVXEmu decoder fixes dropped: DynamoRIO decodes (2026-11-04, session record)
   - Nothing else needs to move from v3compat to avxemu (2026-11-13, session record)
-  - Rule: what works without DynamoRIO goes to avxemu first (2026-11-26, session record)
 - `emu-semantic-suite`: Semantic suite against real silicon
   - Drop the form tests avxemu's suite covers, PR #43 (2026-11-13, commit 3bdbb8e5, commit ba21bf73)
 <!-- END GENERATED: table-emu -->

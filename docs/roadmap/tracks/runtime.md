@@ -59,5 +59,4 @@ flowchart TB
   - SDE plan dropped from the open items: tried before and too slow (2026-11-17, session record)
 - `runtime-v3compat-run`: Wrapper runs v3compat-run, not SDE
   - Plan: Ivy Bridge A/B results, approved targets, ADR 0004 amendments (passthrough, fail closed), PR #77 (2026-11-22, commit f6a68c80, commit 16dabbeb, commit d3655c47, commit 9387cb9f)
-  - Owner: fail closed on nodes without x86-64-v3, amending ADR 0004 (2026-11-22, session record)
 <!-- END GENERATED: table-runtime -->

@@ -44,7 +44,6 @@ nodes:
   - "Helper archive defined by avxemu's cmake/helpers.cmake, PR #66 (2026-11-18, commit ebbf7c14, commit 5fa60eeb, commit 52216de1)"
   - "AVXEmu decoder fixes dropped: DynamoRIO decodes (2026-11-04, session record)"
   - "Nothing else needs to move from v3compat to avxemu (2026-11-13, session record)"
-  - "Rule: what works without DynamoRIO goes to avxemu first (2026-11-26, session record)"
   overview: false
   plain: "AVXEmu's tested instruction semantics became a libc-free static library that the client calls for the forms it does not expand inline."
 
@@ -351,7 +350,7 @@ nodes:
   outcome: "very-successful"
   evidence: ["docs/plan.md", "commit f01f7fc"]
   verdict_quote: "Go tight loop + GC | 356/1000 | 0/1000"
-  headline: "356/1000"
+  headline: "0/1000"
   depends_on: []
   replaced_by: []
   lane: "none"
@@ -866,8 +865,8 @@ nodes:
   state: "done"
   outcome: "very-successful"
   evidence: ["PR #79", "branch pin-trace-abort-foreign", "lhns/dynamorio#29", "docs/plan.md"]
-  verdict_quote: "release builds, crashes 2 of 7,500 against 0 of 7,500 (run 45128649212)."
-  headline: "0 of 7,500"
+  verdict_quote: "overlaps 1 of 4,999 against 0 of 5,000 and cross-thread small-block heap operations 6.1e8 against 2,331 (run 45128633686)"
+  headline: "6.1e8 against 2,331"
   depends_on: [fork-selfwrite-flush, prod-stability-gate]
   replaced_by: []
   lane: "none"
@@ -875,7 +874,6 @@ nodes:
   end: "2026-11-24"
   folded:
   - "Stability gate counts: the heap crash recurs on cc4fdfd; the flusher lead refuted, PR #78 (2026-11-22, commit 5fc6e004, commit ca5cf9be, commit 7d7b590f, commit 049f57b6, commit 9dd6bb9d)"
-  - "First lead not reproduced by a widened window (2026-11-22, session record)"
   - "Fix A narrowed: handing over the whole trace would use freed memory (2026-11-22, session record)"
   overview: false
   plain: "A flushing thread freed another thread's instruction list while that thread decoded into it, corrupting the heap; the rare crash that blocked production."
@@ -1153,7 +1151,7 @@ nodes:
   kind: "experiment"
   state: "done"
   outcome: "mixed"
-  evidence: ["PR #14", "branch startup-time"]
+  evidence: ["PR #14", "branch startup-time", "branch prof-scratch", "branch startup-bench"]
   verdict_quote: "-disable_traces: select -27%, compute -18%; long mixed query +3% wall, +6% CPU. Not made the default (above the 5% limit); documented as an option."
   headline: ""
   depends_on: [client-allowlist]
@@ -1244,7 +1242,7 @@ nodes:
   kind: "experiment"
   state: "done"
   outcome: "unrated"
-  evidence: ["docs/plan.md", "PR #36", "branch prof-scratch", "branch startup-bench"]
+  evidence: ["docs/plan.md", "PR #36"]
   verdict_quote: ""
   headline: ""
   depends_on: [prod-order-of-work]
@@ -1542,7 +1540,6 @@ nodes:
   end: "2026-11-22"
   folded:
   - "Plan: Ivy Bridge A/B results, approved targets, ADR 0004 amendments (passthrough, fail closed), PR #77 (2026-11-22, commit f6a68c80, commit 16dabbeb, commit d3655c47, commit 9387cb9f)"
-  - "Owner: fail closed on nodes without x86-64-v3, amending ADR 0004 (2026-11-22, session record)"
   overview: false
   plain: "The OCI wrapper puts v3compat-run in front of the container's process and refuses to start the container if translation cannot be set up."
 
@@ -1987,5 +1984,5 @@ nodes:
   end: ""
   folded: []
   overview: false
-  plain: "A lab with realistic signals found three differences from native that no fix tracks yet: a vfork child dies of a signal it should ignore, Java crashes under SIGTERM storms, and Python spawns crawl under frequent signals."
+  plain: "A lab with realistic signals found differences from native: a vfork child dies of a signal it ignores before exec, Java crashed 3 times in 24 under SIGTERM storms, and any SIGKILLed child ends the process with status 89. Its Python spawn stall was the close_range fix."
   notes: "Found in a session lab, not written up in the plan yet."

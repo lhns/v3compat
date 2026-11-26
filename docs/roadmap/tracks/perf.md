@@ -92,12 +92,12 @@ flowchart TB
 <!-- BEGIN GENERATED: table-perf -->
 | id | title | kind | lane | state | outcome | start | end | depends_on | replaced_by | qualified_by | headline | evidence |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `perf-startup-options` | DynamoRIO options for startup | experiment | none | done | mixed | 2026-11-05 | 2026-11-05 | client-allowlist |  | perf-traces-claim |  | PR #14; branch startup-time |
+| `perf-startup-options` | DynamoRIO options for startup | experiment | none | done | mixed | 2026-11-05 | 2026-11-05 | client-allowlist |  | perf-traces-claim |  | PR #14; branch startup-time; branch prof-scratch; branch startup-bench |
 | `perf-memo-classify` | Memoise classification by bytes | experiment | none | abandoned | dead-end | 2026-11-05 | 2026-11-05 | client-allowlist |  |  |  | PR #14 |
 | `perf-persist` | DynamoRIO's own persistent cache | experiment | none | abandoned | dead-end | 2026-11-05 | 2026-11-13 | client-allowlist |  |  |  | PR #14; docs/plan.md |
 | `perf-inline-bmi` | Inline rorx, andn, mulx, movbe | feature | none | done | unrated | 2026-11-05 | 2026-11-05 | client-forms |  |  |  | PR #13; branch inline-bmi |
 | `perf-speed-inline` | Inline the hottest helper forms | feature | none | abandoned | superseded | 2026-11-05 | 2026-11-12 | perf-inline-bmi | perf-inline-scalar, perf-inline-vec |  |  | PR #22; branch speed-inline; PR #33 |
-| `perf-baseline` | JIT workloads and speed baseline | experiment | none | done | unrated | 2026-11-12 | 2026-11-12 | prod-order-of-work |  |  |  | docs/plan.md; PR #36; branch prof-scratch; branch startup-bench |
+| `perf-baseline` | JIT workloads and speed baseline | experiment | none | done | unrated | 2026-11-12 | 2026-11-12 | prod-order-of-work |  |  |  | docs/plan.md; PR #36 |
 | `perf-inline-scalar` | Inline BMI shifts and bit counts | feature | none | done | very-successful | 2026-11-12 | 2026-11-12 | perf-inline-bmi, perf-baseline |  |  | 80-85 to 0.6-1.7 ns | PR #33; branch inline-bmi-scalar; docs/plan.md |
 | `perf-inline-vec` | Inline the hot vector forms | feature | none | done | very-successful | 2026-11-12 | 2026-11-12 | perf-inline-scalar |  |  | about 14 to 2.2 ns | PR #35; branch inline-vec; docs/plan.md |
 | `perf-inline-xmm` | Inline remaining hot vector forms | feature | none | done | very-successful | 2026-11-12 | 2026-11-13 | perf-inline-vec |  |  | about 25-27 to 3.1 ns | PR #40; branch inline-xmm-broadcast; docs/plan.md |
