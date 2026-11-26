@@ -1,5 +1,5 @@
-// misc_forms: what the frame path does to MXCSR: nothing, except FMA, which ORs its flags in. The semantic
-// suite cannot see this: it randomises MXCSR only for FP forms.
+// misc_forms: what the frame path does to MXCSR: nothing, except FMA, which ORs its flags in. avxemu's suite
+// checks this for every form too; this stays as a small frame-path workload for the translation cache tests.
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
