@@ -823,6 +823,7 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   affects every thread running during exit and is the one most worth review.
 - **Order of work** (owner, 2026-11-12): the javac/Java crash, then javac under DynamoRIO alone (javac no longer
   crashes, above; Java's status 134 aborts are fixed, above), then the ranked performance list; the OCI wrapper after that. JVM workloads are in scope.
+  The owner approved working the performance list now (2026-11-25), alongside Phase 4 (the wrapper and cluster rollout are in progress).
 - **The `common_heap_alloc()` crash under `flushed-fault` is fixed in the fork** (#29, the pin; fork entry above). It
   blocked production (owner, 2026-11-21); the fix's proof rests on the overlap count, not on crash counts.
 - **`seq_rwx` seed 10 refuses on base** ("write to code whose context cannot be translated", 3 of 3, inline and helpers
@@ -856,9 +857,19 @@ Failures seen that are not regressions; a PR may cite them, with the counts, ins
   the race's RCX-spill-slot fingerprint, and the fix fails the race test 0 of 12,000 times (run 45416571599)
   **[measured]**. Java's 134 itself was not reproduced; a 134 of that shape on the fix would falsify this.
 - **Performance, ranked:** DynamoRIO's gencode `mprotect` toggling: `-protect_mask 0` cuts javac's `mprotect`s 60%
-  but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46); FMA through hardware arithmetic with an exactness guard, if
-  a workload needs it. After #40 about 2M helper calls a run remain in duckdb varied, Node and javac (counted in the
-  helpers, lab `lab-perf-gap`); Java's `Math.fma` is the one dense user. Runner numbers
+  but its wall only 1-2% (lab `lab-perf-protect-off`, run 43398713863; opt-in in lhns/v3compat#46). Rechecked on main
+  `45be5ab` (lab `lab-perf-protect-remeasure`, run 45598252922, three Xeon 6975P-C jobs, default against
+  `-protect_mask 0` interleaved, 20 reps, javac 6; all runs ok, outputs identical) **[measured]**: javac 65.85 to 65.42 s,
+  69.37 to 68.64 s, 67.40 to 67.08 s (0.5-1.1%; `mprotect` 158-162k to 61k); Node 3.58-3.67 s and duckdb compute
+  1.05-1.08 s unchanged, `java -version` 1.43-1.58 s either way. That is the ceiling for any fork change that keeps the
+  protection, so neither a default change nor a fork change is worth losing it: closed, the opt-in stays; FMA through hardware arithmetic with an exactness guard, if
+  a workload needs it. After #40 the helper calls left, counted per form in the helpers on main `45be5ab` (lab
+  `lab-perf-helper-count`, run 45598694690, EPYC 7763 and 9V74, same forms and counts on both, every output equal
+  native) **[measured]**: duckdb varied 1.50M frame calls (`vpsllvq` ymm 750k, `vpunpcklqdq` ymm from memory 747k, FMA
+  450, `vpackssdw` 4) and 25 mcontext (`blsr`, `blsmsk`); javac 39k (`vphaddd` ymm 38.6k, FMA 245); Node 2, `java
+  -version` 22, duckdb compute 5; Java's Bench 65.5M, all `vfmadd231sd` (`Math.fma`). Outside FMA that is at most about
+  0.13 s of duckdb varied's 165 s on Ivy Bridge at 85 ns a call, below what a whole-process A/B resolves, so nothing
+  more is inlined for these workloads: closed until a workload shows a dense form. Java's `Math.fma` is the one dense user. Runner numbers
   understate helper cost 2-4x against Ivy Bridge; an Ivy
   Bridge A/B can run on the cluster's `kube-worker-04` and is not required before a speed PR merges.
 
