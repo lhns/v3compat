@@ -103,3 +103,19 @@ jobs:
         env:
           V3COMPAT_CI: "1"
         run: chmod o+x "$HOME" && bash test/pcache_ci.sh build ./duckdb
+
+  tech-tree:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tech-tree scripts, pinned
+        run: |
+          pip install -q pyyaml==6.0.2
+          base=https://raw.githubusercontent.com/lhns/design-skills/ea48dcf933d1917d4f42ca79d9d68057a3f7a45e/skills/tech-tree/scripts
+          mkdir -p "$RUNNER_TEMP/tech-tree"
+          for f in build.py check.py tree_config.py; do curl -fsSL "$base/$f" -o "$RUNNER_TEMP/tech-tree/$f"; done
+      - name: Roadmap valid and its pages fresh
+        run: python "$RUNNER_TEMP/tech-tree/check.py" --config tech-tree.yaml

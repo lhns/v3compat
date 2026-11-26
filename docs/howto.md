@@ -105,6 +105,21 @@ lists each fix and its evidence.
 
 Older fork branches (`fix-*`, earlier bases) stay as they are unless the owner asks to delete them.
 
+## Roadmap
+
+[roadmap.md](roadmap.md) and `docs/roadmap/` are built from `docs/roadmap/nodes.yaml` by the tech-tree scripts of
+[lhns/design-skills](https://github.com/lhns/design-skills), at the commit the CI job `tech-tree` pins. Edit the nodes,
+then build and check; CI fails on an invalid or stale tree.
+
+```sh
+pin=$(grep -o 'design-skills/[0-9a-f]\{40\}' .github/workflows/ci.yml | cut -d/ -f2)
+d=$(mktemp -d); for f in build.py check.py tree_config.py; do
+  curl -fsSL "https://raw.githubusercontent.com/lhns/design-skills/$pin/skills/tech-tree/scripts/$f" -o "$d/$f"; done
+python3 "$d/build.py" --config tech-tree.yaml && python3 "$d/check.py" --config tech-tree.yaml
+```
+
+A rating needs a verdict quoted from a PR, the plan, the changelog or an ADR; `confirmed` is set only on the owner's word.
+
 ## Glossary
 
 - **Runners:** GitHub's `ubuntu-24.04` machines, assigned at random: AMD EPYC 7763 (Zen 3), 9V74 (Zen 4), 9V45 (Zen 5;

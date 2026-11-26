@@ -6,7 +6,8 @@ Ivy Bridge, at close to native speed.
 **Status:** Phase 1 met (its compute target excludes startup); Phase 2, speed, in progress. Emulation, the launcher and
 exec follow run on DynamoRIO built from our fork. Whole-process time, startup included, is still far from native; see
 "Open items". Decisions are in the [ADRs](adr/README.md); this file holds the current state and the numbers behind it.
-How to build, test and run labs: [howto.md](howto.md). Taking over: [handover.md](handover.md).
+How to build, test and run labs: [howto.md](howto.md). Taking over: [handover.md](handover.md). What was tried, how it
+went and what is next: the [roadmap](roadmap.md).
 
 Claims are tagged: **[measured]** on real hardware, **[source]** read in source or docs, **[memory]** from
 memory and unverified, **[estimate]** unmeasured.
