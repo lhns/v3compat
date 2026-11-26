@@ -416,22 +416,11 @@ enum {
     D_GPR = 8,      /* the result goes to out's first 8 bytes */
 };
 
-static uint32_t fbits(float f) {
-    uint32_t u;
-    __builtin_memcpy(&u, &f, 4);
-    return u;
-}
-
-/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` (the FP
- * contract in avxemu's avxemu_helpers.h): the application then gets the SIGFPE of that kind. */
+/* Operands for one vdivss that raises the highest-priority of the unmasked flags `ex` and no other flag
+ * (avxemu's fp_pending_operands): the application then gets the SIGFPE of that kind, with silicon's MXCSR. */
 static void pending_operands(tls_t *t, uint32_t ex) {
     uint32_t x, y;
-    if (ex & 1) { x = fbits(0.0f); y = fbits(0.0f); }                  /* IE */
-    else if (ex & 2) { x = 1; y = fbits(1.0f); }                       /* DE: a denormal */
-    else if (ex & 4) { x = fbits(1.0f); y = fbits(0.0f); }             /* ZE */
-    else if (ex & 8) { x = fbits(3e38f); y = fbits(1e-30f); }          /* OE */
-    else if (ex & 16) { x = fbits(1e-30f); y = fbits(3e38f); }         /* UE */
-    else { x = fbits(1.0f); y = fbits(3.0f); }                         /* PE */
+    fp_pending_operands(ex, &x, &y);
     for (int i = 0; i < 32; i++) t->a.b[i] = t->b.b[i] = 0;
     for (int i = 0; i < 4; i++) {
         t->a.b[i] = (uint8_t)(x >> (8 * i));
