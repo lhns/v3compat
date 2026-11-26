@@ -27,6 +27,7 @@ flowchart TB
     perf_helper_count[/"✔ Count the remaining<br/>helper calls"/]
     perf_fma_packed["✔ Native kernel for<br/>packed FMA"]
     perf_traces_claim>"⚠ Traces-off cost<br/>claim contradicted"]
+    perf_phase2_gate["⏳ Phase 2: fast on Ivy<br/>Bridge"]
     perf_startup_options ~~~ perf_inline_bmi
     perf_memo_classify ~~~ perf_inline_bmi
     perf_persist ~~~ perf_inline_bmi
@@ -47,7 +48,7 @@ flowchart TB
     perf_procmap ~~~ perf_helper_count
     perf_protect_mask ~~~ perf_fma_packed
     perf_fma_scalar ~~~ perf_traces_claim
-    perf_helper_count ~~~ perf_traces_claim
+    perf_helper_count ~~~ perf_phase2_gate
     perf_startup_options -.-> perf_traces_claim
     perf_inline_bmi --> perf_speed_inline
     perf_speed_inline -.-> perf_inline_scalar
@@ -64,6 +65,7 @@ flowchart TB
     perf_baseline --> perf_fma_scalar
     perf_lean_call --> perf_helper_count
     perf_fma_scalar --> perf_fma_packed
+    perf_lean_call --> perf_phase2_gate
     linkStyle 21 stroke:#e69500,stroke-width:3px,stroke-dasharray:2 3
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
@@ -84,6 +86,7 @@ flowchart TB
     class perf_inline_bmi,perf_baseline,perf_helper_count unrated
     class perf_inline_scalar,perf_inline_vec,perf_inline_xmm,perf_lean_call,perf_gencode_prot,perf_procmap,perf_fma_scalar,perf_fma_packed vsucc
     class perf_traces_claim finding
+    class perf_phase2_gate waiting
 ```
 <!-- END GENERATED: track-perf -->
 
@@ -112,6 +115,7 @@ flowchart TB
 | `perf-traces-claim` | Traces-off cost claim contradicted | defect | none | in-progress | unrated | 2026-11-26 |  | lab-ivy-traces |  |  |  | docs/plan.md; commit 8e97372 |
 | `perf-traces-default` | Traces on or off by default | decision | owner | next | n/a |  |  | lab-ivy-traces |  |  |  | docs/handover.md; docs/plan.md |
 | `perf-fast-decode` | Cheaper decoding for the client | experiment | none | abandoned | dead-end | 2026-11-12 | 2026-11-12 | perf-baseline |  |  |  | docs/plan.md |
+| `perf-phase2-gate` | Phase 2: fast on Ivy Bridge | gate | none | in-progress | unrated | 2026-11-26 |  | lab-targets, lab-ivy-gate, lab-ivy-traces, perf-lean-call |  |  |  | docs/plan.md |
 
 ### Details per node
 
@@ -137,6 +141,7 @@ flowchart TB
 | `perf-traces-claim` | Traces-off cost claim contradicted |  |  | On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted. |  |  | the owner's traces decision |  |  |
 | `perf-traces-default` | Traces on or off by default |  |  | The owner decides whether -disable_traces becomes the default, which also decides whether Phase 3's startup gate is met. | Open owner decision 2 in docs/handover.md. |  |  |  |  |
 | `perf-fast-decode` | Cheaper decoding for the client | `-fast_client_decode` is internal and does not allow changing app code. |  | DynamoRIO's cheaper decode mode cannot be used by a client that rewrites code, and skipping the client's checks would bypass the audited list. |  |  |  |  |  |
+| `perf-phase2-gate` | Phase 2: fast on Ivy Bridge |  |  | Phase 2's go/no-go on Ivy Bridge: per-op and signal gates are met; compute's fastest quarter is 2.0-2.2 s and its minimum 1.3-1.9 s against a 2 s gate. | Done when: every Phase 2 gate in plan.md's Phases table is met on Ivy Bridge, or the owner calls it. |  | the compute gate's reading and the traces default |  |  |
 
 ### Folded items per node
 

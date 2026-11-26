@@ -15,6 +15,7 @@ flowchart TB
     client_forms["✔ Emulate every AVX2<br/>and FMA form"]
     client_allowlist["✔ Refuse instructions<br/>not on a list"]
     client_seg_operands["✔ Segment-relative<br/>memory operands"]
+    client_phase1_gate["✔ Phase 1: correct,<br/>not yet fast"]
     client_block_end["✔ Emulated instruction<br/>ran twice"]
     client_seq_rwx["✔ Self-modifying store<br/>skipped an instruction"]
     client_review_bugs["✔ Four client bugs<br/>from review"]
@@ -25,9 +26,9 @@ flowchart TB
     client_scaffold ~~~ client_forms
     client_forms ~~~ client_allowlist
     client_forms ~~~ client_seg_operands
-    client_forms ~~~ client_block_end
-    client_allowlist ~~~ client_seq_rwx
-    client_seg_operands ~~~ client_seq_rwx
+    client_allowlist ~~~ client_phase1_gate
+    client_seg_operands ~~~ client_block_end
+    client_phase1_gate ~~~ client_seq_rwx
     client_block_end ~~~ client_seq_rwx
     client_seq_rwx ~~~ client_review_bugs
     client_seq_rwx ~~~ client_store_xl8
@@ -36,6 +37,7 @@ flowchart TB
     client_scaffold --> client_forms
     client_forms --> client_allowlist
     client_forms --> client_seg_operands
+    client_allowlist --> client_phase1_gate
     client_forms --> client_block_end
     client_block_end --> client_seq_rwx
     client_seq_rwx --> client_review_bugs
@@ -55,7 +57,7 @@ flowchart TB
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
     class client_design,client_scaffold,client_review_bugs unrated
     class client_kernel_module,client_safe_translate_flushed dead
-    class client_forms,client_allowlist,client_seg_operands succ
+    class client_forms,client_allowlist,client_seg_operands,client_phase1_gate succ
     class client_block_end,client_seq_rwx,client_store_xl8 vsucc
 ```
 <!-- END GENERATED: track-client -->
@@ -76,6 +78,7 @@ flowchart TB
 | `client-store-xl8` | Store translations of JIT blocks | fix | none | done | very-successful | 2026-11-19 | 2026-11-20 | fork-flushed-sandboxed |  |  | 400 of 400 runs bad in each mode, the fix 0 of 400 | PR #71; branch fix-xl8-flushed-store; PR #72; branch fix-xl8-flushed-stored; lhns/dynamorio#24; lhns/dynamorio#25; docs/plan.md |
 | `client-safe-translate-flushed` | DynamoRIO's record-at-flush option | experiment | none | abandoned | dead-end | 2026-11-19 | 2026-11-19 | fork-flushed-sandboxed |  |  |  | docs/plan.md; PR #72 |
 | `client-kernel-module` | Kernel module or patching instead | design | none | abandoned | dead-end | 2026-11-03 | 2026-11-03 |  |  |  |  | docs/adr/0002-same-isa-binary-translator.md; docs/plan.md |
+| `client-phase1-gate` | Phase 1: correct, not yet fast | gate | none | done | successful | 2026-11-05 | 2026-11-05 | client-allowlist, launch-static, fork-cache-reset, lab-phase0 |  |  |  | docs/plan.md |
 
 ### Details per node
 
@@ -92,6 +95,7 @@ flowchart TB
 | `client-store-xl8` | Store translations of JIT blocks | `test/flushed_xl8.c` (ctests `flushed-rewrite`, `flushed-span`): base 400 of 400 runs bad in each mode, the fix 0 of 400 | 400 of 400 runs bad in each mode, the fix 0 of 400 | Faults in flushed JIT blocks whose code changed reached the program with pc 0; the client now records each block's translation when it is emitted. |  |  |  |  |  |
 | `client-safe-translate-flushed` | DynamoRIO's record-at-flush option | DynamoRIO's `-safe_translate_flushed` (record at flush time) deadlocks |  | DynamoRIO's own option to record translations at flush time deadlocks on every flush of a written page, so it is not used. |  |  |  |  |  |
 | `client-kernel-module` | Kernel module or patching instead | Kernel module, eBPF, seccomp patching, ahead-of-time rewriting and hypervisor traps were rejected |  | Emulating in a kernel module, eBPF, seccomp, ahead-of-time rewriting or hypervisor traps was rejected; lzcnt and tzcnt do not even fault on AVX-only CPUs. |  |  |  |  |  |
+| `client-phase1-gate` | Phase 1: correct, not yet fast | Phase 1 met (its compute target excludes startup) |  | Phase 1's go/no-go: lzcnt right in a dlopen'ed library, static children followed, duckdb's output correct, compute under 3 s without startup. |  |  |  |  |  |
 
 ### Folded items per node
 

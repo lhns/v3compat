@@ -12,10 +12,23 @@ flowchart TB
     cache_design("✔ Translation cache<br/>design")
     cache_phase2["✔ Build the cache for<br/>labs"]
     cache_debug_fix["✔ Cache fixes for<br/>debug builds"]
+    cache_training_job["⏳ Cache training Job<br/>on the node"]
+    cache_supported_option["⛔ Cache as a supported<br/>launcher option"]
+    cache_integrity["⛔ Hash manifest for<br/>the cache"]
+    cache_phase3_gate["⛔ Phase 3: fast warm<br/>start"]
     cache_design ~~~ cache_phase2
     cache_phase2 ~~~ cache_debug_fix
+    cache_phase2 ~~~ cache_training_job
+    cache_phase2 ~~~ cache_supported_option
+    cache_debug_fix ~~~ cache_integrity
+    cache_training_job ~~~ cache_integrity
+    cache_supported_option ~~~ cache_integrity
+    cache_integrity ~~~ cache_phase3_gate
     cache_design --> cache_phase2
     cache_phase2 --> cache_debug_fix
+    cache_design --> cache_training_job
+    cache_supported_option --> cache_phase3_gate
+    cache_integrity --> cache_phase3_gate
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -33,6 +46,8 @@ flowchart TB
     class cache_design unrated
     class cache_phase2 mixed
     class cache_debug_fix vsucc
+    class cache_training_job waiting
+    class cache_supported_option,cache_integrity,cache_phase3_gate blocked
 ```
 <!-- END GENERATED: track-cache -->
 
@@ -46,6 +61,10 @@ flowchart TB
 | `cache-placement` | Where the cache lives | decision | none | done | n/a | 2026-11-17 | 2026-11-17 | cache-design |  |  |  | PR #60; branch adr6-cache-placement; docs/adr/0006-read-only-translation-cache.md |
 | `cache-debug-fix` | Cache fixes for debug builds | fix | none | done | very-successful | 2026-11-20 | 2026-11-20 | cache-phase2 |  |  | 0 of 200 bad after | PR #74; branch pin-pcache-lock; lhns/dynamorio#28; docs/plan.md |
 | `cache-canary-call` | Canary with or without the cache | decision | owner | next | n/a |  |  | cache-placement, lab-ivy-gate, prod-release |  |  |  | docs/handover.md; k0s-flux PR #1835 |
+| `cache-phase3-gate` | Phase 3: fast warm start | gate | ivy | blocked | unrated |  |  | perf-traces-default, cache-supported-option, cache-integrity |  |  |  | docs/plan.md; docs/translation-cache.md |
+| `cache-training-job` | Cache training Job on the node | feature | owner | in-progress | unrated | 2026-11-26 |  | cache-placement, runtime-installer |  |  |  | k0s-flux PR #1835; docs/adr/0006-read-only-translation-cache.md |
+| `cache-supported-option` | Cache as a supported launcher option | feature | agent | blocked | unrated |  |  | cache-canary-call |  |  |  | docs/translation-cache.md; launcher/v3compat-run.c; CHANGELOG.md |
+| `cache-integrity` | Hash manifest for the cache | feature | agent | blocked | unrated |  |  | cache-canary-call |  |  |  | docs/adr/0006-read-only-translation-cache.md; lhns/v3compat-runtime README |
 
 ### Details per node
 
@@ -56,6 +75,10 @@ flowchart TB
 | `cache-placement` | Where the cache lives |  |  | The owner agreed: one root-owned cache directory per node and image digest, written by a training Job, mounted read-only. |  |  |  |  |  |
 | `cache-debug-fix` | Cache fixes for debug builds | 200 of 200 runs stopped before, 0 of 200 bad after | 0 of 200 bad after | Debug builds of DynamoRIO stopped on every run with the cache; an option read and a leak are fixed. |  |  |  |  |  |
 | `cache-canary-call` | Canary with or without the cache |  |  | The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work. | Open owner decision 1 in docs/handover.md. Either way, CHANGELOG's line saying the launcher does not use the cache needs fixing. |  |  |  |  |
+| `cache-phase3-gate` | Phase 3: fast warm start |  |  | Phase 3's go/no-go: warm duckdb start under 2 s on Ivy Bridge and 40% below cold, under 180 MB, bad entries rejected; met so far only with traces off. | Done when: the gate run passes with the shipped options and ADR 0006 is amended with what Phase 3 learned. |  |  | 3 |  |
+| `cache-training-job` | Cache training Job on the node |  |  | A Job on the Ivy Bridge node trains the cache into its own directory, and a root step renames it into the per-image tree; built in k0s-flux #1835, not merged. |  |  | #1835 held until the owner's cache call |  |  |
+| `cache-supported-option` | Cache as a supported launcher option |  |  | V3COMPAT_CACHE is for tests and labs only; Phase 3 makes it the user option the runtime's read-only mount relies on. | Done when: the launcher documents and supports the cache outside labs, and CHANGELOG says so. |  |  |  |  |
+| `cache-integrity` | Hash manifest for the cache |  |  | ADR 0006 starts cache integrity with a hash manifest, fs-verity where the filesystem has it; the runtime checks only ownership so far. | Done when: a cache file whose hash is not in the manifest is refused before DynamoRIO reads it. |  |  |  |  |
 
 ### Folded items per node
 

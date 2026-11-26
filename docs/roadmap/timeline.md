@@ -31,6 +31,7 @@ gantt
     Store translations of JIT blocks :client_store_xl8, 2026-11-19, 2026-11-20
     DynamoRIO's record-at-flush option :crit, client_safe_translate_flushed, 2026-11-19, 2026-11-19
     Kernel module or patching instead :crit, client_kernel_module, 2026-11-03, 2026-11-03
+    Phase 1 - correct, not yet fast :client_phase1_gate, 2026-11-05, 2026-11-05
     section fork - DynamoRIO fork
     Two signalled threads looped forever :fork_signal_hang, 2026-11-03, 2026-11-04
     Thread-private caches as a fallback :crit, fork_thread_private, 2026-11-03, 2026-11-04
@@ -76,6 +77,7 @@ gantt
     Build the cache for labs :cache_phase2, 2026-11-13, 2026-11-17
     Where the cache lives :cache_placement, 2026-11-17, 2026-11-17
     Cache fixes for debug builds :cache_debug_fix, 2026-11-20, 2026-11-20
+    Cache training Job on the node :active, cache_training_job, 2026-11-26, 2026-11-26
     section perf - performance
     DynamoRIO options for startup :perf_startup_options, 2026-11-05, 2026-11-05
     Memoise classification by bytes :crit, perf_memo_classify, 2026-11-05, 2026-11-05
@@ -96,6 +98,7 @@ gantt
     Work the performance list now :perf_list_approved, 2026-11-25, 2026-11-25
     Traces-off cost claim contradicted :active, perf_traces_claim, 2026-11-26, 2026-11-26
     Cheaper decoding for the client :crit, perf_fast_decode, 2026-11-12, 2026-11-12
+    Phase 2 - fast on Ivy Bridge :active, perf_phase2_gate, 2026-11-26, 2026-11-26
     section runtime - runtime wrapper
     Run v3 pods under Intel SDE :crit, runtime_sde, 2026-11-03, 2026-11-22
     Wrapper runs v3compat-run, not SDE :runtime_v3compat_run, 2026-11-21, 2026-11-22
@@ -106,6 +109,7 @@ gantt
     Accept three production limits :prod_limits, 2026-11-21, 2026-11-21
     No release until crashes fixed :prod_stability_gate, 2026-11-21, 2026-11-22
     Release 0.1.0 :prod_release, 2026-11-25, 2026-11-25
+    Cluster canary (k0s-flux 1835) :active, prod_canary, 2026-11-26, 2026-11-26
     section lab - labs and measurement
     Phase 0 - is DynamoRIO enough :lab_phase0, 2026-11-03, 2026-11-04
     Lab workflow, bench and stress set :lab_tooling, 2026-11-12, 2026-11-14
@@ -119,5 +123,5 @@ gantt
     Thread-exit test's own race :lab_thread_exit_test, 2026-11-25, 2026-11-26
 ```
 
-Not shown (no `start`): `emu-suite-leftovers`, `fork-exit-fix`, `cache-canary-call`, `perf-traces-default`, `prod-canary`, `prod-two-weeks`
+Not shown (no `start`): `emu-suite-leftovers`, `fork-exit-fix`, `fork-exit-lock-review`, `fork-reset-fix`, `fork-vfork-state`, `launch-exe-cases`, `cache-canary-call`, `cache-phase3-gate`, `cache-supported-option`, `cache-integrity`, `perf-traces-default`, `prod-two-weeks`, `prod-passthrough`, `prod-changelog-cache`, `lab-javac-digest`, `lab-fma-ivy`
 <!-- END GENERATED: timeline -->

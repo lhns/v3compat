@@ -10,11 +10,17 @@ Scope: Phase 4: release, stability gate, production limits, the cluster canary.
 ```mermaid
 flowchart TB
     prod_release["✔ Release 0.1.0"]
-    prod_canary["⛔ Cluster canary<br/>(k0s-flux #35;1835)"]
-    prod_two_weeks[/"⛔ Two weeks matching<br/>native"/]
+    prod_canary["⏳ Cluster canary<br/>(k0s-flux #35;1835)"]
+    prod_passthrough["⛔ Native passthrough<br/>on AVX2 nodes"]
+    prod_two_weeks["⛔ Phase 4: two weeks<br/>like native"]
+    prod_changelog_cache["○ Correct the<br/>changelog's cache line"]
     prod_release ~~~ prod_canary
-    prod_canary ~~~ prod_two_weeks
-    prod_canary --> prod_two_weeks
+    prod_canary ~~~ prod_passthrough
+    prod_passthrough ~~~ prod_two_weeks
+    prod_passthrough ~~~ prod_changelog_cache
+    prod_canary --> prod_passthrough
+    prod_passthrough --> prod_two_weeks
+    prod_release --> prod_changelog_cache
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -30,7 +36,9 @@ flowchart TB
     classDef finding fill:#ffe0b2,stroke:#d84315,stroke-width:2px,color:#111
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
     class prod_release succ
-    class prod_canary,prod_two_weeks blocked
+    class prod_canary waiting
+    class prod_passthrough,prod_two_weeks blocked
+    class prod_changelog_cache next
 ```
 <!-- END GENERATED: track-prod -->
 
@@ -44,8 +52,10 @@ flowchart TB
 | `prod-limits` | Accept three production limits | decision | none | done | n/a | 2026-11-21 | 2026-11-21 | fork-vfork-kill, client-store-xl8 |  |  |  | docs/plan.md; CHANGELOG.md |
 | `prod-stability-gate` | No release until crashes fixed | decision | none | done | n/a | 2026-11-21 | 2026-11-22 | fork-refuse-untranslatable |  |  |  | docs/plan.md; PR #78; PR #83 |
 | `prod-release` | Release 0.1.0 | feature | none | done | successful | 2026-11-25 | 2026-11-25 | fork-selfmod-race, prod-limits |  |  |  | PR #83; commit dbbeadce; tag v0.1.0; CHANGELOG.md; docs/handover.md |
-| `prod-canary` | Cluster canary (k0s-flux #1835) | feature | owner | blocked | unrated |  |  | cache-canary-call, runtime-installer |  |  |  | k0s-flux PR #1835; docs/handover.md |
-| `prod-two-weeks` | Two weeks matching native | experiment | agent | blocked | unrated |  |  | prod-canary |  |  |  |  |
+| `prod-canary` | Cluster canary (k0s-flux #1835) | feature | owner | in-progress | unrated | 2026-11-26 |  | cache-canary-call, runtime-installer |  |  |  | k0s-flux PR #1835; docs/handover.md |
+| `prod-two-weeks` | Phase 4: two weeks like native | gate | agent | blocked | unrated |  |  | prod-canary, prod-passthrough |  |  |  |  |
+| `prod-passthrough` | Native passthrough on AVX2 nodes | feature | owner | blocked | unrated |  |  | prod-canary |  |  |  | docs/adr/0004-opt-in-per-container.md; k0s-flux PR #1835 |
+| `prod-changelog-cache` | Correct the changelog's cache line | fix | agent | next | unrated |  |  | prod-release |  |  |  | docs/handover.md; CHANGELOG.md |
 
 ### Details per node
 
@@ -56,8 +66,10 @@ flowchart TB
 | `prod-limits` | Accept three production limits |  |  | The owner accepted three limits for production: a killed vfork child holding a lock ends the process (status 89), one random self-modifying sequence refuses, and one debug-only assert. |  |  |  |  |  |
 | `prod-stability-gate` | No release until crashes fixed |  |  | The owner made the heap crash and the -sandbox_writable crash blockers: no release until both were fixed. |  |  |  |  |  |
 | `prod-release` | Release 0.1.0 | 0.1.0 is released and its output verified byte-identical to native on Ivy Bridge, with the cache |  | The first release: a self-contained tarball whose output matched native byte for byte on Ivy Bridge, still about 20x slower than native at startup. |  |  |  |  |  |
-| `prod-canary` | Cluster canary (k0s-flux #1835) |  |  | A first real workload on the Ivy Bridge node through the wrapper; held unmerged until the owner decides about the cache. | Done when: the canary runs in the cluster through v3compat-runtime. |  |  |  |  |
-| `prod-two-weeks` | Two weeks matching native |  |  | Phase 4's go/no-go: two weeks of the canary with no divergence from native. | Done when: two weeks of canary output compared with native, no divergence (plan, Phases). |  |  |  |  |
+| `prod-canary` | Cluster canary (k0s-flux #1835) |  |  | A long-lived translated duckdb on kube-worker-04 and a daily byte-for-byte comparison with native; built in k0s-flux #1835 (installer pinned), held unmerged until the owner decides about the cache. | Done when: the canary runs in the cluster through v3compat-runtime. |  | #1835 held until the owner's cache call |  |  |
+| `prod-two-weeks` | Phase 4: two weeks like native |  |  | Phase 4's go/no-go: two weeks of the canary with no divergence from native. | Done when: two weeks of canary output compared with native, no divergence (plan, Phases). |  |  |  |  |
+| `prod-passthrough` | Native passthrough on AVX2 nodes |  |  | Nodes with AVX2 run wrapped containers natively, keyed on a pinned node label; the installer for it is in #1835 but no node carries the label yet. | Done when: an AVX2 node with the label runs a wrapped pod natively. |  |  |  |  |
+| `prod-changelog-cache` | Correct the changelog's cache line |  |  | CHANGELOG says the shipped launcher does not use the cache, but it reads V3COMPAT_CACHE; the line needs fixing whatever the canary decision. | Done when: CHANGELOG states what the launcher does with V3COMPAT_CACHE. |  |  |  |  |
 
 ### Folded items per node
 

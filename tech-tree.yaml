@@ -19,6 +19,7 @@ kinds:
   fix: {}
   experiment: {shape: slant}            # a measured trial or lab run
   design: {shape: round}                # a design doc or decision record written for review
+  gate: {}                              # a phase go/no-go from the plan's Phases table
   tooling: {}
   defect:                               # a finding that qualifies earlier results
     shape: flag
@@ -33,8 +34,9 @@ kinds:
 lanes: [owner, ivy, gh-runners, agent, none]
 queue_lane: ivy
 
-# The history so far is one month; 2-5 history picks per month plus the open nodes.
-overview: {min: 8, max: 20}
+# The overview is the spine: phase gates, turning points and the owner calls that changed direction,
+# picked along direct depends_on edges (only those are drawn between picked nodes).
+overview: {min: 15, max: 20}
 
 history:
   main: origin/main
