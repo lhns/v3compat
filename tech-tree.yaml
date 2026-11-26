@@ -1,0 +1,43 @@
+# The roadmap as a tech tree: docs/roadmap/nodes.yaml is the source, docs/roadmap.md and docs/roadmap/ are built
+# from it. Scripts: tech-tree in github.com/lhns/design-skills (the pin is in .github/workflows/ci.yml).
+nodes: docs/roadmap/nodes.yaml
+page: docs/roadmap.md
+
+tracks:
+  emu:     {name: "instruction emulation", scope: "avxemu helpers and forms, the semantic suite against silicon, MXCSR and FP flags"}
+  client:  {name: "translator client", scope: "the DynamoRIO client: expansions, the audited list, refusals, fault state"}
+  fork:    {name: "DynamoRIO fork", scope: "lhns/dynamorio fixes: signals, exit, threads, vfork, flushes and translation"}
+  launch:  {name: "launcher and exec", scope: "the static launcher, exec follow, /proc/self/exe, privilege refusals"}
+  cache:   {name: "translation cache", scope: "Phase 3: the cache across runs, its design, placement and fail-closed checks"}
+  perf:    {name: "performance", scope: "Phase 2: inline forms, helper calls, DynamoRIO overhead, option choices"}
+  runtime: {name: "runtime wrapper", scope: "lhns/v3compat-runtime: the OCI wrapper, SDE replaced by v3compat-run"}
+  prod:    {name: "production", scope: "Phase 4: release, stability gate, production limits, the cluster canary"}
+  lab:     {name: "labs and measurement", scope: "lab workflow, stress set, Ivy Bridge runs, results write-ups"}
+
+kinds:
+  feature: {}
+  fix: {}
+  experiment: {shape: slant}            # a measured trial or lab run
+  design: {shape: round}                # a design doc or decision record written for review
+  tooling: {}
+  defect:                               # a finding that qualifies earlier results
+    shape: flag
+    rated: false
+    blocks: false
+  decision:
+    shape: hexagon
+    owner_gate: true
+
+# owner: lhns decides or acts; ivy: the shared Ivy Bridge node kube-worker-04 (lab Jobs, one at a time);
+# gh-runners: GitHub-hosted AVX2 runners; agent: work an agent does without a machine of its own.
+lanes: [owner, ivy, gh-runners, agent, none]
+queue_lane: ivy
+
+# The history so far is one month; 2-5 history picks per month plus the open nodes.
+overview: {min: 8, max: 20}
+
+history:
+  main: origin/main
+  weak_refs:
+    pr: '(?<![\w/])#(\d+)\b'
+    adr: 'ADR[- ]?0*(\d{1,4})'

@@ -1,0 +1,1988 @@
+# v3compat's roadmap as a tech tree: one node per piece of work with its own verdict. Schema: the tech-tree
+# skill in github.com/lhns/design-skills. Ratings are proposed from the quoted verdict; `confirmed` is the
+# owner's sign-off. Build and check before each push (see tech-tree.yaml).
+nodes:
+- id: "emu-preload"
+  title: "AVXEmu's in-memory patching"
+  track: "emu"
+  kind: "design"
+  state: "abandoned"
+  outcome: "superseded"
+  evidence: ["docs/adr/0005-avxemu-core-as-helpers.md", "lhns/avxemu#8"]
+  verdict_quote: "Phase 0 passed and the preload is removed from lhns/avxemu, so the fallback above no longer applies."
+  headline: ""
+  depends_on: []
+  replaced_by: [emu-helpers]
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-05"
+  folded: ["On Ivy Bridge the patching design refused duckdb and zstd at startup (2026-11-03, session record)"]
+  overview: false
+  plain: "The earlier approach patched AVX2 instructions in memory; it missed shared libraries, static binaries and JIT code, so only its emulation core was kept."
+
+- id: "emu-helpers"
+  title: "AVXEmu core as helper library"
+  track: "emu"
+  kind: "feature"
+  state: "done"
+  outcome: "unrated"
+  evidence:
+  - "docs/adr/0005-avxemu-core-as-helpers.md"
+  - "lhns/avxemu#3"
+  - "lhns/avxemu#4"
+  - "lhns/avxemu#5"
+  - "lhns/avxemu#9"
+  - "lhns/avxemu#13"
+  verdict_quote: ""
+  headline: ""
+  depends_on: [client-design]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-05"
+  folded:
+  - "Helper archive defined by avxemu's cmake/helpers.cmake, PR #66 (2026-11-18, commit ebbf7c14, commit 5fa60eeb, commit 52216de1)"
+  - "AVXEmu decoder fixes dropped: DynamoRIO decodes (2026-11-04, session record)"
+  - "Nothing else needs to move from v3compat to avxemu (2026-11-13, session record)"
+  overview: false
+  plain: "AVXEmu's tested instruction semantics became a libc-free static library that the client calls for the forms it does not expand inline."
+
+- id: "emu-semantic-suite"
+  title: "Semantic suite against real silicon"
+  track: "emu"
+  kind: "tooling"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["lhns/avxemu#2", "lhns/avxemu#6", "lhns/avxemu#7", "docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [emu-helpers]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-13"
+  folded: ["Drop the form tests avxemu's suite covers, PR #43 (2026-11-13, commit 3bdbb8e5, commit ba21bf73)"]
+  overview: false
+  plain: "Every emulated form is checked against results recorded on real AVX2 CPUs, and v3compat runs the same suite under the client (semantic-hw)."
+
+- id: "emu-gathers"
+  title: "Emulate the AVX2 gathers"
+  track: "emu"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #17", "branch avxemu-gathers", "lhns/avxemu#10"]
+  verdict_quote: "`semantic-hw` and `semantic-hw-helpers` (smoke): 574 forms, 0 refused, match the digests recorded on AVX2 silicon, including the gather fault states and restarts."
+  headline: ""
+  depends_on: [client-forms, emu-semantic-suite]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: []
+  overview: false
+  plain: "The 16 gather instructions are expanded inline, one real load per element, so a fault mid-gather leaves the same state as hardware."
+
+- id: "emu-intel-nan"
+  title: "Intel and AMD agree on NaNs"
+  track: "emu"
+  kind: "experiment"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #29", "branch intel-nan", "docs/plan.md"]
+  verdict_quote: "So Intel and AMD agree on NaN priority and on every other recorded value, and the emulation matches both."
+  headline: ""
+  depends_on: [emu-semantic-suite]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-10"
+  end: "2026-11-10"
+  folded: []
+  overview: false
+  plain: "The reference results were recorded on AMD; a run on Intel CPUs showed the emulation matches Intel too."
+
+- id: "emu-mxcsr"
+  title: "Check FP control state at faults"
+  track: "emu"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #88", "commit 489618f3", "lhns/avxemu#15"]
+  verdict_quote: "with the helper all three semantic tests pass on Xeon 6975P-C and EPYC 7763 (run 45740263716)."
+  headline: ""
+  depends_on: [emu-semantic-suite]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-26"
+  end: "2026-11-26"
+  folded: []
+  overview: false
+  plain: "The suite now varies the FP control register (MXCSR) for every form and compares it after each instruction and at a fault; 17 FMA forms that disagreed were fixed."
+
+- id: "emu-suite-leftovers"
+  title: "Retire leftover semantic test pieces"
+  track: "emu"
+  kind: "decision"
+  state: "next"
+  outcome: "n/a"
+  evidence: ["docs/handover.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [emu-mxcsr]
+  replaced_by: []
+  lane: "owner"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "The owner decides whether to keep test/misc_forms.c, retire avxemu's Intel reference file, and run the full imm8 semantic-hw as a nightly job."
+  notes: "Open owner decision 4 in docs/handover.md."
+
+- id: "client-design"
+  title: "Translator on DynamoRIO, not patching"
+  track: "client"
+  kind: "design"
+  state: "done"
+  outcome: "unrated"
+  evidence:
+  - "commit eda4685"
+  - "commit 1d65ca3"
+  - "commit 84e2db1"
+  - "docs/adr/0001-correctness-over-speed.md"
+  - "docs/adr/0002-same-isa-binary-translator.md"
+  - "docs/adr/0003-dynamorio-as-the-base.md"
+  verdict_quote: ""
+  headline: ""
+  depends_on: []
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-03"
+  folded:
+  - "Apache-2.0 licence; DynamoRIO's LGPL extensions shipped as separate libraries (2026-11-03, commit d3893a5, commit afc4bc8)"
+  - "Project named v3compat; the wrapper became v3compat-runtime (2026-11-03, session record)"
+  overview: false
+  plain: "Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries."
+
+- id: "client-scaffold"
+  title: "Client, launcher and CI skeleton"
+  track: "client"
+  kind: "tooling"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #1", "branch scaffold"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [client-design]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: ["Stop tracking __pycache__, PR #8 (2026-11-04, commit 076ff7cd, commit dfe2c807)"]
+  overview: false
+  plain: "A DynamoRIO client that counts AVX2-era instructions, a launcher and CI, before anything was emulated."
+
+- id: "client-forms"
+  title: "Emulate every AVX2 and FMA form"
+  track: "client"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #3", "branch client-emulation", "docs/plan.md"]
+  verdict_quote: "Of avxemu's 578 forms, 574 are tested; the 4 refused are the F16C conversions, which Ivy Bridge has natively."
+  headline: ""
+  depends_on: [client-scaffold, emu-helpers]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "Each AVX2, FMA, BMI, LZCNT and MOVBE form is either substituted by an AVX1 equivalent, expanded inline or sent to a helper, with the program's FP flags and faults kept."
+
+- id: "client-allowlist"
+  title: "Refuse instructions not on a list"
+  track: "client"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence:
+  - "PR #4"
+  - "branch native-allowlist"
+  - "PR #5"
+  - "branch allow-rcp-split-target"
+  - "PR #11"
+  - "branch allow-order-independent"
+  - "docs/adr/0008-audited-list-keyed-on-shape.md"
+  - "docs/allowlist.md"
+  verdict_quote: "**Real programs:** hello, zstd, duckdb's three queries translate 0 forms off the list, on Ivy Bridge and CI; hashes match native."
+  headline: ""
+  depends_on: [client-forms]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: true
+  plain: "Every instruction shape the translator lets through is on an audited list built from runs on real CPUs; anything else stops the program with status 86 instead of guessing."
+
+- id: "client-seg-operands"
+  title: "Segment-relative memory operands"
+  track: "client"
+  kind: "fix"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #18", "branch fs-operand", "PR #21", "branch seg-operands"]
+  verdict_quote: "Every segment-operand form of an expanded instruction either works or exits 86."
+  headline: ""
+  depends_on: [client-forms]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: ["Share the client's starts helper, PR #16 (2026-11-05, commit 2427dd11, commit 6585fea4)"]
+  overview: false
+  plain: "Emulated instructions reading thread-local memory (fs:, gs:) used DynamoRIO's segment base and returned zeros; they now use the program's."
+
+- id: "client-block-end"
+  title: "Emulated instruction ran twice"
+  track: "client"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #54", "branch fix-emulated-block-end", "docs/plan.md"]
+  verdict_quote: "with `-sandbox_writable` (every writable region sandboxed) 168 wrong values on base, 0 with the fix"
+  headline: "168 wrong values on base, 0 with the fix"
+  depends_on: [client-forms, perf-baseline]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-14"
+  end: "2026-11-15"
+  folded: []
+  overview: false
+  plain: "A block that ended on an emulated instruction ran that instruction twice, which gave Java's benchmark a wrong checksum."
+
+- id: "client-seq-rwx"
+  title: "Self-modifying store skipped an instruction"
+  track: "client"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #55", "branch seq-rwx", "docs/plan.md"]
+  verdict_quote: "5 of 5 runs differ from native on base, 0 of 5 with the fix"
+  headline: "5 of 5 runs differ from native on base, 0 of 5 with the fix"
+  depends_on: [client-block-end]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-15"
+  end: "2026-11-15"
+  folded: []
+  overview: false
+  plain: "In JIT code, a store that changed its own block resumed after the next emulated instruction, skipping it; random self-modifying sequences now match native."
+
+- id: "client-review-bugs"
+  title: "Four client bugs from review"
+  track: "client"
+  kind: "fix"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #67", "branch cleanup-bugs"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [client-seq-rwx]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-18"
+  end: "2026-11-18"
+  folded:
+  - "Cleanup: shared helpers, dead code, stale docs, PR #68 (2026-11-18, commit 0f31a756, commit 27ad387f, commit fcc3b3f7, commit f675049e, commit 68580570, commit 486235e1)"
+  overview: false
+  plain: "A review of the client found four bugs (a refused form skipped in JIT code, a movbe scratch register, a table bound, exec policy init), each fixed with a test."
+
+- id: "client-store-xl8"
+  title: "Store translations of JIT blocks"
+  track: "client"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence:
+  - "PR #71"
+  - "branch fix-xl8-flushed-store"
+  - "PR #72"
+  - "branch fix-xl8-flushed-stored"
+  - "lhns/dynamorio#24"
+  - "lhns/dynamorio#25"
+  - "docs/plan.md"
+  verdict_quote: "`test/flushed_xl8.c` (ctests `flushed-rewrite`, `flushed-span`): base 400 of 400 runs bad in each mode, the fix 0 of 400"
+  headline: "400 of 400 runs bad in each mode, the fix 0 of 400"
+  depends_on: [fork-flushed-sandboxed]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-19"
+  end: "2026-11-20"
+  folded: []
+  overview: false
+  plain: "Faults in flushed JIT blocks whose code changed reached the program with pc 0; the client now records each block's translation when it is emitted."
+
+- id: "client-safe-translate-flushed"
+  title: "DynamoRIO's record-at-flush option"
+  track: "client"
+  kind: "experiment"
+  state: "abandoned"
+  outcome: "dead-end"
+  evidence: ["docs/plan.md", "PR #72"]
+  verdict_quote: "DynamoRIO's `-safe_translate_flushed` (record at flush time) deadlocks"
+  headline: ""
+  depends_on: [fork-flushed-sandboxed]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-19"
+  end: "2026-11-19"
+  folded: []
+  overview: false
+  plain: "DynamoRIO's own option to record translations at flush time deadlocks on every flush of a written page, so it is not used."
+
+- id: "fork-signal-hang"
+  title: "Two signalled threads looped forever"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["docs/plan.md", "commit f01f7fc"]
+  verdict_quote: "Go tight loop + GC | 356/1000 | 0/1000"
+  headline: "0/1000"
+  depends_on: []
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "Two threads signalled in one shared code fragment looped forever under stock DynamoRIO, in Go programs and C alike; fixed in the fork before v3compat started."
+
+- id: "fork-thread-private"
+  title: "Thread-private caches as a fallback"
+  track: "fork"
+  kind: "experiment"
+  state: "abandoned"
+  outcome: "dead-end"
+  evidence: ["docs/plan.md", "commit f01f7fc"]
+  verdict_quote: "`-thread_private` is not a fallback: it hung too."
+  headline: ""
+  depends_on: [fork-signal-hang]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "Giving each thread its own code cache did not avoid the signal hang."
+
+- id: "fork-build"
+  title: "Build DynamoRIO from our fork"
+  track: "fork"
+  kind: "tooling"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #2", "branch dr-fork-source", "docs/adr/0003-dynamorio-as-the-base.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [client-scaffold, fork-signal-hang, fork-commit-call]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: ["Fork fixes for lost flags and the movbe operand size (2026-11-04, session record)"]
+  overview: false
+  plain: "DynamoRIO is built from source from lhns/dynamorio at a pinned commit; fixes go to the fork only, never upstream."
+
+- id: "fork-clone3"
+  title: "Spawned child lost its signal handlers"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #10", "branch clone3-root-cause"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-build]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "glibc's posix_spawn cleared DynamoRIO's own signal handlers in the child, which then died; the fork now clears only the program's."
+
+- id: "fork-cache-reset"
+  title: "Turn off DynamoRIO's cache reset"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["PR #12", "branch no-enable-reset", "docs/adr/0010-no-cache-reset.md", "docs/plan.md"]
+  verdict_quote: "**`-no_enable_reset`** in the launcher: a mitigation, because flags in that window (i#400) and the client under forced resets (likely i#4219) are still wrong, and reset hangs under code churn."
+  headline: ""
+  depends_on: [fork-build]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: []
+  overview: false
+  plain: "About 1 duckdb run in 10 gave wrong results or crashed because a full cache reset moves threads incorrectly; the reset is off and one register bug is fixed."
+
+- id: "fork-ignore-syscalls"
+  title: "Free retired code during syscalls"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #19", "branch jit-growth", "docs/adr/0011-no-ignored-syscalls.md"]
+  verdict_quote: "Growth over 3,000 regions with a thread waiting in `pthread_join`: 18.4 KB per region before, 0.0 after."
+  headline: "18.4 KB per region before, 0.0 after"
+  depends_on: [fork-cache-reset]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: []
+  overview: false
+  plain: "With reset off, code retired while a thread waited in a system call was never freed; every system call now passes a point where it is."
+
+- id: "fork-vfork-signal"
+  title: "Vfork child dying hung its parent"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #20", "branch vfork-hang"]
+  verdict_quote: "`test/vfork_sig.c`, new: before, 9 of 9 hung and all 6 ctest variants timed out. After, 0 of 300 (at most 1%, 95%), all pass; native passes."
+  headline: "0 of 300"
+  depends_on: [fork-clone3]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: []
+  overview: false
+  plain: "A vfork child killed by a signal no longer leaves its parent waiting forever."
+
+- id: "fork-signal-unlink"
+  title: "Signal handler freed running code"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #23", "branch signal-unlink-free", "docs/plan.md"]
+  verdict_quote: "without the change, 17 of 9,000 on main and 21 of 12,000 on the same lab with an unrelated change; with it, 0 of 12,000 (at most 0.025%, 95%)"
+  headline: "0 of 12,000"
+  depends_on: [fork-ignore-syscalls]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-06"
+  end: "2026-11-06"
+  folded: []
+  overview: false
+  plain: "A signal could free the code fragment its own thread was running, a rare crash that could also have run wrong code."
+
+- id: "fork-map32bit"
+  title: "Low-memory mmap failed under DynamoRIO"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #24", "branch map32bit", "lhns/dynamorio#1"]
+  verdict_quote: "After, run 42227141671 (fork 1b8b780; 216923a differs only in a comment): gather 0 of 700, the mmap 0 of 600, forced case 0 of 300."
+  headline: "gather 0 of 700"
+  depends_on: [fork-build]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-06"
+  end: "2026-11-08"
+  folded: []
+  overview: false
+  plain: "DynamoRIO's code reservation sometimes covered the whole range MAP_32BIT allocations must come from; it now falls back to a free range below 2 GB."
+
+- id: "fork-torn-exit"
+  title: "Torn jump when relinking code"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #25", "commit da64fe11", "branch dr-exit-offset-16", "lhns/dynamorio#2", "docs/plan.md"]
+  verdict_quote: "base 6 of 24,000, fix 0 of 102,000 (at most 0.003%, 95%)"
+  headline: "fix 0 of 102,000"
+  depends_on: [fork-signal-unlink]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-10"
+  end: "2026-11-10"
+  folded: ["First fix by block padding refuted: 8 of 24,000 still crashed (2026-11-09, session record)"]
+  overview: false
+  plain: "On AMD Zen 5, a jump patched by another thread could be read half old, half new; patched offsets now never straddle 16 bytes."
+
+- id: "fork-vfork-exit"
+  title: "Exit hung on a vfork thread"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #26", "branch vfork-exit", "lhns/dynamorio#3"]
+  verdict_quote: "After (8ad77ff): 0 of 1,200 scenarios bad under the client and 0 of 1,200 on DynamoRIO alone (at most 0.25%, 95%)."
+  headline: "0 of 1,200"
+  depends_on: [fork-vfork-signal]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-10"
+  end: "2026-11-10"
+  folded: []
+  overview: false
+  plain: "A process ending while one thread waited in vfork hung every time; that thread is now left to the kernel."
+
+- id: "fork-thread-create-fail"
+  title: "Failed thread creation stalled exit"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #27", "branch thread-exit", "lhns/dynamorio#4"]
+  verdict_quote: "Every creation failing, after (a900662, the same code as 2191454 on x64): 0.4-0.6 s; RSS 6 MB after 64,000 failures."
+  headline: "0.4-0.6 s"
+  depends_on: [fork-vfork-exit]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-10"
+  end: "2026-11-10"
+  folded: []
+  overview: false
+  plain: "A thread that failed to start, for example at a thread limit, made every later exit wait 51 s and leaked its stack."
+
+- id: "fork-kill-signal"
+  title: "Hold kill-sent signals to block end"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #28", "branch kill-signal-hold", "lhns/dynamorio#5"]
+  verdict_quote: "`regstress xlsig` after: 0 of 190 in each (at most 1.6%, 95%) on EPYC 7763, 9V74, 9V45 and Xeon 8573C, with 4,000-8,000 signals a run at an emulated instruction."
+  headline: "0 of 190 in each"
+  depends_on: [fork-thread-create-fail]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-10"
+  end: "2026-11-10"
+  folded: []
+  overview: false
+  plain: "Some signals sent by another thread were delivered in the middle of an emulated instruction with wrong register state; they now wait for the block's end."
+
+- id: "fork-rebase"
+  title: "Fork rebased onto upstream master"
+  track: "fork"
+  kind: "tooling"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #30", "branch rebase-dr-master", "docs/plan.md"]
+  verdict_quote: "Upstream had fixed none of these bugs, so no fork commit was dropped."
+  headline: ""
+  depends_on: [fork-kill-signal, fork-torn-exit, fork-map32bit]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-10"
+  end: "2026-11-11"
+  folded:
+  - "Allowlist, duckdb and stress checks pass on the Ivy Bridge node at the new pin (2026-11-11, session record)"
+  overview: false
+  plain: "The fork's fixes moved from a 2025 base onto current upstream DynamoRIO (branch rebase-master-20261110)."
+
+- id: "fork-vfork-exit-race"
+  title: "Races in the vfork exit fix"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence:
+  - "PR #31"
+  - "branch vfork-exit-race"
+  - "PR #32"
+  - "branch tidy-suspend-poll"
+  - "lhns/dynamorio#6"
+  - "lhns/dynamorio#7"
+  verdict_quote: "After the fix that is 0 of 9,600 runs, at most 0.16% per way of ending (95%)."
+  headline: "0 of 9,600 runs"
+  depends_on: [fork-vfork-exit, fork-rebase]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-11"
+  end: "2026-11-11"
+  folded: ["Bisect of the rare vfork_exit failure: a steady 0.24%, not a regression (2026-11-15, session record)"]
+  overview: false
+  plain: "The vfork exit fix could still hang or abort under load; both races are fixed and tested with eight copies at once."
+
+- id: "fork-trace-teardown"
+  title: "javac crash building traces"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #38", "branch pin-trace-fix", "lhns/dynamorio#8", "docs/plan.md", "branch lab-perf-trace-diag"]
+  verdict_quote: "javac before: 8 of 8 crash under the client, 7 of 8 with an empty client; after: 0 of 50 each in libdynamorio, Java benchmark 0 of 12."
+  headline: "0 of 50"
+  depends_on: [fork-rebase, prod-order-of-work]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-12"
+  folded:
+  - "The javac crash is neither the memory abort nor the protection switch-back (2026-11-12, session record)"
+  - "Owner: fix the JVM crashes in the fork, no launcher workaround (2026-11-12, session record)"
+  overview: false
+  plain: "javac and Java crashed under any DynamoRIO client while traces were built; per-block lists are now freed with the trace."
+
+- id: "fork-ibl-race"
+  title: "Indirect-branch table deletion race"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #47", "branch pin-ibl-tag", "lhns/dynamorio#11", "docs/plan.md"]
+  verdict_quote: "DynamoRIO alone 86 of 120 bad before, 0 of 120 after; under the client 49 of 120, 0 of 120."
+  headline: "0 of 120"
+  depends_on: [fork-trace-teardown]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "A thread could read a half-retired lookup entry and jump to a bogus address; it now keeps the tag it matched."
+
+- id: "fork-trace-emit"
+  title: "New trace freed under its builder"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #51", "branch pin-trace-emit", "lhns/dynamorio#12", "PR #47", "docs/plan.md"]
+  verdict_quote: "With both fixes against `0bd5cd8`, interleaved, defaults (run 43437004196): status 255 in 9 of 1,872 runs before and 0 of 1,872 after."
+  headline: "0 of 1,872"
+  depends_on: [fork-trace-teardown]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "A freshly built trace could be freed by a concurrent flush before its thread entered it; it is now looked up again."
+
+- id: "fork-sig-thread-start"
+  title: "Signal at a new thread's start"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #52", "branch pin-sig-thread-start", "lhns/dynamorio#15", "docs/plan.md"]
+  verdict_quote: "600 of 600 bad before, 0 of 600 after, under the client and on DynamoRIO alone."
+  headline: "0 of 600"
+  depends_on: [fork-rebase]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-14"
+  end: "2026-11-14"
+  folded:
+  - "Rerun of open items on the new pin: javac's 2% crash and the thread-start kill closed, PR #62 (2026-11-17, commit 6fe20853, commit f0ec7168)"
+  - "javac failures under DynamoRIO alone tracked as a separate bug, later closed by the signal fixes (2026-11-12, session record)"
+  overview: false
+  plain: "A signal reaching a thread right after its creation killed the process; new threads now start with signals blocked until DynamoRIO is ready."
+
+- id: "fork-sigxcpu"
+  title: "Kernel-raised SIGXCPU crashed DynamoRIO"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #57", "branch pin-sigxcpu", "lhns/dynamorio#17", "docs/plan.md"]
+  verdict_quote: "regstress kio under the client 20 of 20 bad before, 0 of 20 after; block_end kio 10 of 10 and 0 of 10"
+  headline: "0 of 20"
+  depends_on: [fork-sig-thread-start]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-15"
+  end: "2026-11-15"
+  folded: []
+  overview: false
+  plain: "SIGXCPU raised by the kernel inside DynamoRIO's own code aborted the process; it is now always delayed to a safe point."
+
+- id: "fork-selfmod-xl8"
+  title: "Write fault in rebuilt JIT block"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #58", "branch pin-selfmod", "lhns/dynamorio#18", "docs/plan.md"]
+  verdict_quote: "5 of 5 runs differ on main, inline and helpers only, 0 of 5 with the fix"
+  headline: "0 of 5"
+  depends_on: [client-seq-rwx]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-16"
+  end: "2026-11-16"
+  folded: []
+  overview: false
+  plain: "A write fault in sandboxed JIT code was translated against a wrongly rebuilt block and resumed at address 0; it is now translated correctly or stops the process."
+
+- id: "fork-exit-sigmask"
+  title: "Signal during a thread's own exit"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #59", "branch pin-exit-sigmask", "lhns/dynamorio#19", "docs/plan.md"]
+  verdict_quote: "`vfork_exit_dyn 20` under the client, interleaved, EPYC 7763 (run 43956311210): 82 of 3,000 bad on base `19fea7e`, 0 of 3,000 with the fix."
+  headline: "0 of 3,000"
+  depends_on: [fork-vfork-exit-race]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-17"
+  end: "2026-11-17"
+  folded: []
+  overview: false
+  plain: "A signal arriving while a thread was exiting aborted the process ('multiple native handlers'); signals now stay blocked through the exit."
+
+- id: "fork-safe-spot"
+  title: "Stale permission after a signal"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #61", "branch fix-safe-spot-signal", "lhns/dynamorio#20", "docs/plan.md"]
+  verdict_quote: "DynamoRIO alone 106 of 114 bad on base `521016e`, 0 of 114 with the fix; under the client 99 of 114 and 1 of 114 (one late reap)."
+  headline: "0 of 114"
+  depends_on: [fork-exit-sigmask]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-17"
+  end: "2026-11-17"
+  folded: []
+  overview: false
+  plain: "A signal at a wait point left a stale permission that later made fork stall for about 50 s; it is now cleared."
+
+- id: "fork-flushed-sandboxed"
+  title: "JVM aborts at safepoints"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #63", "branch fix-xl8-flushed", "lhns/dynamorio#21", "docs/plan.md"]
+  verdict_quote: "Bench's `arrays` kernel, a safepoint every millisecond, 400 runs an arm, interleaved, 20 runners (run 44141984403): 8 aborts on base `af12842`, 0 with the fix"
+  headline: "8 aborts on base `af12842`, 0 with the fix"
+  depends_on: [fork-selfmod-xl8]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-17"
+  end: "2026-11-17"
+  folded: ["Traces ruled out: the JVM aborts also happen with traces off (2026-11-17, session record)"]
+  overview: false
+  plain: "A fault in a flushed JIT block was translated against a sandboxed rebuild and reached the JVM with pc 0 (status 134 aborts); such rebuilds now stay as built."
+
+- id: "fork-vfork-kill"
+  title: "Vfork child killed inside DynamoRIO"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["PR #69", "branch fix-vfork-kill", "lhns/dynamorio#22", "docs/plan.md"]
+  verdict_quote: "This is option 2 (the child holds less) with option 3 (a clean end) as the backstop. Option 2 alone was not enough"
+  headline: ""
+  depends_on: [fork-vfork-exit-race]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-19"
+  end: "2026-11-19"
+  folded: []
+  overview: false
+  plain: "A vfork child SIGKILLed inside DynamoRIO hung or crashed its parent; now the parent goes on, or the process ends with status 89 when the child died holding a lock."
+
+- id: "fork-close-range"
+  title: "Closing all fds took a minute"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #70", "branch fix-close-range", "lhns/dynamorio#23", "docs/plan.md"]
+  verdict_quote: "Main's pin `5693e56` against the fix, interleaved, 3 reps, EPYC 7763 (run 44507982244): 37.7-41.1 s before, 0.11-0.15 s after, under the client and alone."
+  headline: "0.11-0.15 s after"
+  depends_on: [fork-rebase]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-19"
+  end: "2026-11-19"
+  folded: []
+  overview: false
+  plain: "Python's subprocess closes every fd up to INT_MAX, and DynamoRIO checked each one, so one subprocess call took about a minute."
+
+- id: "fork-refuse-untranslatable"
+  title: "Stop on untranslatable faults"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #73", "branch refuse-untranslatable-fault", "lhns/dynamorio#26", "docs/plan.md"]
+  verdict_quote: "with the fix 60 of 60 stop with status 40 and the message, both arms (run 44623652835)."
+  headline: ""
+  depends_on: [client-store-xl8]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-20"
+  end: "2026-11-20"
+  folded: ["Owner: the refusal ends with DynamoRIO's status 40, no new code (2026-11-20, session record)"]
+  overview: false
+  plain: "A fault in deleted code whose state cannot be recovered now stops the process with status 40 instead of handing the program pc 0."
+  qualified_by: [lab-noop-value-checks]
+
+- id: "fork-selfwrite-flush"
+  title: "Self-written fragment deleted twice"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["lhns/dynamorio#27", "docs/plan.md", "commit c8c6e30"]
+  verdict_quote: "unfixed against fixed in the same jobs 6 of 600 and 0 of 600 (run 44631011188)"
+  headline: "6 of 600 and 0 of 600"
+  depends_on: [fork-flushed-sandboxed]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-20"
+  end: "2026-11-20"
+  folded: []
+  overview: false
+  plain: "A fragment that wrote its own code was deleted while a flush could unlink it at the same moment (debug asserts); it is now deleted safely."
+
+- id: "fork-heap-race"
+  title: "Heap free-list race in DynamoRIO"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #79", "branch pin-trace-abort-foreign", "lhns/dynamorio#29", "docs/plan.md"]
+  verdict_quote: "overlaps 1 of 4,999 against 0 of 5,000 and cross-thread small-block heap operations 6.1e8 against 2,331 (run 45128633686)"
+  headline: "6.1e8 against 2,331"
+  depends_on: [fork-selfwrite-flush, prod-stability-gate]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-24"
+  end: "2026-11-24"
+  folded:
+  - "Stability gate counts: the heap crash recurs on cc4fdfd; the flusher lead refuted, PR #78 (2026-11-22, commit 5fc6e004, commit ca5cf9be, commit 7d7b590f, commit 049f57b6, commit 9dd6bb9d)"
+  - "Fix A narrowed: handing over the whole trace would use freed memory (2026-11-22, session record)"
+  overview: false
+  plain: "A flushing thread freed another thread's instruction list while that thread decoded into it, corrupting the heap; the rare crash that blocked production."
+  notes: "The plan says the proof rests on the overlap count; the crash counts only agree."
+
+- id: "fork-selfmod-race"
+  title: "JIT patch raced block building"
+  track: "fork"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #81", "commit e9997b92", "lhns/dynamorio#30", "docs/plan.md"]
+  verdict_quote: "the fix 0 in each; the reproducer 960 of 960 against 0 of 960, under the client and alone."
+  headline: "960 of 960 against 0 of 960"
+  depends_on: [fork-heap-race, prod-stability-gate]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-25"
+  folded:
+  - "Plan corrections: the Bench workload and the status 134 description, PR #80 (2026-11-24, commit 2b0709ef, commit aacbff8f, commit 5c2cd890)"
+  - "Status 255 not reproduced in 1,920 runs on the then pin (2026-11-18, session record)"
+  - "Owner: fix crash 2 rather than document it as a limit (2026-11-22, session record)"
+  - "First reading refuted: the crash address is never-allocated code space, not freed cache (2026-11-22, session record)"
+  - "First fix computed rip-relative addresses from the copy; revised (2026-11-24, session record)"
+  - "Status 134 attributed to the same race, closed by inference (2026-11-24, session record)"
+  overview: true
+  plain: "A JIT patching a method while DynamoRIO copied it gave a block made of two different versions of the code (the status 255 crash); blocks are now built from one read."
+
+- id: "fork-exit-sigsegv"
+  title: "SIGSEGV at exit while threads start"
+  track: "fork"
+  kind: "defect"
+  state: "in-progress"
+  outcome: "unrated"
+  evidence: ["docs/plan.md", "commit 8e97372", "branch lab-te-exit-amp", "branch lab-te-exit-diag"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-thread-exit-test]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: ""
+  folded: ["Normal exits are clean: the crash needs a process already dying from a fault (2026-11-26, session record)"]
+  overview: true
+  plain: "When a process is already dying from a program fault, a thread starting at that moment can crash in DynamoRIO's init; the mechanism is confirmed, the fix is not done."
+  notes: "Mechanism confirmed in lab runs 45805324695 and 45805304984; the code-128 failures are unexplained."
+  waiting_on: "the owner's call on a fork fix"
+
+- id: "fork-exit-fix"
+  title: "Keep SIGSEGV safe during exit"
+  track: "fork"
+  kind: "decision"
+  state: "next"
+  outcome: "n/a"
+  evidence: ["docs/handover.md", "docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-exit-sigsegv]
+  replaced_by: []
+  lane: "owner"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "The owner decides whether the fork should keep SIGSEGV handled while DynamoRIO runs the default action of a fatal signal."
+  notes: "Open owner decision 3 in docs/handover.md."
+
+- id: "fork-regstress-segv"
+  title: "One unreproduced regstress SIGSEGV"
+  track: "fork"
+  kind: "defect"
+  state: "parked"
+  outcome: "unrated"
+  evidence: ["docs/plan.md", "PR #30"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-rebase]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-11"
+  end: ""
+  folded: []
+  overview: false
+  plain: "One signal-stress run crashed in CI on the rebased fork and was not seen again in 2,000 reruns."
+
+- id: "fork-bare-dr-hang"
+  title: "Bare DynamoRIO hangs in control runs"
+  track: "fork"
+  kind: "defect"
+  state: "parked"
+  outcome: "unrated"
+  evidence: ["docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-thread-exit-test]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-26"
+  end: ""
+  folded: []
+  overview: false
+  plain: "DynamoRIO without our client, and with an empty client, hangs in about 12-15% of control runs; v3compat's client never did."
+
+- id: "launch-static"
+  title: "Static launcher that follows exec"
+  track: "launch"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence:
+  - "PR #6"
+  - "branch launcher-exec"
+  - "PR #7"
+  - "branch readlink-short-buffer"
+  - "docs/adr/0009-static-launcher-no-drrun.md"
+  - "docs/plan.md"
+  verdict_quote: "On Ivy Bridge, under Docker's default seccomp: ctest passes except `docker`, skipped as the dev container has no docker."
+  headline: ""
+  depends_on: [client-scaffold]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "v3compat-run is a static binary that starts DynamoRIO directly and keeps translating across exec, so child programs never run untranslated."
+
+- id: "launch-exec-error-call"
+  title: "Refused exec fails with an errno"
+  track: "launch"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["PR #9", "docs/adr/0009-static-launcher-no-drrun.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [launch-static]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "The owner chose that an exec the client refuses returns an error to the caller instead of ending the process."
+
+- id: "launch-refused-exec"
+  title: "Check and exec one descriptor"
+  track: "launch"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #9", "branch refused-exec-returns-error"]
+  verdict_quote: "On the previous code a refused file ran in 17 of 80 (swap), 8 of 80 (script swap) and 27 of 80 (unreadable flip, untranslated) runs on a host without AVX2. Now 0 of 120 each."
+  headline: "Now 0 of 120 each"
+  depends_on: [launch-exec-error-call]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "A refused exec returns EPERM or ENOEXEC, and the file is checked and executed through one descriptor, so swapping it in between cannot bypass the check."
+
+- id: "cache-design"
+  title: "Translation cache design"
+  track: "cache"
+  kind: "design"
+  state: "done"
+  outcome: "unrated"
+  evidence:
+  - "PR #41"
+  - "branch translation-cache-design"
+  - "PR #64"
+  - "branch lab-startup-ladder"
+  - "docs/translation-cache.md"
+  - "docs/adr/0006-read-only-translation-cache.md"
+  - "lhns/dynamorio#10"
+  verdict_quote: ""
+  headline: ""
+  depends_on: [perf-startup-options]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-20"
+  folded: ["The lab prototype cut warm start about 40%, just under the bar on one runner (2026-11-13, session record)"]
+  overview: false
+  plain: "A design for keeping translated blocks across runs, read-only for containers, written by a separate trainer; startup was measured at about 14 us per block."
+
+- id: "cache-phase2"
+  title: "Build the cache for labs"
+  track: "cache"
+  kind: "feature"
+  state: "done"
+  outcome: "mixed"
+  evidence:
+  - "PR #50"
+  - "branch pcache-phase2"
+  - "PR #56"
+  - "branch pcache-phase2-rebase"
+  - "lhns/dynamorio#14"
+  - "lhns/dynamorio#16"
+  - "branch lab-pcache-rerun"
+  - "docs/translation-cache.md"
+  verdict_quote: "Phase 1's stop criterion, 40% on `select 42` with traces on, is met on the 7763 (43%) and missed on the 9V45 (39%)."
+  headline: "0.55 to 0.34 s"
+  depends_on: [cache-design]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-17"
+  folded: ["-stable_reach chosen so cached jumps survive the random code-cache offset (2026-11-13, session record)"]
+  overview: false
+  plain: "The cache works for tests and labs: entries are checksummed and position-independent, a bad entry is rejected, and duckdb starts about 40% faster warm."
+
+- id: "cache-placement"
+  title: "Where the cache lives"
+  track: "cache"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["PR #60", "branch adr6-cache-placement", "docs/adr/0006-read-only-translation-cache.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [cache-design]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-17"
+  end: "2026-11-17"
+  folded:
+  - "ADR 0006 amendment: a directory per image digest, one .pcache per program, PR #84 (2026-11-25, commit 523df4c1)"
+  overview: false
+  plain: "The owner agreed: one root-owned cache directory per node and image digest, written by a training Job, mounted read-only."
+
+- id: "cache-debug-fix"
+  title: "Cache fixes for debug builds"
+  track: "cache"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #74", "branch pin-pcache-lock", "lhns/dynamorio#28", "docs/plan.md"]
+  verdict_quote: "200 of 200 runs stopped before, 0 of 200 bad after"
+  headline: "0 of 200 bad after"
+  depends_on: [cache-phase2]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-20"
+  end: "2026-11-20"
+  folded: []
+  overview: false
+  plain: "Debug builds of DynamoRIO stopped on every run with the cache; an option read and a leak are fixed."
+
+- id: "cache-canary-call"
+  title: "Canary with or without the cache"
+  track: "cache"
+  kind: "decision"
+  state: "next"
+  outcome: "n/a"
+  evidence: ["docs/handover.md", "k0s-flux PR #1835"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [cache-placement, lab-ivy-gate, prod-release]
+  replaced_by: []
+  lane: "owner"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work."
+  notes: "Open owner decision 1 in docs/handover.md. Either way, CHANGELOG's line saying the launcher does not use the cache needs fixing."
+
+- id: "perf-startup-options"
+  title: "DynamoRIO options for startup"
+  track: "perf"
+  kind: "experiment"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["PR #14", "branch startup-time", "branch prof-scratch", "branch startup-bench"]
+  verdict_quote: "-disable_traces: select -27%, compute -18%; long mixed query +3% wall, +6% CPU. Not made the default (above the 5% limit); documented as an option."
+  headline: ""
+  depends_on: [client-allowlist]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: []
+  overview: false
+  plain: "Turning off DynamoRIO's traces made startup faster but long runs slightly slower on GitHub runners, so it stayed an option."
+  qualified_by: [perf-traces-claim]
+
+- id: "perf-memo-classify"
+  title: "Memoise classification by bytes"
+  track: "perf"
+  kind: "experiment"
+  state: "abandoned"
+  outcome: "dead-end"
+  evidence: ["PR #14"]
+  verdict_quote: "Memoising classify and the allowlist by instruction bytes: no gain (select 0.58 s base, 0.61 s memoised), dropped."
+  headline: ""
+  depends_on: [client-allowlist]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: []
+  overview: false
+  plain: "Caching the per-instruction decision by its bytes did not speed up startup."
+
+- id: "perf-persist"
+  title: "DynamoRIO's own persistent cache"
+  track: "perf"
+  kind: "experiment"
+  state: "abandoned"
+  outcome: "dead-end"
+  evidence: ["PR #14", "docs/plan.md"]
+  verdict_quote: "-persist: the client's libdrmgr.so fails to load with it (undefined symbol __memcpy_chk); a persisted cache would also need persistence callbacks in the client. Not pursued."
+  headline: ""
+  depends_on: [client-allowlist]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "DynamoRIO's -persist does not keep a client's blocks and made runs slower, so the translation cache was designed separately."
+
+- id: "perf-inline-bmi"
+  title: "Inline rorx, andn, mulx, movbe"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #13", "branch inline-bmi"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [client-forms]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-05"
+  folded: ["About 490 ns per helper call: helpers alone cannot reach the speed target (2026-11-04, session record)"]
+  overview: false
+  plain: "Four BMI and MOVBE forms run as short inline sequences instead of a call into the helper."
+
+- id: "perf-speed-inline"
+  title: "Inline the hottest helper forms"
+  track: "perf"
+  kind: "feature"
+  state: "abandoned"
+  outcome: "superseded"
+  evidence: ["PR #22", "branch speed-inline", "PR #33"]
+  verdict_quote: "Scalar half of #22 (supersedes the scalar part of #22)."
+  headline: ""
+  depends_on: [perf-inline-bmi]
+  replaced_by: [perf-inline-scalar, perf-inline-vec]
+  lane: "none"
+  start: "2026-11-05"
+  end: "2026-11-12"
+  folded: []
+  overview: false
+  plain: "One PR inlining the forms programs execute most was split into a scalar and a vector half."
+
+- id: "perf-baseline"
+  title: "JIT workloads and speed baseline"
+  track: "perf"
+  kind: "experiment"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["docs/plan.md", "PR #36"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [prod-order-of-work]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-12"
+  folded: []
+  overview: false
+  plain: "Node, Java and javac were measured against native and DynamoRIO alone: emulation-dense code pays per helper call, JIT startup pays DynamoRIO."
+
+- id: "perf-inline-scalar"
+  title: "Inline BMI shifts and bit counts"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #33", "branch inline-bmi-scalar", "docs/plan.md"]
+  verdict_quote: "#33, merged (`shlx`, `shrx`, `sarx`, `bzhi`, `tzcnt`, `lzcnt`: 80-85 to 0.6-1.7 ns, duckdb varied 13.93 to 12.43 s, Java's bit round 7.0 s to 96 ms)"
+  headline: "80-85 to 0.6-1.7 ns"
+  depends_on: [perf-inline-bmi, perf-baseline]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-12"
+  folded: ["Mutation check, PR #34 (closed): a deliberately wrong shrx turned CI red, as expected"]
+  overview: true
+  plain: "Six scalar BMI forms went from about 80 ns as a helper call to about 1 ns inline; Java's bit-twiddling round went from 7 s to 0.1 s."
+
+- id: "perf-inline-vec"
+  title: "Inline the hot vector forms"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #35", "branch inline-vec", "docs/plan.md"]
+  verdict_quote: "#35, merged (vector forms: about 14 to 2.2 ns, duckdb varied 8.32 to 6.67 s)"
+  headline: "about 14 to 2.2 ns"
+  depends_on: [perf-inline-scalar]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-12"
+  folded: []
+  overview: false
+  plain: "The vector forms duckdb and zstd use most run inline in two 128-bit halves."
+
+- id: "perf-inline-xmm"
+  title: "Inline remaining hot vector forms"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #40", "branch inline-xmm-broadcast", "docs/plan.md"]
+  verdict_quote: "#40, merged (broadcasts to xmm, `vpmovmskb`, `vpshufd`, `vpermq`/`vpermd`: about 25-27 to 3.1 ns, duckdb varied 10.63 to 10.09 s on EPYC 7763)"
+  headline: "about 25-27 to 3.1 ns"
+  depends_on: [perf-inline-vec]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "Broadcasts, permutes and vpmovmskb, which still reached a helper, now run inline."
+
+- id: "perf-lean-call"
+  title: "Lean call into helpers"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #39", "branch lean-helper-call", "docs/plan.md"]
+  verdict_quote: "#39, merged (lean helper call, ADR 0007 (4)): a frame helper 27.7 to 23.5 ns (Xeon 8370C), 20.8 to 17.5 (EPYC 9V74)"
+  headline: "27.7 to 23.5 ns"
+  depends_on: [perf-inline-xmm]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "Helper calls save only the registers the ABI lets a helper clobber instead of DynamoRIO's full context switch."
+
+- id: "perf-gencode-prot"
+  title: "Fewer memory-map reads on toggles"
+  track: "perf"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #44", "branch pin-gencode-prot", "lhns/dynamorio#9", "branch lab-perf-maps-callers", "docs/plan.md"]
+  verdict_quote: "`java -version` 2.37 to 1.50 s under the client and 1.95 to 1.11 s alone, javac 81.8 to 66.6 s"
+  headline: "javac 81.8 to 66.6 s"
+  depends_on: [perf-baseline, fork-trace-teardown]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-13"
+  folded: ["Plan: maps-read callers and helper-call counts, PR #42 (2026-11-13, commit 34c59192, commit 95985e61)"]
+  overview: false
+  plain: "DynamoRIO read /proc/self/maps every time it toggled its own code's protection; it now passes the known bits."
+
+- id: "perf-procmap"
+  title: "New-module check without maps reads"
+  track: "perf"
+  kind: "fix"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #48", "branch pin-procmap-query", "lhns/dynamorio#13", "docs/plan.md"]
+  verdict_quote: "`java -version` 1.37 to 1.18 s under the client on EPYC 9V45 and 2.68 to 2.25 s on 7763, javac 51.5 to 49.8 s and 93.7 to 91.1 s, Node 3.24 to 2.80 s"
+  headline: "1.37 to 1.18 s"
+  depends_on: [perf-gencode-prot]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "DynamoRIO's check on each new code area asks the kernel through an ioctl instead of reading /proc/self/maps."
+
+- id: "perf-protect-mask"
+  title: "Leave generated code unprotected"
+  track: "perf"
+  kind: "experiment"
+  state: "done"
+  outcome: "mixed"
+  evidence:
+  - "PR #46"
+  - "branch unprotected-gencode"
+  - "branch gencode-unprotected"
+  - "branch lab-perf-protect-off"
+  - "branch lab-perf-protect-remeasure"
+  - "docs/plan.md"
+  verdict_quote: "That is the ceiling for any fork change that keeps the protection, so neither a default change nor a fork change is worth losing it: closed, the opt-in stays"
+  headline: ""
+  depends_on: [perf-procmap]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-16"
+  folded: ["Measured gain 1-2%; the owner kept the opt-in PR open then (2026-11-13, session record)"]
+  overview: false
+  plain: "Skipping DynamoRIO's protection toggles cut javac's mprotect calls 60% but its time only 1-2%; it stays an opt-in."
+
+- id: "perf-fma-scalar"
+  title: "Fast path for FMA helpers"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "very-successful"
+  evidence: ["PR #45", "branch pin-avxemu-fma", "lhns/avxemu#11", "docs/plan.md"]
+  verdict_quote: "dgemm 0.78 to 0.39 s, sgemm 0.79 to 0.26 s, Horner 0.19 to 0.11 s"
+  headline: "dgemm 0.78 to 0.39 s"
+  depends_on: [emu-helpers, perf-baseline]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-13"
+  end: "2026-11-13"
+  folded: []
+  overview: false
+  plain: "Fused multiply-add is computed exactly in software; a fast integer path for the common case halved its cost."
+
+- id: "perf-fma-packed"
+  title: "Native kernel for packed FMA"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "very-successful"
+  evidence:
+  - "PR #87"
+  - "commit 9a5cf83e"
+  - "lhns/avxemu#14"
+  - "branch lab-perf-fma-ceiling"
+  - "branch lab-perf-fma-guard"
+  - "branch lab-perf-fma-guard-cpus"
+  - "branch lab-perf-fma-guard2"
+  - "branch lab-perf-fma-guard2-cpus"
+  - "branch lab-perf-fma-guard2-old"
+  - "docs/plan.md"
+  verdict_quote: "packed ymm `ps` 0.52-0.63, `pd` 0.59-0.71; dgemm 0.49-0.56, sgemm 0.39-0.44"
+  headline: "dgemm 0.49-0.56"
+  depends_on: [perf-fma-scalar, perf-list-approved]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-26"
+  end: "2026-11-26"
+  folded: ["Hardware FMA first parked until a workload needs it (2026-11-20, session record)"]
+  overview: false
+  plain: "Packed FMA uses the CPU's SSE arithmetic for every lane an exactness check proves, about halving matrix-multiply time; other lanes keep the exact code."
+
+- id: "perf-helper-count"
+  title: "Count the remaining helper calls"
+  track: "perf"
+  kind: "experiment"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["docs/plan.md", "PR #85", "branch lab-perf-helper-count"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [perf-lean-call, perf-list-approved]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-26"
+  folded: []
+  overview: false
+  plain: "After the inline work, helper calls outside FMA cost at most about 0.1 s of duckdb's mixed query, so nothing more is inlined until a workload needs it."
+
+- id: "perf-list-approved"
+  title: "Work the performance list now"
+  track: "perf"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/plan.md", "PR #85", "commit 799fac8e"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [prod-release]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-25"
+  folded: []
+  overview: false
+  plain: "The owner approved working the ranked performance list now, alongside the production rollout."
+
+- id: "perf-traces-claim"
+  title: "Traces-off cost claim contradicted"
+  track: "perf"
+  kind: "defect"
+  state: "in-progress"
+  outcome: "unrated"
+  evidence: ["docs/plan.md", "commit 8e97372"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-ivy-traces]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-26"
+  end: ""
+  folded: []
+  overview: false
+  plain: "On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted."
+  waiting_on: "the owner's traces decision"
+
+- id: "perf-traces-default"
+  title: "Traces on or off by default"
+  track: "perf"
+  kind: "decision"
+  state: "next"
+  outcome: "n/a"
+  evidence: ["docs/handover.md", "docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-ivy-traces]
+  replaced_by: []
+  lane: "owner"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "The owner decides whether -disable_traces becomes the default, which also decides whether Phase 3's startup gate is met."
+  notes: "Open owner decision 2 in docs/handover.md."
+
+- id: "runtime-sde"
+  title: "Run v3 pods under Intel SDE"
+  track: "runtime"
+  kind: "feature"
+  state: "abandoned"
+  outcome: "superseded"
+  evidence: ["lhns/v3compat-runtime#1", "lhns/v3compat-runtime#3"]
+  verdict_quote: "Replaces Intel SDE with v3compat's static launcher (`v3compat-run`, lhns/v3compat ADR 0009)."
+  headline: ""
+  depends_on: []
+  replaced_by: [runtime-v3compat-run]
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-22"
+  folded: ["SDE plan dropped from the open items: tried before and too slow (2026-11-17, session record)"]
+  overview: false
+  plain: "The cluster first ran x86-64-v3 containers on the Ivy Bridge node under Intel SDE, about 300 times slower than native at startup."
+
+- id: "runtime-v3compat-run"
+  title: "Wrapper runs v3compat-run, not SDE"
+  track: "runtime"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence: ["lhns/v3compat-runtime#3", "docs/plan.md", "docs/adr/0004-opt-in-per-container.md"]
+  verdict_quote: "In progress: the wrapper runs `v3compat-run` and fails closed"
+  headline: ""
+  depends_on: [launch-refused-exec, prod-order-of-work]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-21"
+  end: "2026-11-22"
+  folded:
+  - "Plan: Ivy Bridge A/B results, approved targets, ADR 0004 amendments (passthrough, fail closed), PR #77 (2026-11-22, commit f6a68c80, commit 16dabbeb, commit d3655c47, commit 9387cb9f)"
+  overview: false
+  plain: "The OCI wrapper puts v3compat-run in front of the container's process and refuses to start the container if translation cannot be set up."
+
+- id: "runtime-installer"
+  title: "Installer and release pin"
+  track: "runtime"
+  kind: "feature"
+  state: "done"
+  outcome: "unrated"
+  evidence:
+  - "lhns/v3compat-runtime#4"
+  - "lhns/v3compat-runtime#7"
+  - "lhns/v3compat-runtime#8"
+  - "lhns/v3compat-runtime#9"
+  - "lhns/v3compat-runtime#13"
+  verdict_quote: ""
+  headline: ""
+  depends_on: [runtime-v3compat-run, prod-release]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-26"
+  folded: []
+  overview: false
+  plain: "A DaemonSet installer image puts the wrapper on nodes; the wrapper pins the 0.1.0 release and mounts the cache read-only."
+
+- id: "prod-order-of-work"
+  title: "Order: JVM crashes first"
+  track: "prod"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/plan.md", "PR #36"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-phase0]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-12"
+  folded: []
+  overview: false
+  plain: "The owner put JVM workloads in scope and ordered the work: the javac and Java crashes, then the ranked performance list, then the OCI wrapper."
+
+- id: "prod-triage"
+  title: "Won't fix and later lists"
+  track: "prod"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["PR #65", "branch plan-wontfix", "docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-safe-spot]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-18"
+  end: "2026-11-18"
+  folded: ["Static re-attach losing AVX-512 state left alone: v3compat does not use it (2026-11-09, session record)"]
+  overview: false
+  plain: "The owner ruled three DynamoRIO-only problems out of scope (won't fix), and put fixing the cache reset on the later list."
+
+- id: "prod-limits"
+  title: "Accept three production limits"
+  track: "prod"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/plan.md", "CHANGELOG.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-vfork-kill, client-store-xl8]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-21"
+  end: "2026-11-21"
+  folded: []
+  overview: false
+  plain: "The owner accepted three limits for production: a killed vfork child holding a lock ends the process (status 89), one random self-modifying sequence refuses, and one debug-only assert."
+
+- id: "prod-stability-gate"
+  title: "No release until crashes fixed"
+  track: "prod"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/plan.md", "PR #78", "PR #83"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-refuse-untranslatable]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-21"
+  end: "2026-11-22"
+  folded:
+  - "Advisor review: not production ready, unexplained crashes and a vfork hang as blockers (2026-11-15, session record)"
+  overview: false
+  plain: "The owner made the heap crash and the -sandbox_writable crash blockers: no release until both were fixed."
+
+- id: "prod-release"
+  title: "Release 0.1.0"
+  track: "prod"
+  kind: "feature"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #83", "commit dbbeadce", "tag v0.1.0", "CHANGELOG.md", "docs/handover.md"]
+  verdict_quote: "0.1.0 is released and its output verified byte-identical to native on Ivy Bridge, with the cache"
+  headline: ""
+  depends_on: [fork-selfmod-race, prod-limits]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-25"
+  folded:
+  - "Release workflow for the self-contained tarball, PR #76 (2026-11-22, commit 74d4e6a5, commit 731e963f, commit af5c5869)"
+  overview: true
+  plain: "The first release: a self-contained tarball whose output matched native byte for byte on Ivy Bridge, still about 20x slower than native at startup."
+
+- id: "prod-canary"
+  title: "Cluster canary (k0s-flux #1835)"
+  track: "prod"
+  kind: "feature"
+  state: "blocked"
+  outcome: "unrated"
+  evidence: ["k0s-flux PR #1835", "docs/handover.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [cache-canary-call, runtime-installer]
+  replaced_by: []
+  lane: "owner"
+  start: ""
+  end: ""
+  folded: []
+  overview: true
+  plain: "A first real workload on the Ivy Bridge node through the wrapper; held unmerged until the owner decides about the cache."
+  notes: "Done when: the canary runs in the cluster through v3compat-runtime."
+
+- id: "prod-two-weeks"
+  title: "Two weeks matching native"
+  track: "prod"
+  kind: "experiment"
+  state: "blocked"
+  outcome: "unrated"
+  evidence: []
+  verdict_quote: ""
+  headline: ""
+  depends_on: [prod-canary]
+  replaced_by: []
+  lane: "agent"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "Phase 4's go/no-go: two weeks of the canary with no divergence from native."
+  notes: "Done when: two weeks of canary output compared with native, no divergence (plan, Phases)."
+
+- id: "lab-phase0"
+  title: "Phase 0: is DynamoRIO enough"
+  track: "lab"
+  kind: "experiment"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["commit e9ed94e", "docs/plan.md"]
+  verdict_quote: "Phase 0 (is DynamoRIO good enough) is done; its startup criterion was revised after seeing results to cold startup under 5 s on Ivy Bridge"
+  headline: ""
+  depends_on: [client-design]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-04"
+  folded:
+  - "Startup target set after the results: cold start under 5 s, Java out of scope then (2026-11-03, session record)"
+  - "Compute and startup targets measured separately, startup left to the cache (2026-11-04, session record)"
+  overview: true
+  plain: "DynamoRIO alone was measured on duckdb, zstd, Node and Java: fast enough on long runs, slow to start, so the startup criterion was relaxed with the owner's approval."
+
+- id: "lab-tooling"
+  title: "Lab workflow, bench and stress set"
+  track: "lab"
+  kind: "tooling"
+  state: "done"
+  outcome: "unrated"
+  evidence:
+  - "PR #36"
+  - "branch handover"
+  - "PR #37"
+  - "branch howto-crash-recipe"
+  - "PR #49"
+  - "branch lab-build-fails"
+  - "PR #53"
+  - "branch stress-short-runs"
+  - "docs/howto.md"
+  - "AGENTS.md"
+  - "branch dr-suite"
+  - "branch lab-perf-probe3"
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-rebase]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-14"
+  folded:
+  - "Cleanup: shrink the plan, state facts in README, PR #15 (2026-11-05, commit e2d88147, commit 07303359)"
+  - "Slow signal stress traced to code placement on one CPU model, accepted as noise (2026-11-14, session record)"
+  overview: false
+  plain: "Lab jobs run on lab-* branches with base and change interleaved in one job; a fixed stress set (duckdb, signal and register stress) runs on every fork pin."
+
+- id: "lab-ivy-ab"
+  title: "First Ivy Bridge A/B run"
+  track: "lab"
+  kind: "experiment"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["PR #75", "branch ivy-ab", "PR #77", "docs/plan.md"]
+  verdict_quote: "Treat these as upper bounds; the compute-less-startup difference is too noisy to gate on."
+  headline: ""
+  depends_on: [cache-phase2, prod-triage]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-20"
+  end: "2026-11-20"
+  folded: ["Phase 2 measure fixed before the run: compute time without startup (2026-11-20, session record)"]
+  overview: false
+  plain: "The first measurements on the real Ivy Bridge node, in a pod on kube-worker-04; the node is shared and busy, so the numbers are upper bounds."
+
+- id: "lab-targets"
+  title: "Approve Phase 2 and 3 targets"
+  track: "lab"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/plan.md", "PR #77"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-ivy-ab]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-22"
+  end: "2026-11-22"
+  folded:
+  - "Warm cache on Ivy Bridge 1.7 s with traces off, far from the old 0.5 s goal; revised by the owner (2026-11-18, session record)"
+  overview: false
+  plain: "The owner approved the gates: inline forms under 6 ns, helpers under 100 ns, compute under 2 s, 0 bad in 1,000 signal runs, warm startup under 2 s and 40% below cold."
+
+- id: "lab-noop-value-checks"
+  title: "Value checks that checked nothing"
+  track: "lab"
+  kind: "defect"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #80", "branch plan-c134-corrections", "docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-refuse-untranslatable]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-24"
+  end: "2026-11-24"
+  folded: []
+  overview: false
+  plain: "Several Java labs compared output lines main's benchmark does not print, so their '0 wrong values' checked nothing; the plan was corrected."
+
+- id: "lab-ivy-gate"
+  title: "Ivy Bridge gate run"
+  track: "lab"
+  kind: "experiment"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["PR #82", "commit 45be5abf", "docs/plan.md"]
+  verdict_quote: "met only with traces off (warm 1.76 and 1.92 s, 51-52% below cold with the same options"
+  headline: ""
+  depends_on: [lab-targets, fork-selfmod-race]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-25"
+  folded: []
+  overview: false
+  plain: "On Ivy Bridge the signal gate was met (0 bad of 1,000) and the startup gate only with traces off; the compute gate could not run on the busy node."
+
+- id: "lab-method-call"
+  title: "Lab method left to the agents"
+  track: "lab"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/plan.md", "PR #89"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-ivy-gate]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-26"
+  end: "2026-11-26"
+  folded: ["Cordoning the node or keeping CI runners off it rejected by the owner (2026-11-26, session record)"]
+  overview: false
+  plain: "The owner left how to restrict the Ivy Bridge lab to the agents; gates now use the low end of interleaved rounds instead of waiting for a quiet node."
+
+- id: "lab-ivy-traces"
+  title: "Traces A/B on Ivy Bridge"
+  track: "lab"
+  kind: "experiment"
+  state: "done"
+  outcome: "mixed"
+  evidence: ["PR #89", "commit 7873a0f6", "PR #90", "commit 8e97372e", "docs/plan.md", "branch ivy-traces"]
+  verdict_quote: "Three rounds under load: the sign is clear, the size is not."
+  headline: ""
+  depends_on: [lab-method-call]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-26"
+  end: "2026-11-26"
+  folded: []
+  overview: false
+  plain: "Default, traces off and a higher trace threshold were interleaved on Ivy Bridge: traces off used the least CPU on javac and java; the compute query was within noise."
+
+- id: "lab-ivy-traces-signal"
+  title: "Signal runs with traces off"
+  track: "lab"
+  kind: "experiment"
+  state: "in-progress"
+  outcome: "unrated"
+  evidence: ["docs/handover.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-ivy-traces]
+  replaced_by: []
+  lane: "ivy"
+  start: "2026-11-26"
+  end: ""
+  folded: []
+  overview: true
+  plain: "The traces A/B's last section, 1,000 signal-injection runs with traces off, is running on kube-worker-04."
+  notes: "Done when: the IVY-AB-JSON result is in plan.md's traces A/B section and namespace v3compat-lab-ivy is deleted."
+  queue_order: 1
+
+- id: "lab-thread-exit-test"
+  title: "Thread-exit test's own race"
+  track: "lab"
+  kind: "fix"
+  state: "done"
+  outcome: "successful"
+  evidence: ["PR #86", "commit 0c5c0f8f", "docs/plan.md"]
+  verdict_quote: "The cause is the test, not DynamoRIO: it crashes natively too."
+  headline: ""
+  depends_on: [fork-thread-create-fail]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-25"
+  end: "2026-11-26"
+  folded: []
+  overview: false
+  plain: "The thread-exit test crashed now and then because it detached threads racily; natively too. Threads are now created detached."
+
+- id: "client-kernel-module"
+  title: "Kernel module or patching instead"
+  track: "client"
+  kind: "design"
+  state: "abandoned"
+  outcome: "dead-end"
+  evidence: ["docs/adr/0002-same-isa-binary-translator.md", "docs/plan.md"]
+  verdict_quote: "Kernel module, eBPF, seccomp patching, ahead-of-time rewriting and hypervisor traps were rejected"
+  headline: ""
+  depends_on: []
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-03"
+  end: "2026-11-03"
+  folded:
+  - "Kernel-module emulation rejected: it cannot see lzcnt or tzcnt, traps are slow, a bug takes down the node (2026-11-03, session record)"
+  overview: false
+  plain: "Emulating in a kernel module, eBPF, seccomp, ahead-of-time rewriting or hypervisor traps was rejected; lzcnt and tzcnt do not even fault on AVX-only CPUs."
+
+- id: "emu-rust-rewrite"
+  title: "Rewrite AVXEmu in Rust"
+  track: "emu"
+  kind: "design"
+  state: "parked"
+  outcome: "unrated"
+  evidence: ["session record"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: []
+  replaced_by: []
+  lane: "agent"
+  start: "2026-11-03"
+  end: ""
+  folded: []
+  overview: false
+  plain: "A Rust rewrite of AVXEmu was set aside: the worst bugs were wrong instruction semantics, which a test suite catches and Rust does not."
+
+- id: "fork-commit-call"
+  title: "Commit to our DynamoRIO fork"
+  track: "fork"
+  kind: "decision"
+  state: "done"
+  outcome: "n/a"
+  evidence: ["docs/adr/0003-dynamorio-as-the-base.md", "session record"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [lab-phase0]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-04"
+  end: "2026-11-04"
+  folded: []
+  overview: false
+  plain: "After Phase 0 the owner accepted the ADRs and committed to DynamoRIO built from our own fork, with nothing posted upstream."
+
+- id: "perf-fast-decode"
+  title: "Cheaper decoding for the client"
+  track: "perf"
+  kind: "experiment"
+  state: "abandoned"
+  outcome: "dead-end"
+  evidence: ["docs/plan.md"]
+  verdict_quote: "`-fast_client_decode` is internal and does not allow changing app code."
+  headline: ""
+  depends_on: [perf-baseline]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-12"
+  end: "2026-11-12"
+  folded: []
+  overview: false
+  plain: "DynamoRIO's cheaper decode mode cannot be used by a client that rewrites code, and skipping the client's checks would bypass the audited list."
+
+- id: "fork-signal-deviations"
+  title: "Signal behaviour differing from native"
+  track: "fork"
+  kind: "defect"
+  state: "parked"
+  outcome: "unrated"
+  evidence: ["session record"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [fork-vfork-kill]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-19"
+  end: ""
+  folded: []
+  overview: false
+  plain: "A lab with realistic signals found differences from native: a vfork child dies of a signal it ignores before exec, Java crashed 3 times in 24 under SIGTERM storms, and any SIGKILLed child ends the process with status 89. Its Python spawn stall was the close_range fix."
+  notes: "Found in a session lab, not written up in the plan yet."

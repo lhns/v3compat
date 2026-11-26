@@ -11,9 +11,9 @@ first; state and numbers are in [plan.md](plan.md), not repeated here.
 - The runtime runs `v3compat-run` instead of SDE.
 - Plan Phase 2 (speed) is in progress; Phase 3 and 4 state is in the [Phases table](plan.md#phases).
 
-Read: plan.md "Phases" and "Open items"; [translation-cache.md](translation-cache.md);
-ADRs [0004](adr/0004-opt-in-per-container.md), [0006](adr/0006-read-only-translation-cache.md),
-[0008](adr/0008-audited-list-keyed-on-shape.md), [0009](adr/0009-static-launcher-no-drrun.md).
+Read: the [roadmap](roadmap.md) (every piece of work with its verdict, and what is open); plan.md "Phases" and
+"Open items"; [translation-cache.md](translation-cache.md); ADRs [0004](adr/0004-opt-in-per-container.md),
+[0006](adr/0006-read-only-translation-cache.md), [0008](adr/0008-audited-list-keyed-on-shape.md), [0009](adr/0009-static-launcher-no-drrun.md).
 
 ## Owner's standing rules
 
@@ -24,6 +24,8 @@ ADRs [0004](adr/0004-opt-in-per-container.md), [0006](adr/0006-read-only-transla
 - Lab jobs on `kube-worker-04` may be restricted as needed; never cordon or taint the node or restrict the CI runners.
 - Worktrees live in the session scratchpad, never in the user's git folder.
 - A speed PR carries one interleaved lab job.
+- Update the roadmap (`docs/roadmap/nodes.yaml`) in the same push as each result, merge or owner decision, and run
+  its build and check first ([how-to](howto.md#roadmap)).
 - kubectl works only through the jumphost: `ssh lhns@10.1.5.15 'kubectl ...'`. Never paste secrets.
 
 ## Open owner decisions
