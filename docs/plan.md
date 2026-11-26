@@ -223,6 +223,14 @@ excluding startup, from at least 20 rounds on a quiet node (1.93 s here, noisy);
 1,000 runs (0 of 282 here). Phase 3, warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same
 job (2.91 s, 36% now); 0.5 s is out of reach with this cache design. Memory and bad-entry gates unchanged.
 
+**How the Ivy Bridge gates are measured** (the owner left the lab's method to us, 2026-11-26: "restrictions for the v3
+runner however you like"). The node is shared and never idle, so a round starts whatever the load; each round logs
+the node's 1-minute load. Contention only adds time, so the compute gate uses the low end (minimum or p25) of at least
+20 rounds of the query's own time from duckdb's `.timer`, not a per-round "whole process less `select 42`" (that
+difference spread 0.20-4.34 s above). CPU time is recorded but not gated: it sums a multi-threaded query's threads.
+A choice between option sets (traces on or off) compares the arms within the same interleaved rounds, so load falls
+on every arm alike. The 2026-11-22 "quiet node" wording is replaced by this.
+
 ### Ivy Bridge gate run (2026-11-25)
 
 `lab/ivy-ab.sh` at `7a7e580` (main `e9997b9`, DynamoRIO pin `45bfae0f`), the pod shape above, two Jobs on
@@ -239,9 +247,8 @@ Job / second Job **[measured]**:
   options; every warm arm hit 77.1k of 77.2k lookups, 0 corrupt. Traces cost about 1 s of the cold start here, which
   the cache does not cover. Peak memory 64-115 MB, under 180 MB. Whether the gate may be met with traces off is the
   owner's call (about 3% on long runs, runners).
-- **Phase 2 compute: not measured.** The node's 1-minute load never fell below the fixed threshold of 6.0 (20 vCPUs)
-  in 95 minutes of waiting (10.9-48.2, about 02:05-03:40 UTC; the cluster's GitHub runners dominate), so no round ran.
-  A quiet window needs the node's other load stopped.
+- **Phase 2 compute: not measured.** The lab's own start gate (load below 6.0 on 20 vCPUs) never opened in 95 minutes
+  (10.9-48.2); the gate is dropped since (method above).
 - **Signal injection:** 0 bad of 1,000 (500 `regstress 8 3 sig jit`, 500 `xlsig`), second Job. Phase 2's gate is met.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
@@ -804,7 +811,7 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, from at least 20 rounds on a quiet node; signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute not measured, the node was never quiet ([gate run](#ivy-bridge-gate-run-2026-11-25)) |
+| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, the low end of at least 20 interleaved rounds (method above the gate run); signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute not measured, the node was never quiet ([gate run](#ivy-bridge-gate-run-2026-11-25)) |
 | **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache lab and test only ([design](translation-cache.md)). Ivy Bridge: warm `select 42` 1.76-1.92 s, 51-52% below cold, 64-115 MB, with `-disable_traces` only; 2.8-2.9 s with traces on ([gate run](#ivy-bridge-gate-run-2026-11-25)). Traces off pending the owner |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
 
