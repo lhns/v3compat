@@ -8,19 +8,20 @@
 #      cold and warm per set. LADDER=1 adds lab/startup.sh's ladder.
 #   2. OPS=1: per-op cost (test/bench_bmi, bench/fma micro rows), inline against V3COMPAT_HELPERS_ONLY=1, OPS_ROUNDS
 #      rounds per set in OPS_OPTSETS.
-#   3. COMPUTE_ROUNDS>0: duckdb compute cold, `select 42` of the same round, their difference, and compute warm, per set.
-#      A round starts only when the node's 1-minute load is below QUIET_LOAD; a round that ran is never dropped.
+#   3. COMPUTE_ROUNDS>0: duckdb compute cold and warm, and `select 42` cold, per set, interleaved in each round, with
+#      the query's own time from duckdb's `.timer` (compute.query.<set>). No load gate: each round logs the node's
+#      1-minute load, and contention hits every arm of a round alike. Gate on the low end (min, p25) of the rounds.
 #   4. LONG_REPS>0: duckdb varied, javac of bench/Bench.java and `java Bench 8 1` per set; output digests recorded.
 #   5. SIG_RUNS>0: signal injection (regstress sig jit / xlsig) under each of SIG_OPTSETS; failures keep their output.
-# Variables: OPTSETS="d nt th", P3=1, OPS=1, OPS_ROUNDS=3, OPS_OPTSETS="d nt", COMPUTE_ROUNDS=20, COMPUTE_MIN=120
-# (minutes section 3 may wait for quiet and run), QUIET_LOAD=6.0, LONG_REPS=3, SIG_RUNS=1000, SIG_OPTSETS=nt, LADDER=0.
+# Variables: OPTSETS="d nt th", P3=1, OPS=1, OPS_ROUNDS=3, OPS_OPTSETS="d nt", COMPUTE_ROUNDS=20, LONG_REPS=3,
+# SIG_RUNS=1000, SIG_OPTSETS=nt, LADDER=0, THREADS (duckdb's threads; default nproc, set it to the pod's CPU limit).
 # Needs python3, and java + javac for the Java part of section 4. Raw lines go to lab-out/ivy-raw.txt; a measured
 # line is `KEY WALL rc=RC cpu=USER+SYS rss=KB` (seconds; the sum of user and system time of the process tree).
-# The summary (median, min, max per key, CPU model, load before and after) is printed as JSON at the end.
+# The summary (median, p25, min, max per key, CPU model, load before and after) is printed as JSON at the end.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 OPTSETS=${OPTSETS:-d nt th} P3=${P3:-1} OPS=${OPS:-1} OPS_ROUNDS=${OPS_ROUNDS:-3} OPS_OPTSETS=${OPS_OPTSETS:-d nt}
-COMPUTE_ROUNDS=${COMPUTE_ROUNDS:-20} COMPUTE_MIN=${COMPUTE_MIN:-120} QUIET_LOAD=${QUIET_LOAD:-6.0}
+COMPUTE_ROUNDS=${COMPUTE_ROUNDS:-20} THREADS=${THREADS:-$(nproc)}
 LONG_REPS=${LONG_REPS:-3} SIG_RUNS=${SIG_RUNS:-1000} SIG_OPTSETS=${SIG_OPTSETS:-nt} LADDER=${LADDER:-0}
 mkdir -p lab-out
 RAW=lab-out/ivy-raw.txt; : > $RAW
@@ -42,8 +43,10 @@ if [ ! -x ./duckdb ]; then
 fi
 
 RUN=(build/inst/bin/v3compat-run --)
-Q42=(./duckdb -csv -noheader -c 'select 42')
-QC=(./duckdb -csv -noheader -c 'select sum(range*range) from range(30000000)')
+Q42=(./duckdb -csv -noheader -cmd "set threads = $THREADS" -c 'select 42')
+QC=(./duckdb -csv -noheader -cmd "set threads = $THREADS" -c 'select sum(range*range) from range(30000000)')
+# The same query with duckdb's timer: its "Run Time (s): real" line is the query alone, without startup.
+QT=(./duckdb -csv -noheader -cmd "set threads = $THREADS" -cmd '.timer on' -c 'select sum(range*range) from range(30000000)')
 declare -A OPT=([d]="" [nt]="-disable_traces" [th]="-trace_threshold 1000")
 OUT=/tmp/ivy-out ERR=/tmp/ivy-err
 rec() { echo "$*" >> $RAW; echo "$*"; }
@@ -135,29 +138,20 @@ if [ "$OPS" = 1 ]; then
   secend 2
 fi
 
-# 3. duckdb compute cold, whole-process; less select 42 of the same round; and warm. Each round waits for a quiet node.
+# 3. duckdb compute cold and warm, select 42 cold, and the query's own time, per set, interleaved in each round.
 throttled() { { [ -r /sys/fs/cgroup/cpu.stat ] && awk '$1 == "nr_throttled" { print $2; f = 1 } END { if (!f) print "na" }' /sys/fs/cgroup/cpu.stat; } || echo na; }
-quiet() { # wait until load < QUIET_LOAD; fail when the time box ends first
-  local l
-  while :; do
-    l=$(loadnow)
-    awk -v l="$l" -v q="$QUIET_LOAD" 'BEGIN { exit !(l < q) }' && return 0
-    [ $(( $(date +%s) + 15 )) -ge $CEND ] && return 1
-    echo "waiting for quiet: load $l >= $QUIET_LOAD"; sleep 15
-  done
-}
 if [ "$COMPUTE_ROUNDS" -gt 0 ]; then
   secbegin; [ -n "$TRAINED" ] || train
-  CEND=$(( $(date +%s) + COMPUTE_MIN * 60 ))
   rounds=0
   for r in $(seq "$COMPUTE_ROUNDS"); do
-    quiet || { rec "compute.gaveup round=$r"; break; }
     l0=$(loadnow); t0=$(throttled)
     for s in $OPTSETS; do
-      V3COMPAT_DR_OPTS=${OPT[$s]} meas "compute.cold.$s" "${RUN[@]}" "${QC[@]}"; read -r _ c rc1 _ <<<"$LAST"
-      V3COMPAT_DR_OPTS=${OPT[$s]} meas "select42.cold.pair.$s" "${RUN[@]}" "${Q42[@]}"; read -r _ w rc2 _ <<<"$LAST"
-      [ "$rc1 $rc2" = "rc=0 rc=0" ] && rec "compute.less_startup.$s $(echo "$c - $w" | bc) rc=0"
+      V3COMPAT_DR_OPTS=${OPT[$s]} meas "compute.cold.$s" "${RUN[@]}" "${QC[@]}"
+      V3COMPAT_DR_OPTS=${OPT[$s]} meas "select42.cold.pair.$s" "${RUN[@]}" "${Q42[@]}"
       V3COMPAT_DR_OPTS=${OPT[$s]} V3COMPAT_CACHE=/tmp/ivy-cache-$s meas "compute.warm.$s" "${RUN[@]}" "${QC[@]}"
+      V3COMPAT_DR_OPTS=${OPT[$s]} meas "compute.timed.$s" "${RUN[@]}" "${QT[@]}"; read -r _ _ rc _ <<<"$LAST"
+      q=$(awk '/^Run Time \(s\): real/ { print $5; exit }' $OUT)
+      [ "$rc" = rc=0 ] && [ -n "$q" ] && rec "compute.query.$s $q rc=0"
     done
     l1=$(loadnow); t1=$(throttled); d=na
     [ "$t0" != na ] && [ "$t1" != na ] && d=$(( t1 - t0 ))
@@ -223,7 +217,7 @@ python3 - "$RAW" "$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)" "$LOAD0
 import json, statistics, sys
 raw, model, l0, l1, cpus = sys.argv[1:6]
 # lines with text, digests or several numbers stay raw; counts are not timings
-SKIP = ("ladder", "signal.", "round.load", "cache.hits", "compute.rounds", "compute.gaveup", "probe.", "digest.",
+SKIP = ("ladder", "signal.", "round.load", "cache.hits", "compute.rounds", "probe.", "digest.",
         "section.load", "optsets", "long.skip")
 vals, other = {}, []
 for line in open(raw):
@@ -244,8 +238,8 @@ for line in open(raw):
             pass
     other.append(line.strip())
 out = {"cpu": model.strip(), "nproc_cpu_max": cpus, "loadavg_before": l0, "loadavg_after": l1,
-       "stats": {k: {"n": len(v), "median": statistics.median(v), "min": min(v), "max": max(v)}
-                 for k, v in sorted(vals.items())},
+       "stats": {k: {"n": len(v), "median": statistics.median(v), "p25": statistics.quantiles(v, n=4)[0] if len(v) > 1 else v[0],
+                     "min": min(v), "max": max(v)} for k, v in sorted(vals.items())},
        "other": other}
 print("IVY-AB-JSON " + json.dumps(out))
 PY
