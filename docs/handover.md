@@ -12,7 +12,8 @@ first; state and numbers are in [plan.md](plan.md), not repeated here.
 - Plan Phase 2 (speed) is in progress; Phase 3 and 4 state is in the [Phases table](plan.md#phases).
 
 Read: the [roadmap](roadmap.md) (every piece of work with its verdict, and what is open); plan.md "Phases" and
-"Open items"; [translation-cache.md](translation-cache.md); ADRs [0004](adr/0004-opt-in-per-container.md), [0006](adr/0006-read-only-translation-cache.md),
+"Open items"; [translation-cache.md](translation-cache.md); ADRs [0004](adr/0004-opt-in-per-container.md),
+[0006](adr/0006-read-only-translation-cache.md),
 [0008](adr/0008-audited-list-keyed-on-shape.md), [0009](adr/0009-static-launcher-no-drrun.md).
 
 ## Owner's standing rules
