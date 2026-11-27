@@ -1,7 +1,7 @@
 /* te_sig cap ms pre|post KIND: lab copy of test/thread_exit.c where one app thread dies of KIND while threads start
  * and end: pre at ms/2, post right after main printed (main then _exits with 3). KIND: segv (read of address 16),
  * abrt (abort()), bus (read past the end of a truncated memfd mapping), ill (ud2), fpe (integer divide by zero),
- * ksegv (raise(SIGSEGV), a sent SIGSEGV). Natively pre ends with that signal's status (139, 134, 135, 132, 136, 139)
+ * ksegv (raise(SIGSEGV), a sent SIGSEGV). A 6th argument vfork keeps a vfork child alive meanwhile. Natively pre ends with that signal's status (139, 134, 135, 132, 136, 139)
  * and post (1 ms after main's go) with 3. Whose thread dumped the core tells whose fault ended the process. */
 #define _GNU_SOURCE
 #include <pthread.h>
@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 static int cap;
@@ -67,6 +68,22 @@ static void *faulter(void *arg) {
     return (void *)(long)*(volatile int *)16;
 }
 
+/* Keeps a vfork child alive most of the time: each spins 20 ms in the child. */
+static void *vforker(void *arg) {
+    (void)arg;
+    for (;;) {
+        pid_t c = vfork();
+        if (c == 0) {
+            struct timespec t0, t;
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+            do clock_gettime(CLOCK_MONOTONIC, &t);
+            while ((t.tv_sec - t0.tv_sec) * 1000000000L + t.tv_nsec - t0.tv_nsec < 20000000L);
+            _exit(0);
+        }
+        if (c > 0) waitpid(c, 0, 0);
+    }
+}
+
 static void *spawner(void *arg) {
     (void)arg;
     for (;;)
@@ -79,12 +96,14 @@ int main(int argc, char **argv) {
     ms = argc > 2 ? atoi(argv[2]) : 300;
     pre = argc > 3 && !strcmp(argv[3], "pre");
     if (argc > 4) kind = argv[4];
+    int with_vfork = argc > 5 && !strcmp(argv[5], "vfork");
     struct timespec d = {ms / 1000, (ms % 1000) * 1000000L};
     int fd = memfd_create("te_sig", 0);
     if (fd < 0 || ftruncate(fd, 4096)) return 2;
     busmap = mmap(0, 4096, PROT_READ, MAP_SHARED, fd, 0);
     if (busmap == MAP_FAILED || ftruncate(fd, 0)) return 2;
     if (pthread_attr_init(&detached) || pthread_attr_setdetachstate(&detached, PTHREAD_CREATE_DETACHED)) return 2;
+    if (with_vfork && pthread_create(&t, &detached, vforker, 0)) return 2;
     for (int i = 0; i < 4; i++)
         if (pthread_create(&t, 0, spawner, 0)) return 2;
     if (pthread_create(&t, &detached, faulter, 0)) return 2;

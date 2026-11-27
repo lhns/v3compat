@@ -1,7 +1,7 @@
 #!/bin/bash
 # exab.sh ROUNDS N: the exit-time SIGSEGV, base (/tmp/base, origin/main's pin) against this branch's pin, interleaved
 # with native. Per round, kind and arm: te_sig pre and post (an app thread dies of the kind while threads start, or
-# right as main _exits with 3), the old pthread_detach test (8N runs) and thread_exit. Every core is classified by whose
+# 1 ms after main's _exit(3)); the same with a vfork child alive (.vfork); the old pthread_detach test (8N runs) and thread_exit. Every core is classified by whose
 # fault the dumping thread took. Natively: pre ends with the kind's signal from app:faulter, post and the rest with 3.
 grep -m1 "model name" /proc/cpuinfo; uname -r
 R=${1:-4}; N=${2:-10}
@@ -36,6 +36,9 @@ one() {
 for r in $(seq $R); do
   for kind in segv abrt bus ill fpe ksegv; do for when in pre post; do
     for i in $(seq $N); do for arm in native base fix; do one $arm $kind.$when /tmp/te_sig 64 300 $when $kind; done; done
+  done; done
+  for kind in segv abrt ill ksegv; do for when in pre post; do
+    for i in $(seq $N); do for arm in native base fix; do one $arm $kind.$when.vfork /tmp/te_sig 64 300 $when $kind vfork; done; done
   done; done
   for i in $(seq $((N * 8))); do for arm in native base fix; do one $arm old /tmp/te_old 64 300; done; done
   for i in $(seq $N); do for arm in base fix; do one $arm ctl build/test/thread_exit 64 300; done; done
