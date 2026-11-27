@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -103,6 +104,55 @@ jobs:
         env:
           V3COMPAT_CI: "1"
         run: chmod o+x "$HOME" && bash test/pcache_ci.sh build ./duckdb
+
+  # Gate for semantic-full: the full check is deterministic, so it runs only when what it checks can change.
+  semantic-full-gate:
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.g.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: g
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_PR: ${{ github.event.pull_request.base.sha }}
+          BASE_PUSH: ${{ github.event.before }}
+        run: |
+          run=false
+          base=$BASE_PR; [ "$EVENT" = push ] && base=$BASE_PUSH
+          if [ "$EVENT" = workflow_dispatch ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            run=true
+          else
+            git diff --name-only "$base" HEAD | grep -qx src/expand.c && run=true
+            git diff -U0 "$base" HEAD -- CMakeLists.txt | grep -q '^[+-]set(AVXEMU_COMMIT ' && run=true
+            git diff -U0 "$base" HEAD -- cmake/FetchDynamoRIO.cmake | grep -q '^[+-]set(V3COMPAT_DR_COMMIT ' && run=true
+          fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
+
+  # The semantic suite on every case and imm8 value, inline and helpers only (docs/howto.md).
+  semantic-full:
+    needs: semantic-full-gate
+    if: needs.semantic-full-gate.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runner CPU
+        run: grep -m1 'model name' /proc/cpuinfo | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/v3compat
+          key: dynamorio-${{ hashFiles('cmake/FetchDynamoRIO.cmake') }}
+      - name: DynamoRIO build dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y zlib1g-dev musl-tools
+      - name: Build
+        run: cmake -S . -B build -DV3COMPAT_SEMANTIC=ON -DV3COMPAT_SEMANTIC_FULL=ON && cmake --build build -j
+      - name: Full semantic suite
+        run: |
+          start=$(date +%s)
+          ctest --test-dir build -L semantic-full --output-on-failure
+          echo "semantic-full took $(( $(date +%s) - start )) s" | tee -a "$GITHUB_STEP_SUMMARY"
 
   tech-tree:
     runs-on: ubuntu-24.04

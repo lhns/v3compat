@@ -475,6 +475,7 @@ add_test(NAME helpers-guard COMMAND sh "${AVXEMU_SRC}/test/check-helpers-lib.sh"
 add_test(NAME emulated-iforms COMMAND sh -c "sh '${_A}/iforms.sh' '${AVXEMU_SRC}/test/spec/manifest.tsv' | diff - '${_A}/emulated-iforms.txt'")
 
 option(V3COMPAT_SEMANTIC "Add the opt-in semantic suite test (avxemu's instruction-form cases)" OFF)
+option(V3COMPAT_SEMANTIC_FULL "With V3COMPAT_SEMANTIC: also add semantic-hw-full tests (all imm8 values; label semantic-full)" OFF)
 if(V3COMPAT_SEMANTIC)
   add_subdirectory(sem)
 endif()
