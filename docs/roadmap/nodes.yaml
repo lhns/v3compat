@@ -2253,3 +2253,21 @@ nodes:
   folded: []
   overview: false
   plain: "A killed vfork child holding a DynamoRIO lock ends the process with status 89; letting the parent run on needs the child's thread state built before the clone, or robust locks."
+
+- id: "emu-full-imm8"
+  title: "Full imm8 check on pin changes"
+  track: "emu"
+  kind: "feature"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["PR #95"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [emu-suite-leftovers]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-27"
+  end: "2026-11-27"
+  folded: []
+  overview: false
+  plain: "CI runs the semantic suite on every imm8 value, inline and helpers only, when the avxemu pin, the DynamoRIO pin or src/expand.c changes."
