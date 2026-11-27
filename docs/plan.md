@@ -274,7 +274,8 @@ artefact. All rc 0; the varied and java digests are equal across sets. The lab p
 - **Reading:** nt used the least CPU in every round of javac and java, about 33% and 27% below d; varied is within
   noise; th is no better than d. That contradicts "about 3% wall and 6% CPU" on a long mixed workload (runners, above
   and README). Three rounds under load: the sign is clear, the size is not. The default is unchanged: the owner decides.
-- **Signal injection** (nt, 1,000 runs): pending, 50 of 1,000 with 0 bad when written.
+- **Signal injection** (nt, alternating 500 `regstress 8 3 sig jit` and 500 `xlsig`): 0 bad of 1,000, at most 0.3% (95%),
+  finished 2026-11-26 **[measured]**. Traces off meets Phase 2's signal gate, as the default did.
 
 ### Launcher and exec follow ([ADR 0009](adr/0009-static-launcher-no-drrun.md))
 

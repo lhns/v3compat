@@ -1862,21 +1862,19 @@ nodes:
   title: "Signal runs with traces off"
   track: "lab"
   kind: "experiment"
-  state: "in-progress"
-  outcome: "unrated"
-  evidence: ["docs/handover.md"]
-  verdict_quote: ""
+  state: "done"
+  outcome: "successful"
+  evidence: ["docs/plan.md"]
+  verdict_quote: "Traces off meets Phase 2's signal gate, as the default did."
   headline: ""
   depends_on: [lab-ivy-traces]
   replaced_by: []
-  lane: "ivy"
+  lane: "none"
   start: "2026-11-26"
-  end: ""
+  end: "2026-11-26"
   folded: []
   overview: false
-  plain: "The traces A/B's last section, 1,000 signal-injection runs with traces off, is running on kube-worker-04."
-  notes: "Done when: the IVY-AB-JSON result is in plan.md's traces A/B section and namespace v3compat-lab-ivy is deleted."
-  queue_order: 1
+  plain: "The traces A/B's last section: 1,000 signal-injection runs with traces off on kube-worker-04, none bad."
 
 - id: "lab-thread-exit-test"
   title: "Thread-exit test's own race"

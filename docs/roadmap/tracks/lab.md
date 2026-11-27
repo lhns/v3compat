@@ -16,7 +16,7 @@ flowchart TB
     lab_ivy_gate[/"✔ Ivy Bridge gate run"/]
     lab_thread_exit_test["✔ Thread-exit test's<br/>own race"]
     lab_ivy_traces[/"✔ Traces A/B on Ivy<br/>Bridge"/]
-    lab_ivy_traces_signal[/"▶ Signal runs with<br/>traces off"/]
+    lab_ivy_traces_signal[/"✔ Signal runs with<br/>traces off"/]
     lab_javac_digest["○ Check javac output<br/>on Ivy Bridge"]
     lab_fma_ivy[/"○ Packed FMA kernel on<br/>Ivy Bridge"/]
     lab_phase0 ~~~ lab_noop_value_checks
@@ -48,8 +48,7 @@ flowchart TB
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
     class lab_phase0,lab_ivy_ab,lab_ivy_gate,lab_ivy_traces mixed
     class lab_tooling unrated
-    class lab_noop_value_checks,lab_thread_exit_test succ
-    class lab_ivy_traces_signal inprog
+    class lab_noop_value_checks,lab_thread_exit_test,lab_ivy_traces_signal succ
     class lab_javac_digest,lab_fma_ivy next
 ```
 <!-- END GENERATED: track-lab -->
@@ -67,7 +66,7 @@ flowchart TB
 | `lab-ivy-gate` | Ivy Bridge gate run | experiment | none | done | mixed | 2026-11-25 | 2026-11-25 | lab-targets, fork-selfmod-race |  |  |  | PR #82; commit 45be5abf; docs/plan.md |
 | `lab-method-call` | Lab method left to the agents | decision | none | done | n/a | 2026-11-26 | 2026-11-26 | lab-ivy-gate |  |  |  | docs/plan.md; PR #89 |
 | `lab-ivy-traces` | Traces A/B on Ivy Bridge | experiment | none | done | mixed | 2026-11-26 | 2026-11-26 | lab-method-call |  |  |  | PR #89; commit 7873a0f6; PR #90; commit 8e97372e; docs/plan.md; branch ivy-traces |
-| `lab-ivy-traces-signal` | Signal runs with traces off | experiment | ivy | in-progress | unrated | 2026-11-26 |  | lab-ivy-traces |  |  |  | docs/handover.md |
+| `lab-ivy-traces-signal` | Signal runs with traces off | experiment | none | done | successful | 2026-11-26 | 2026-11-26 | lab-ivy-traces |  |  |  | docs/plan.md |
 | `lab-thread-exit-test` | Thread-exit test's own race | fix | none | done | successful | 2026-11-25 | 2026-11-26 | fork-thread-create-fail |  |  |  | PR #86; commit 0c5c0f8f; docs/plan.md |
 | `lab-javac-digest` | Check javac output on Ivy Bridge | tooling | agent | next | unrated |  |  | lab-ivy-traces |  |  |  | docs/plan.md |
 | `lab-fma-ivy` | Packed FMA kernel on Ivy Bridge | experiment | ivy | next | unrated |  |  | perf-fma-packed |  |  |  | docs/plan.md |
@@ -84,7 +83,7 @@ flowchart TB
 | `lab-ivy-gate` | Ivy Bridge gate run | met only with traces off (warm 1.76 and 1.92 s, 51-52% below cold with the same options |  | On Ivy Bridge the signal gate was met (0 bad of 1,000) and the startup gate only with traces off; the compute gate could not run on the busy node. |  |  |  |  |  |
 | `lab-method-call` | Lab method left to the agents |  |  | The owner left how to restrict the Ivy Bridge lab to the agents; gates now use the low end of interleaved rounds instead of waiting for a quiet node. |  |  |  |  |  |
 | `lab-ivy-traces` | Traces A/B on Ivy Bridge | Three rounds under load: the sign is clear, the size is not. |  | Default, traces off and a higher trace threshold were interleaved on Ivy Bridge: traces off used the least CPU on javac and java; the compute query was within noise. |  |  |  |  |  |
-| `lab-ivy-traces-signal` | Signal runs with traces off |  |  | The traces A/B's last section, 1,000 signal-injection runs with traces off, is running on kube-worker-04. | Done when: the IVY-AB-JSON result is in plan.md's traces A/B section and namespace v3compat-lab-ivy is deleted. |  |  | 1 |  |
+| `lab-ivy-traces-signal` | Signal runs with traces off | Traces off meets Phase 2's signal gate, as the default did. |  | The traces A/B's last section: 1,000 signal-injection runs with traces off on kube-worker-04, none bad. |  |  |  |  |  |
 | `lab-thread-exit-test` | Thread-exit test's own race | The cause is the test, not DynamoRIO: it crashes natively too. |  | The thread-exit test crashed now and then because it detached threads racily; natively too. Threads are now created detached. |  |  |  |  |  |
 | `lab-javac-digest` | Check javac output on Ivy Bridge |  |  | The Ivy Bridge lab compares duckdb and Java outputs across option sets but prints no digest for javac's output, so a wrong compile would go unseen. | Done when: lab/ivy-ab.sh prints a javac output digest and compares it across option sets. |  |  |  |  |
 | `lab-fma-ivy` | Packed FMA kernel on Ivy Bridge |  |  | The packed-FMA speedup was measured on six runner CPUs but not on Ivy Bridge, where helpers cost 4-5x more. | Done when: bench/fma's packed rows, base against the pin, are in plan.md from one interleaved Ivy Bridge job. |  |  | 2 | after the running signal job: one Job at a time on the node |
