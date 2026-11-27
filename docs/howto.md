@@ -98,7 +98,7 @@ lists each fix and its evidence.
    `-DBUILD_TESTS=ON`, release and debug, runs `ctest` twice and reruns each test that fails on one side only 20
    times. The bar is the same failures on both apart from the [known flakes](plan.md#known-flakes).
 4. `gh pr create -R lhns/dynamorio --base rebase-master-20261110 --head <branch>`.
-   The fork PR is merged by the owner, on the same rule as here.
+   The fork PR merges on the same rule as here: CI green and a cleanup pass.
 5. A v3compat PR moving `V3COMPAT_DR_COMMIT` to the head of `rebase-master-20261110` once the fork PR is merged (a
    commit on that branch, not the PR branch's), with the lab evidence and an entry in the plan. The pin moves only after
    the stress set and the lab match the previous pin.

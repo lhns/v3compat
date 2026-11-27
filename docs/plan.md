@@ -68,12 +68,7 @@ As of main. Costs are Ivy Bridge unless noted; GitHub runners show helpers 2-4x 
 - **Passthrough** on capable hosts keys on a pinned node label, not CPUID: masking CPUID does not disable the silicon, so
   `lzcnt` can change meaning when a VM migrates ([ADR 0004](adr/0004-opt-in-per-container.md)).
 
-| Work | Repo |
-|---|---|
-| DynamoRIO client, launcher, expansions, `cpuid`; tests of what the client does around an instruction (fault state, flags, scratch, segments, refusals, exec) | `v3compat` |
-| Emulation helpers and their fixes; the semantic suite: every emulated form's result against silicon, which `semantic-hw` runs under the client | [lhns/avxemu](https://github.com/lhns/avxemu) |
-| DynamoRIO fork | [lhns/dynamorio](https://github.com/lhns/dynamorio) |
-| OCI wrapper | [v3compat-runtime](https://github.com/lhns/v3compat-runtime) |
+Which repo owns what, and where a change goes: [AGENTS.md](../AGENTS.md#which-repo).
 
 The translation cache is built for tests and labs through Phase 2 and not deployed ([ADR 0006](adr/0006-read-only-translation-cache.md),
 accepted); its design, what Phase 2 built and the owner's open decisions: [translation-cache.md](translation-cache.md).
