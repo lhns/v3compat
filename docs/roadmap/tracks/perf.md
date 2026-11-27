@@ -120,7 +120,7 @@ flowchart TB
 | `perf-traces-default` | Traces on or off by default | decision | none | done | n/a | 2026-11-27 | 2026-11-27 | lab-ivy-traces |  |  |  | docs/handover.md; docs/plan.md |
 | `perf-fast-decode` | Cheaper decoding for the client | experiment | none | abandoned | dead-end | 2026-11-12 | 2026-11-12 | perf-baseline |  |  |  | docs/plan.md |
 | `perf-phase2-gate` | Phase 2: fast on Ivy Bridge | gate | none | in-progress | unrated | 2026-11-26 |  | lab-targets, lab-ivy-gate, lab-ivy-traces, perf-lean-call |  |  |  | docs/plan.md |
-| `perf-traces-off` | Traces off by default | feature | none | done | unrated | 2026-11-27 | 2026-11-27 | perf-traces-default |  |  |  | branch decisions-2026-11-27; launcher/v3compat-run.c; README.md |
+| `perf-traces-off` | Traces off by default | feature | none | done | unrated | 2026-11-27 | 2026-11-27 | perf-traces-default |  |  |  | PR #96; branch decisions-2026-11-27; launcher/v3compat-run.c; README.md |
 
 ### Details per node
 

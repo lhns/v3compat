@@ -2277,7 +2277,7 @@ nodes:
   kind: "feature"
   state: "done"
   outcome: "unrated"
-  evidence: ["branch decisions-2026-11-27", "launcher/v3compat-run.c", "README.md"]
+  evidence: ["PR #96", "branch decisions-2026-11-27", "launcher/v3compat-run.c", "README.md"]
   verdict_quote: ""
   headline: ""
   depends_on: [perf-traces-default]
