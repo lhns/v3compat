@@ -40,9 +40,4 @@ Read: the [roadmap](roadmap.md) (every piece of work with its verdict, and what 
 
 ## Running
 
-Job `ivy-traces`, namespace `v3compat-lab-ivy`: the signal section (nt, 1,000 runs) was at 50 of 1,000 with 0 bad,
-expected done about 19:30 local on 2026-11-26. The pod then sleeps 7,200 s. To finish:
-
-1. `ssh lhns@10.1.5.15 'kubectl -n v3compat-lab-ivy logs job/ivy-traces'`, read the `IVY-AB-JSON` line.
-2. Record the signal result in plan.md's traces A/B section.
-3. Delete the namespace `v3compat-lab-ivy`.
+Nothing. The last Job, `ivy-traces`, finished; its result is in plan.md's traces A/B section and its namespace is deleted.

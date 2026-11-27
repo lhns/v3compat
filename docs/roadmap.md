@@ -92,9 +92,9 @@ Owner calls are the purple shape. A decided owner call is drawn in the overview 
 ## Ratings
 
 <!-- BEGIN GENERATED: ratings -->
-0 of 67 rated nodes are confirmed by the owner.
+0 of 68 rated nodes are confirmed by the owner.
 
-Not yet confirmed: `emu-preload`, `emu-gathers`, `emu-intel-nan`, `emu-mxcsr`, `client-forms`, `client-allowlist`, `client-seg-operands`, `client-block-end`, `client-seq-rwx`, `client-store-xl8`, `client-safe-translate-flushed`, `fork-signal-hang`, `fork-thread-private`, `fork-cache-reset`, `fork-ignore-syscalls`, `fork-vfork-signal`, `fork-signal-unlink`, `fork-map32bit`, `fork-torn-exit`, `fork-vfork-exit`, `fork-thread-create-fail`, `fork-kill-signal`, `fork-rebase`, `fork-vfork-exit-race`, `fork-trace-teardown`, `fork-ibl-race`, `fork-trace-emit`, `fork-sig-thread-start`, `fork-sigxcpu`, `fork-selfmod-xl8`, `fork-exit-sigmask`, `fork-safe-spot`, `fork-flushed-sandboxed`, `fork-vfork-kill`, `fork-close-range`, `fork-refuse-untranslatable`, `fork-selfwrite-flush`, `fork-heap-race`, `fork-selfmod-race`, `launch-static`, `launch-refused-exec`, `cache-phase2`, `cache-debug-fix`, `perf-startup-options`, `perf-memo-classify`, `perf-persist`, `perf-speed-inline`, `perf-inline-scalar`, `perf-inline-vec`, `perf-inline-xmm`, `perf-lean-call`, `perf-gencode-prot`, `perf-procmap`, `perf-protect-mask`, `perf-fma-scalar`, `perf-fma-packed`, `runtime-sde`, `runtime-v3compat-run`, `prod-release`, `lab-phase0`, `lab-ivy-ab`, `lab-ivy-gate`, `lab-ivy-traces`, `lab-thread-exit-test`, `client-kernel-module`, `perf-fast-decode`, `client-phase1-gate`.
+Not yet confirmed: `emu-preload`, `emu-gathers`, `emu-intel-nan`, `emu-mxcsr`, `client-forms`, `client-allowlist`, `client-seg-operands`, `client-block-end`, `client-seq-rwx`, `client-store-xl8`, `client-safe-translate-flushed`, `fork-signal-hang`, `fork-thread-private`, `fork-cache-reset`, `fork-ignore-syscalls`, `fork-vfork-signal`, `fork-signal-unlink`, `fork-map32bit`, `fork-torn-exit`, `fork-vfork-exit`, `fork-thread-create-fail`, `fork-kill-signal`, `fork-rebase`, `fork-vfork-exit-race`, `fork-trace-teardown`, `fork-ibl-race`, `fork-trace-emit`, `fork-sig-thread-start`, `fork-sigxcpu`, `fork-selfmod-xl8`, `fork-exit-sigmask`, `fork-safe-spot`, `fork-flushed-sandboxed`, `fork-vfork-kill`, `fork-close-range`, `fork-refuse-untranslatable`, `fork-selfwrite-flush`, `fork-heap-race`, `fork-selfmod-race`, `launch-static`, `launch-refused-exec`, `cache-phase2`, `cache-debug-fix`, `perf-startup-options`, `perf-memo-classify`, `perf-persist`, `perf-speed-inline`, `perf-inline-scalar`, `perf-inline-vec`, `perf-inline-xmm`, `perf-lean-call`, `perf-gencode-prot`, `perf-procmap`, `perf-protect-mask`, `perf-fma-scalar`, `perf-fma-packed`, `runtime-sde`, `runtime-v3compat-run`, `prod-release`, `lab-phase0`, `lab-ivy-ab`, `lab-ivy-gate`, `lab-ivy-traces`, `lab-ivy-traces-signal`, `lab-thread-exit-test`, `client-kernel-module`, `perf-fast-decode`, `client-phase1-gate`.
 <!-- END GENERATED: ratings -->
 
 ## Overview
@@ -234,7 +234,6 @@ flowchart TB
 | Approve Phase 2 and 3 targets | ✔ done · n/a | The owner approved the gates: inline forms under 6 ns, helpers under 100 ns, compute under 2 s, 0 bad in 1,000 signal runs, warm startup under 2 s and 40% below cold. |
 | Ivy Bridge gate run | ✔ done · mixed | On Ivy Bridge the signal gate was met (0 bad of 1,000) and the startup gate only with traces off; the compute gate could not run on the busy node. |
 | Traces A/B on Ivy Bridge | ✔ done · mixed | Default, traces off and a higher trace threshold were interleaved on Ivy Bridge: traces off used the least CPU on javac and java; the compute query was within noise. |
-| Signal runs with traces off | ▶ in progress | The traces A/B's last section, 1,000 signal-injection runs with traces off, is running on kube-worker-04. |
 | Check javac output on Ivy Bridge | ○ next | The Ivy Bridge lab compares duckdb and Java outputs across option sets but prints no digest for javac's output, so a wrong compile would go unseen. |
 | Packed FMA kernel on Ivy Bridge | ○ next | The packed-FMA speedup was measured on six runner CPUs but not on Ivy Bridge, where helpers cost 4-5x more. |
 <!-- END GENERATED: plain-words -->
@@ -260,9 +259,7 @@ flowchart TB
 ## Running
 
 <!-- BEGIN GENERATED: running -->
-**ivy**
-
-- `lab-ivy-traces-signal`: Signal runs with traces off
+_None._
 <!-- END GENERATED: running -->
 
 ## Built, waiting
@@ -290,9 +287,8 @@ flowchart TB
 ## Queue
 
 <!-- BEGIN GENERATED: queue -->
-1. `lab-ivy-traces-signal`: Signal runs with traces off
-2. `lab-fma-ivy`: Packed FMA kernel on Ivy Bridge. after the running signal job: one Job at a time on the node
-3. `cache-phase3-gate`: Phase 3: fast warm start
+1. `lab-fma-ivy`: Packed FMA kernel on Ivy Bridge. after the running signal job: one Job at a time on the node
+2. `cache-phase3-gate`: Phase 3: fast warm start
 <!-- END GENERATED: queue -->
 
 ## Timeline
@@ -300,13 +296,13 @@ flowchart TB
 <!-- BEGIN GENERATED: timeline -->
 [The timeline](roadmap/timeline.md) shows every dated node as a bar from its start to its end.
 
-Generated on 2026-11-26.
+Generated on 2026-11-27.
 <!-- END GENERATED: timeline -->
 
 ## Done, by month
 
 <!-- BEGIN GENERATED: done-by-month -->
-<details><summary><b>Nov 2026</b>: 82 done, 9 abandoned</summary>
+<details><summary><b>Nov 2026</b>: 83 done, 9 abandoned</summary>
 
 - `client-design`: Translator on DynamoRIO, not patching (✔ done · unrated). Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries.
   - Apache-2.0 licence; DynamoRIO's LGPL extensions shipped as separate libraries (2026-11-03)
@@ -440,6 +436,7 @@ Generated on 2026-11-26.
   - Release workflow for the self-contained tarball, PR #76 (2026-11-22)
 - `emu-mxcsr`: Check FP control state at faults (✔ done · successful). The suite now varies the FP control register (MXCSR) for every form and compares it after each instruction and at a fault; 17 FMA forms that disagreed were fixed.
 - `lab-ivy-traces`: Traces A/B on Ivy Bridge (✔ done · mixed). Default, traces off and a higher trace threshold were interleaved on Ivy Bridge: traces off used the least CPU on javac and java; the compute query was within noise.
+- `lab-ivy-traces-signal`: Signal runs with traces off (✔ done · successful). The traces A/B's last section: 1,000 signal-injection runs with traces off on kube-worker-04, none bad.
 - `lab-method-call`: Lab method left to the agents (✔ done · n/a). The owner left how to restrict the Ivy Bridge lab to the agents; gates now use the low end of interleaved rounds instead of waiting for a quiet node.
   - Cordoning the node or keeping CI runners off it rejected by the owner (2026-11-26)
 - `lab-thread-exit-test`: Thread-exit test's own race (✔ done · successful). The thread-exit test crashed now and then because it detached threads racily; natively too. Threads are now created detached.
@@ -464,5 +461,5 @@ Each track has its own page with its tree, node table and per-node details.
 - [perf - performance](roadmap/tracks/perf.md): 21 nodes (14 done, 2 in progress, 1 next, 4 abandoned)
 - [runtime - runtime wrapper](roadmap/tracks/runtime.md): 3 nodes (2 done, 1 abandoned)
 - [prod - production](roadmap/tracks/prod.md): 9 nodes (5 done, 1 in progress, 1 next, 2 blocked)
-- [lab - labs and measurement](roadmap/tracks/lab.md): 12 nodes (9 done, 1 in progress, 2 next)
+- [lab - labs and measurement](roadmap/tracks/lab.md): 12 nodes (10 done, 2 next)
 <!-- END GENERATED: tracks -->

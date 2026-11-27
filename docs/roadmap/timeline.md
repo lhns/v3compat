@@ -4,7 +4,7 @@
 
 [Back to the page](../roadmap.md)
 
-Generated on 2026-11-26. Open bars end on that date.
+Generated on 2026-11-27. Open bars end on that date.
 
 <!-- BEGIN GENERATED: timeline -->
 ```mermaid
@@ -18,7 +18,7 @@ gantt
     Emulate the AVX2 gathers :emu_gathers, 2026-11-05, 2026-11-05
     Intel and AMD agree on NaNs :emu_intel_nan, 2026-11-10, 2026-11-10
     Check FP control state at faults :emu_mxcsr, 2026-11-26, 2026-11-26
-    Rewrite AVXEmu in Rust :emu_rust_rewrite, 2026-11-03, 2026-11-26
+    Rewrite AVXEmu in Rust :emu_rust_rewrite, 2026-11-03, 2026-11-27
     section client - translator client
     Translator on DynamoRIO, not patching :client_design, 2026-11-03, 2026-11-03
     Client, launcher and CI skeleton :client_scaffold, 2026-11-04, 2026-11-04
@@ -63,11 +63,11 @@ gantt
     Self-written fragment deleted twice :fork_selfwrite_flush, 2026-11-20, 2026-11-20
     Heap free-list race in DynamoRIO :fork_heap_race, 2026-11-24, 2026-11-24
     JIT patch raced block building :fork_selfmod_race, 2026-11-25, 2026-11-25
-    SIGSEGV at exit while threads start :active, fork_exit_sigsegv, 2026-11-25, 2026-11-26
-    One unreproduced regstress SIGSEGV :fork_regstress_segv, 2026-11-11, 2026-11-26
-    Bare DynamoRIO hangs in control runs :fork_bare_dr_hang, 2026-11-26, 2026-11-26
+    SIGSEGV at exit while threads start :active, fork_exit_sigsegv, 2026-11-25, 2026-11-27
+    One unreproduced regstress SIGSEGV :fork_regstress_segv, 2026-11-11, 2026-11-27
+    Bare DynamoRIO hangs in control runs :fork_bare_dr_hang, 2026-11-26, 2026-11-27
     Commit to our DynamoRIO fork :fork_commit_call, 2026-11-04, 2026-11-04
-    Signal behaviour differing from native :fork_signal_deviations, 2026-11-19, 2026-11-26
+    Signal behaviour differing from native :fork_signal_deviations, 2026-11-19, 2026-11-27
     section launch - launcher and exec
     Static launcher that follows exec :launch_static, 2026-11-04, 2026-11-04
     Refused exec fails with an errno :launch_exec_error_call, 2026-11-04, 2026-11-04
@@ -77,7 +77,7 @@ gantt
     Build the cache for labs :cache_phase2, 2026-11-13, 2026-11-17
     Where the cache lives :cache_placement, 2026-11-17, 2026-11-17
     Cache fixes for debug builds :cache_debug_fix, 2026-11-20, 2026-11-20
-    Cache training Job on the node :active, cache_training_job, 2026-11-26, 2026-11-26
+    Cache training Job on the node :active, cache_training_job, 2026-11-26, 2026-11-27
     section perf - performance
     DynamoRIO options for startup :perf_startup_options, 2026-11-05, 2026-11-05
     Memoise classification by bytes :crit, perf_memo_classify, 2026-11-05, 2026-11-05
@@ -96,9 +96,9 @@ gantt
     Native kernel for packed FMA :perf_fma_packed, 2026-11-26, 2026-11-26
     Count the remaining helper calls :perf_helper_count, 2026-11-25, 2026-11-26
     Work the performance list now :perf_list_approved, 2026-11-25, 2026-11-25
-    Traces-off cost claim contradicted :active, perf_traces_claim, 2026-11-26, 2026-11-26
+    Traces-off cost claim contradicted :active, perf_traces_claim, 2026-11-26, 2026-11-27
     Cheaper decoding for the client :crit, perf_fast_decode, 2026-11-12, 2026-11-12
-    Phase 2 - fast on Ivy Bridge :active, perf_phase2_gate, 2026-11-26, 2026-11-26
+    Phase 2 - fast on Ivy Bridge :active, perf_phase2_gate, 2026-11-26, 2026-11-27
     section runtime - runtime wrapper
     Run v3 pods under Intel SDE :crit, runtime_sde, 2026-11-03, 2026-11-22
     Wrapper runs v3compat-run, not SDE :runtime_v3compat_run, 2026-11-21, 2026-11-22
@@ -109,7 +109,7 @@ gantt
     Accept three production limits :prod_limits, 2026-11-21, 2026-11-21
     No release until crashes fixed :prod_stability_gate, 2026-11-21, 2026-11-22
     Release 0.1.0 :prod_release, 2026-11-25, 2026-11-25
-    Cluster canary (k0s-flux 1835) :active, prod_canary, 2026-11-26, 2026-11-26
+    Cluster canary (k0s-flux 1835) :active, prod_canary, 2026-11-26, 2026-11-27
     section lab - labs and measurement
     Phase 0 - is DynamoRIO enough :lab_phase0, 2026-11-03, 2026-11-04
     Lab workflow, bench and stress set :lab_tooling, 2026-11-12, 2026-11-14
@@ -119,7 +119,7 @@ gantt
     Ivy Bridge gate run :lab_ivy_gate, 2026-11-25, 2026-11-25
     Lab method left to the agents :lab_method_call, 2026-11-26, 2026-11-26
     Traces A/B on Ivy Bridge :lab_ivy_traces, 2026-11-26, 2026-11-26
-    Signal runs with traces off :active, lab_ivy_traces_signal, 2026-11-26, 2026-11-26
+    Signal runs with traces off :lab_ivy_traces_signal, 2026-11-26, 2026-11-26
     Thread-exit test's own race :lab_thread_exit_test, 2026-11-25, 2026-11-26
 ```
 
