@@ -120,8 +120,8 @@ flowchart TB
         lab_ivy_traces[/"lab · ✔ Traces A/B on<br/>Ivy Bridge"/]
     end
     subgraph bd_1["Now (in progress)"]
-        prod_canary["prod · ⏳ Cluster<br/>canary (k0s-flux<br/>#35;1835)"]
         perf_phase2_gate["perf · ⏳ Phase 2: fast<br/>on Ivy Bridge"]
+        prod_canary["prod · ⏳ Cluster<br/>canary (k0s-flux<br/>#35;1835)"]
     end
     subgraph bd_2["Later (blocked or parked)"]
         cache_phase3_gate["cache · ⛔ Phase 3:<br/>fast warm start"]
@@ -144,11 +144,11 @@ flowchart TB
     fork_selfmod_race ~~~ prod_release
     fork_selfmod_race ~~~ lab_ivy_gate
     fork_selfmod_race ~~~ lab_ivy_traces
-    prod_release ~~~ prod_canary
-    lab_ivy_gate ~~~ perf_phase2_gate
-    lab_ivy_traces ~~~ perf_phase2_gate
-    prod_canary ~~~ cache_phase3_gate
-    perf_phase2_gate ~~~ prod_passthrough
+    prod_release ~~~ perf_phase2_gate
+    lab_ivy_gate ~~~ prod_canary
+    lab_ivy_traces ~~~ prod_canary
+    perf_phase2_gate ~~~ cache_phase3_gate
+    prod_canary ~~~ prod_passthrough
     cache_phase3_gate ~~~ prod_two_weeks
     prod_passthrough ~~~ prod_two_weeks
     client_design --> lab_phase0
@@ -161,10 +161,7 @@ flowchart TB
     prod_limits --> prod_release
     lab_targets --> lab_ivy_gate
     fork_selfmod_race --> lab_ivy_gate
-    cache_placement --> prod_canary
-    lab_ivy_gate --> prod_canary
     lab_ivy_traces --> perf_phase2_gate
-    lab_ivy_traces --> cache_phase3_gate
     prod_canary --> prod_passthrough
     prod_passthrough --> prod_two_weeks
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
@@ -196,8 +193,8 @@ flowchart TB
 <!-- BEGIN GENERATED: plain-words -->
 | title | status | in plain words |
 |---|---|---|
-| Retire leftover semantic test pieces | ○ next | The owner decides whether to keep test/misc_forms.c, retire avxemu's Intel reference file, and run the full imm8 semantic-hw as a nightly job. |
 | Rewrite AVXEmu in Rust | ⏸ parked | A Rust rewrite of AVXEmu was set aside: the worst bugs were wrong instruction semantics, which a test suite catches and Rust does not. |
+| Record references on Intel AVX2 | ○ next | Not done yet: record avxemu's semantic reference on an Intel AVX2 GitHub runner; runners are assigned at random (Xeon 8370C and 8573C among them), so the job retries until it lands on Intel. |
 | Translator on DynamoRIO, not patching | ✔ done · unrated | Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries. |
 | Refuse instructions not on a list | ✔ done · successful | Every instruction shape the translator lets through is on an audited list built from runs on real CPUs; anything else stops the program with status 86 instead of guessing. |
 | Phase 1: correct, not yet fast | ✔ done · successful | Phase 1's go/no-go: lzcnt right in a dlopen'ed library, static children followed, duckdb's output correct, compute under 3 s without startup. |
@@ -213,19 +210,18 @@ flowchart TB
 | Vfork child state built before clone | ⏸ parked | A killed vfork child holding a DynamoRIO lock ends the process with status 89; letting the parent run on needs the child's thread state built before the clone, or robust locks. |
 | Two untested exec cases | ○ next | Not measured yet: exec with argv[0] set to /proc/self/exe, and /proc/self/exe relative to a directory fd. |
 | Where the cache lives | ✔ done · n/a | The owner agreed: one root-owned cache directory per node and image digest, written by a training Job, mounted read-only. |
-| Canary with or without the cache | ○ next | The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work. |
 | Phase 3: fast warm start | ⛔ blocked | Phase 3's go/no-go: warm duckdb start under 2 s on Ivy Bridge and 40% below cold, under 180 MB, bad entries rejected; met so far only with traces off. |
 | Cache training Job on the node | ⏳ waiting | A Job on the Ivy Bridge node trains the cache into its own directory, and a root step renames it into the per-image tree; built in k0s-flux #1835, not merged. |
 | Cache as a supported launcher option | ⛔ blocked | V3COMPAT_CACHE is for tests and labs only; Phase 3 makes it the user option the runtime's read-only mount relies on. |
 | Hash manifest for the cache | ⛔ blocked | ADR 0006 starts cache integrity with a hash manifest, fs-verity where the filesystem has it; the runtime checks only ownership so far. |
+| Separate canary for the cache | ○ next | Not started: a second cluster canary that runs with the translation cache; it does not count toward Phase 4's two weeks. |
 | Traces-off cost claim contradicted | ⚠ open | On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted. |
-| Traces on or off by default | ○ next | The owner decides whether -disable_traces becomes the default, which also decides whether Phase 3's startup gate is met. |
 | Phase 2: fast on Ivy Bridge | ⏳ waiting | Phase 2's go/no-go on Ivy Bridge: per-op and signal gates are met; compute's fastest quarter is 2.0-2.2 s and its minimum 1.3-1.9 s against a 2 s gate. |
 | Order: JVM crashes first | ✔ done · n/a | The owner put JVM workloads in scope and ordered the work: the javac and Java crashes, then the ranked performance list, then the OCI wrapper. |
 | Accept three production limits | ✔ done · n/a | The owner accepted three limits for production: a killed vfork child holding a lock ends the process (status 89), one random self-modifying sequence refuses, and one debug-only assert. |
 | No release until crashes fixed | ✔ done · n/a | The owner made the heap crash and the -sandbox_writable crash blockers: no release until both were fixed. |
 | Release 0.1.0 | ✔ done · successful | The first release: a self-contained tarball whose output matched native byte for byte on Ivy Bridge, still about 20x slower than native at startup. |
-| Cluster canary (k0s-flux #1835) | ⏳ waiting | A long-lived translated duckdb on kube-worker-04 and a daily byte-for-byte comparison with native; built in k0s-flux #1835 (installer pinned), held unmerged until the owner decides about the cache. |
+| Cluster canary (k0s-flux #1835) | ⏳ waiting | A long-lived translated duckdb on kube-worker-04 and a daily byte-for-byte comparison with native; built in k0s-flux #1835 (installer pinned), held unmerged until it drops the cache, as the owner decided on 2026-11-27. |
 | Phase 4: two weeks like native | ⛔ blocked | Phase 4's go/no-go: two weeks of the canary with no divergence from native. |
 | Native passthrough on AVX2 nodes | ⛔ blocked | Nodes with AVX2 run wrapped containers natively, keyed on a pinned node label; the installer for it is in #1835 but no node carries the label yet. |
 | Correct the changelog's cache line | ○ next | CHANGELOG says the shipped launcher does not use the cache, but it reads V3COMPAT_CACHE; the line needs fixing whatever the canary decision. |
@@ -236,18 +232,25 @@ flowchart TB
 | Traces A/B on Ivy Bridge | ✔ done · mixed | Default, traces off and a higher trace threshold were interleaved on Ivy Bridge: traces off used the least CPU on javac and java; the compute query was within noise. |
 | Check javac output on Ivy Bridge | ○ next | The Ivy Bridge lab compares duckdb and Java outputs across option sets but prints no digest for javac's output, so a wrong compile would go unseen. |
 | Packed FMA kernel on Ivy Bridge | ○ next | The packed-FMA speedup was measured on six runner CPUs but not on Ivy Bridge, where helpers cost 4-5x more. |
+| Traces on or off, steady compute | ○ next | Not measured yet: a long steady-compute workload with traces on and off, interleaved in one job on kube-worker-04, to check the traces-off default where traces should help most. |
 <!-- END GENERATED: plain-words -->
 
 ## Ready now
 
 <!-- BEGIN GENERATED: ready-now -->
+**owner**
+
+- `cache-canary-run`: Separate canary for the cache
+
 **ivy**
 
 - `lab-fma-ivy`: Packed FMA kernel on Ivy Bridge
+- `lab-traces-steady`: Traces on or off, steady compute
 
 **gh-runners**
 
 - `launch-exe-cases`: Two untested exec cases
+- `emu-intel-record`: Record references on Intel AVX2
 
 **agent**
 
@@ -265,23 +268,23 @@ _None._
 ## Built, waiting
 
 <!-- BEGIN GENERATED: built-waiting -->
-**#1835 held until the owner's cache call**
+**#1835 changed to drop the cache**
 
 - `prod-canary`: Cluster canary (k0s-flux #1835)
-- `cache-training-job`: Cache training Job on the node
 
-**the compute gate's reading and the traces default**
+**the compute gate's reading**
 
 - `perf-phase2-gate`: Phase 2: fast on Ivy Bridge
+
+**the cache's own canary; the main canary no longer uses it**
+
+- `cache-training-job`: Cache training Job on the node
 <!-- END GENERATED: built-waiting -->
 
 ## Waiting on the owner
 
 <!-- BEGIN GENERATED: waiting-on-owner -->
-- `emu-suite-leftovers`: Retire leftover semantic test pieces
 - `fork-exit-fix`: Keep SIGSEGV safe during exit
-- `cache-canary-call`: Canary with or without the cache
-- `perf-traces-default`: Traces on or off by default
 <!-- END GENERATED: waiting-on-owner -->
 
 ## Queue
@@ -302,7 +305,7 @@ Generated on 2026-11-27.
 ## Done, by month
 
 <!-- BEGIN GENERATED: done-by-month -->
-<details><summary><b>Nov 2026</b>: 84 done, 9 abandoned</summary>
+<details><summary><b>Nov 2026</b>: 88 done, 9 abandoned</summary>
 
 - `client-design`: Translator on DynamoRIO, not patching (✔ done · unrated). Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries.
   - Apache-2.0 licence; DynamoRIO's LGPL extensions shipped as separate libraries (2026-11-03)
@@ -444,7 +447,11 @@ Generated on 2026-11-27.
   - Hardware FMA first parked until a workload needs it (2026-11-20)
 - `perf-helper-count`: Count the remaining helper calls (✔ done · unrated). After the inline work, helper calls outside FMA cost at most about 0.1 s of duckdb's mixed query, so nothing more is inlined until a workload needs it.
 - `runtime-installer`: Installer and release pin (✔ done · unrated). A DaemonSet installer image puts the wrapper on nodes; the wrapper pins the 0.1.0 release and mounts the cache read-only.
+- `cache-canary-call`: Canary with or without the cache (✔ done · n/a). Decided: the cluster canary drops the cache; the cache gets its own canary run later, which does not count toward Phase 4.
 - `emu-full-imm8`: Full imm8 check on pin changes (✔ done · unrated). CI runs the semantic suite on every imm8 value, inline and helpers only, when the avxemu pin, the DynamoRIO pin or src/expand.c changes.
+- `emu-suite-leftovers`: Retire leftover semantic test pieces (✔ done · n/a). Decided: test/misc_forms.c stays, avxemu's Intel reference file is retired, and the full imm8 semantic-hw becomes a path-filtered CI job.
+- `perf-traces-default`: Traces on or off by default (✔ done · n/a). Decided: traces are off by default, and a program can turn them back on through V3COMPAT_DR_OPTS.
+- `perf-traces-off`: Traces off by default (✔ done · unrated). The launcher passes -disable_traces first; V3COMPAT_DR_OPTS=-enable_traces turns traces back on for one program.
 
 </details>
 <!-- END GENERATED: done-by-month -->
@@ -454,13 +461,13 @@ Generated on 2026-11-27.
 <!-- BEGIN GENERATED: tracks -->
 Each track has its own page with its tree, node table and per-node details.
 
-- [emu - instruction emulation](roadmap/tracks/emu.md): 9 nodes (6 done, 1 next, 1 parked, 1 abandoned)
+- [emu - instruction emulation](roadmap/tracks/emu.md): 10 nodes (7 done, 1 next, 1 parked, 1 abandoned)
 - [client - translator client](roadmap/tracks/client.md): 12 nodes (10 done, 2 abandoned)
 - [fork - DynamoRIO fork](roadmap/tracks/fork.md): 39 nodes (30 done, 1 in progress, 2 next, 5 parked, 1 abandoned)
 - [launch - launcher and exec](roadmap/tracks/launch.md): 4 nodes (3 done, 1 next)
-- [cache - translation cache](roadmap/tracks/cache.md): 9 nodes (4 done, 1 in progress, 1 next, 3 blocked)
-- [perf - performance](roadmap/tracks/perf.md): 21 nodes (14 done, 2 in progress, 1 next, 4 abandoned)
+- [cache - translation cache](roadmap/tracks/cache.md): 10 nodes (5 done, 1 in progress, 1 next, 3 blocked)
+- [perf - performance](roadmap/tracks/perf.md): 22 nodes (16 done, 2 in progress, 4 abandoned)
 - [runtime - runtime wrapper](roadmap/tracks/runtime.md): 3 nodes (2 done, 1 abandoned)
 - [prod - production](roadmap/tracks/prod.md): 9 nodes (5 done, 1 in progress, 1 next, 2 blocked)
-- [lab - labs and measurement](roadmap/tracks/lab.md): 12 nodes (10 done, 2 next)
+- [lab - labs and measurement](roadmap/tracks/lab.md): 13 nodes (10 done, 3 next)
 <!-- END GENERATED: tracks -->

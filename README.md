@@ -58,9 +58,12 @@ checks that every ELF in it needs nothing outside the bundle.
   DynamoRIO instead of faulting. Off by default.
 - `V3COMPAT_STATS=1` prints, at exit to stderr, how many instructions of each class (AVX2, FMA, BMI, LZCNT, TZCNT,
   MOVBE) and of each emulated opcode were executed. It slows the program: never time a run with it.
-- Startup is DynamoRIO translating the program's static init (duckdb `select 42`: about 20 times native). Measured on
-  CI runners: `V3COMPAT_DR_OPTS=-disable_traces` cuts it by about 27% (compute query 18%) but costs about 3% wall and
-  6% CPU on a long mixed workload, so it is not the default; use it for short-lived programs. On Ivy Bridge it used about 27-33% less CPU on javac and java (3 rounds, loaded node), so that cost is contradicted there: [plan](docs/plan.md#ivy-bridge-traces-ab-2026-11-26). `-trace_threshold` does
+- Startup is DynamoRIO translating the program's static init (duckdb `select 42`: about 20 times native). The launcher
+  passes `-disable_traces` by default (owner, 2026-11-27): on Ivy Bridge it used 27-33% less CPU on javac and java than
+  traces on, and the signal gate was met with it, 0 bad of 1,000 ([plan](docs/plan.md#ivy-bridge-traces-ab-2026-11-26)).
+  On CI runners it cuts startup by about 27% (compute query 18%) but costs about 3% wall and 6% CPU on a long mixed
+  workload. To turn traces back on for a program, add `-enable_traces` to `V3COMPAT_DR_OPTS` (it comes after the
+  default and undoes it; `-no_disable_traces` does nothing). `-trace_threshold` does
   not help (10 to 100 the same, higher is slower). The allowlist check is about 5% of startup and memoising it gained
   nothing. `-persist` does not work with the client: the client's `libdrmgr.so` fails to load
   (`undefined symbol __memcpy_chk`), and a persisted cache would need a client that registers persistence callbacks.

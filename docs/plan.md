@@ -241,8 +241,9 @@ Job / second Job **[measured]**:
 - **Phase 3:** met only with traces off (warm 1.76 and 1.92 s, 51-52% below cold with the same options; 61-62%
   against default cold). With traces on warm stays at 2.8-2.9 s. Each warm arm has its own cache, trained under its
   options; every warm arm hit 77.1k of 77.2k lookups, 0 corrupt. Traces cost about 1 s of the cold start here, which
-  the cache does not cover. Peak memory 64-115 MB, under 180 MB. Whether the gate may be met with traces off is the
-  owner's call (about 3% on long runs, runners).
+  the cache does not cover. Peak memory 64-115 MB, under 180 MB. Traces are off by default since 2026-11-27 (owner;
+  [traces A/B](#ivy-bridge-traces-ab-2026-11-26)), but this run is not counted as meeting the gate: the warm and cold
+  arms of one run do not settle it, so the gate needs its own run with the shipped options.
 - **Phase 2 compute: not measured.** The lab's own start gate (load below 6.0 on 20 vCPUs) never opened in 95 minutes
   (10.9-48.2); the gate is dropped since (method above).
 - **Signal injection:** 0 bad of 1,000 (500 `regstress 8 3 sig jit`, 500 `xlsig`), second Job. Phase 2's gate is met.
@@ -268,7 +269,9 @@ artefact. All rc 0; the varied and java digests are equal across sets. The lab p
 
 - **Reading:** nt used the least CPU in every round of javac and java, about 33% and 27% below d; varied is within
   noise; th is no better than d. That contradicts "about 3% wall and 6% CPU" on a long mixed workload (runners, above
-  and README). Three rounds under load: the sign is clear, the size is not. The default is unchanged: the owner decides.
+  and README). Three rounds under load: the sign is clear, the size is not. **Decided 2026-11-27 (owner): traces off is
+  the default.** The launcher passes `-disable_traces`; `V3COMPAT_DR_OPTS=-enable_traces` turns them back on per program.
+  Still open: a steady-compute run, traces on against off, in one interleaved job on Ivy Bridge (roadmap).
 - **Signal injection** (nt, alternating 500 `regstress 8 3 sig jit` and 500 `xlsig`): 0 bad of 1,000, at most 0.3% (95%),
   finished 2026-11-26 **[measured]**. Traces off meets Phase 2's signal gate, as the default did.
 
@@ -832,8 +835,8 @@ seeing results to cold startup under 5 s on Ivy Bridge, and Phase 1's compute ta
 | Phase | Go/no-go | State |
 |---|---|---|
 | **1. Correct, not yet fast** | `lzcnt` in a `dlopen`ed library, static children, duckdb output correct; compute excluding startup under 3 s | Met |
-| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, the low end of at least 20 interleaved rounds (method above the gate run); signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute p25 2.0-2.2 s, minimum 1.3-1.9 s on a loaded node ([traces A/B](#ivy-bridge-traces-ab-2026-11-26)); the 2026-11-25 run never got a quiet node |
-| **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache lab and test only ([design](translation-cache.md)). Ivy Bridge: warm `select 42` 1.76-1.92 s, 51-52% below cold, 64-115 MB, with `-disable_traces` only; 2.8-2.9 s with traces on ([gate run](#ivy-bridge-gate-run-2026-11-25)). Traces off pending the owner |
+| **2. Fast** | On Ivy Bridge: every inline form under 6 ns per op, frame helpers under 100 ns; compute under 2 s excluding startup, the low end of at least 20 interleaved rounds (method above the gate run); signal injection 0 bad in at least 1,000 runs | In progress: per-op and signal gates met (0 bad of 1,000, 2026-11-25); compute p25 2.0-2.2 s, minimum 1.3-1.9 s on a loaded node ([traces A/B](#ivy-bridge-traces-ab-2026-11-26)); the 2026-11-25 run never got a quiet node; traces off by default since 2026-11-27 |
+| **3. Startup** | Warm `select 42` under 2 s on Ivy Bridge and at least 40% below cold in the same job; memory under 180 MB; bad entries rejected | Cache lab and test only ([design](translation-cache.md)). Ivy Bridge: warm `select 42` 1.76-1.92 s, 51-52% below cold, 64-115 MB, with `-disable_traces` only; 2.8-2.9 s with traces on ([gate run](#ivy-bridge-gate-run-2026-11-25)). Traces are off by default now (owner, 2026-11-27); the gate is not counted as met until a run with the shipped options passes |
 | **4. Production** | Wrapper integration, passthrough, canary; two weeks with no divergence from native | In progress: the wrapper runs `v3compat-run` and fails closed ([v3compat-runtime#3](https://github.com/lhns/v3compat-runtime/pull/3)); no canary, no production use |
 
 No release until the open crashes were fixed (owner, 2026-11-22); both are (#29, #81). The first release, 0.1.0, is prepared

@@ -1,7 +1,9 @@
 # Translation cache across runs: design
 
 **Status:** Phases 1 and 2 are built and merged (the fork's cache subsystem, v3compat #56), lab and test only
-([Phase 2](#phase-2-what-was-built)). Nothing is deployed. It works out [ADR 0006](adr/0006-read-only-translation-cache.md)
+([Phase 2](#phase-2-what-was-built)). Nothing is deployed, and the cluster canary
+does not use the cache (owner, 2026-11-27); the cache gets its own canary run later, which does not count toward Phase 4.
+It works out [ADR 0006](adr/0006-read-only-translation-cache.md)
 (Accepted). Tags as in
 the [plan](plan.md): **[measured]**, **[source]**, **[estimate]**.
 
@@ -400,4 +402,6 @@ Each phase ends at a go/no-go for the owner.
 Decided. Phases 1 and 2 were funded and merged with the fork's cache subsystem (v3compat #56). Placement, writer and
 integrity are in ADR 0006's amendment of 2026-11-17. The Ivy Bridge A/B (plan) answers Phase 0: warm
 `select 42` 2.91 s there, so the cache does not reach the 0.5 s gate. The owner approved a revised gate (2026-11-22): warm
-under 2 s on Ivy Bridge and at least 40% below cold; see the plan's Phases.
+under 2 s on Ivy Bridge and at least 40% below cold; see the plan's Phases. Deployment: the canary runs without the
+cache (owner, 2026-11-27). The launcher reads `V3COMPAT_CACHE*` only for tests and labs, and the runtime's read-only
+mount exists but is unused there. A separate cache canary comes later and is not part of Phase 4's two weeks.

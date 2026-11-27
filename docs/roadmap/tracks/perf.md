@@ -28,6 +28,7 @@ flowchart TB
     perf_fma_packed["✔ Native kernel for<br/>packed FMA"]
     perf_traces_claim>"⚠ Traces-off cost<br/>claim contradicted"]
     perf_phase2_gate["⏳ Phase 2: fast on Ivy<br/>Bridge"]
+    perf_traces_off["✔ Traces off by<br/>default"]
     perf_startup_options ~~~ perf_inline_bmi
     perf_memo_classify ~~~ perf_inline_bmi
     perf_persist ~~~ perf_inline_bmi
@@ -49,6 +50,9 @@ flowchart TB
     perf_protect_mask ~~~ perf_fma_packed
     perf_fma_scalar ~~~ perf_traces_claim
     perf_helper_count ~~~ perf_phase2_gate
+    perf_fma_packed ~~~ perf_traces_off
+    perf_traces_claim ~~~ perf_traces_off
+    perf_phase2_gate ~~~ perf_traces_off
     perf_startup_options -.-> perf_traces_claim
     perf_inline_bmi --> perf_speed_inline
     perf_speed_inline -.-> perf_inline_scalar
@@ -66,7 +70,7 @@ flowchart TB
     perf_lean_call --> perf_helper_count
     perf_fma_scalar --> perf_fma_packed
     perf_lean_call --> perf_phase2_gate
-    linkStyle 21 stroke:#e69500,stroke-width:3px,stroke-dasharray:2 3
+    linkStyle 24 stroke:#e69500,stroke-width:3px,stroke-dasharray:2 3
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -83,7 +87,7 @@ flowchart TB
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
     class perf_startup_options,perf_protect_mask mixed
     class perf_memo_classify,perf_persist,perf_speed_inline,perf_fast_decode dead
-    class perf_inline_bmi,perf_baseline,perf_helper_count unrated
+    class perf_inline_bmi,perf_baseline,perf_helper_count,perf_traces_off unrated
     class perf_inline_scalar,perf_inline_vec,perf_inline_xmm,perf_lean_call,perf_gencode_prot,perf_procmap,perf_fma_scalar,perf_fma_packed vsucc
     class perf_traces_claim finding
     class perf_phase2_gate waiting
@@ -113,9 +117,10 @@ flowchart TB
 | `perf-helper-count` | Count the remaining helper calls | experiment | none | done | unrated | 2026-11-25 | 2026-11-26 | perf-lean-call, perf-list-approved |  |  |  | docs/plan.md; PR #85; branch lab-perf-helper-count |
 | `perf-list-approved` | Work the performance list now | decision | none | done | n/a | 2026-11-25 | 2026-11-25 | prod-release |  |  |  | docs/plan.md; PR #85; commit 799fac8e |
 | `perf-traces-claim` | Traces-off cost claim contradicted | defect | none | in-progress | unrated | 2026-11-26 |  | lab-ivy-traces |  |  |  | docs/plan.md; commit 8e97372 |
-| `perf-traces-default` | Traces on or off by default | decision | owner | next | n/a |  |  | lab-ivy-traces |  |  |  | docs/handover.md; docs/plan.md |
+| `perf-traces-default` | Traces on or off by default | decision | none | done | n/a | 2026-11-27 | 2026-11-27 | lab-ivy-traces |  |  |  | docs/handover.md; docs/plan.md |
 | `perf-fast-decode` | Cheaper decoding for the client | experiment | none | abandoned | dead-end | 2026-11-12 | 2026-11-12 | perf-baseline |  |  |  | docs/plan.md |
 | `perf-phase2-gate` | Phase 2: fast on Ivy Bridge | gate | none | in-progress | unrated | 2026-11-26 |  | lab-targets, lab-ivy-gate, lab-ivy-traces, perf-lean-call |  |  |  | docs/plan.md |
+| `perf-traces-off` | Traces off by default | feature | none | done | unrated | 2026-11-27 | 2026-11-27 | perf-traces-default |  |  |  | PR #96; branch decisions-2026-11-27; launcher/v3compat-run.c; README.md |
 
 ### Details per node
 
@@ -138,10 +143,11 @@ flowchart TB
 | `perf-fma-packed` | Native kernel for packed FMA | packed ymm `ps` 0.52-0.63, `pd` 0.59-0.71; dgemm 0.49-0.56, sgemm 0.39-0.44 | dgemm 0.49-0.56 | Packed FMA uses the CPU's SSE arithmetic for every lane an exactness check proves, about halving matrix-multiply time; other lanes keep the exact code. |  |  |  |  |  |
 | `perf-helper-count` | Count the remaining helper calls |  |  | After the inline work, helper calls outside FMA cost at most about 0.1 s of duckdb's mixed query, so nothing more is inlined until a workload needs it. |  |  |  |  |  |
 | `perf-list-approved` | Work the performance list now |  |  | The owner approved working the ranked performance list now, alongside the production rollout. |  |  |  |  |  |
-| `perf-traces-claim` | Traces-off cost claim contradicted |  |  | On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted. |  |  | the owner's traces decision |  |  |
-| `perf-traces-default` | Traces on or off by default |  |  | The owner decides whether -disable_traces becomes the default, which also decides whether Phase 3's startup gate is met. | Open owner decision 2 in docs/handover.md. |  |  |  |  |
+| `perf-traces-claim` | Traces-off cost claim contradicted |  |  | On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted. |  |  |  |  |  |
+| `perf-traces-default` | Traces on or off by default |  |  | Decided: traces are off by default, and a program can turn them back on through V3COMPAT_DR_OPTS. | Owner decision of 2026-11-27. Phase 3's startup gate is not counted as met from the 2026-11-25 run. |  |  |  |  |
 | `perf-fast-decode` | Cheaper decoding for the client | `-fast_client_decode` is internal and does not allow changing app code. |  | DynamoRIO's cheaper decode mode cannot be used by a client that rewrites code, and skipping the client's checks would bypass the audited list. |  |  |  |  |  |
-| `perf-phase2-gate` | Phase 2: fast on Ivy Bridge |  |  | Phase 2's go/no-go on Ivy Bridge: per-op and signal gates are met; compute's fastest quarter is 2.0-2.2 s and its minimum 1.3-1.9 s against a 2 s gate. | Done when: every Phase 2 gate in plan.md's Phases table is met on Ivy Bridge, or the owner calls it. |  | the compute gate's reading and the traces default |  |  |
+| `perf-phase2-gate` | Phase 2: fast on Ivy Bridge |  |  | Phase 2's go/no-go on Ivy Bridge: per-op and signal gates are met; compute's fastest quarter is 2.0-2.2 s and its minimum 1.3-1.9 s against a 2 s gate. | Done when: every Phase 2 gate in plan.md's Phases table is met on Ivy Bridge, or the owner calls it. |  | the compute gate's reading |  |  |
+| `perf-traces-off` | Traces off by default |  |  | The launcher passes -disable_traces first; V3COMPAT_DR_OPTS=-enable_traces turns traces back on for one program. |  |  |  |  |  |
 
 ### Folded items per node
 

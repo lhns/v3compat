@@ -28,15 +28,18 @@ Read: the [roadmap](roadmap.md) (every piece of work with its verdict, and what 
   its build and check first ([how-to](howto.md#roadmap)).
 - kubectl works only through the jumphost: `ssh lhns@10.1.5.15 'kubectl ...'`. Never paste secrets.
 
-## Open owner decisions
+## Owner decisions
 
-1. **#1835, the canary cache.** Drop the cache first (recommended) or keep it, which needs ADR 0006 work. Its CHANGELOG
-   line saying the launcher does not use the cache needs fixing either way.
-2. **Traces default**, given the [Ivy Bridge A/B](plan.md#ivy-bridge-traces-ab-2026-11-26): `-disable_traces` used
-   27-33% less CPU on javac and java. README's claim is marked contradicted.
-3. **Fork fix for the exit-time SIGSEGV**: keep SIGSEGV safe during the default action
-   ([plan.md, Open items](plan.md#open-items)).
-4. `test/misc_forms.c` keep or not; retire `semantics.intel.ref`; full-mode `semantic-hw` for imm8 as a nightly.
+None open. Decided 2026-11-27 (owner):
+
+1. **#1835, the canary cache:** the canary drops the cache. The cache gets its own canary run later, which does not
+   count toward Phase 4.
+2. **Traces default:** off. The launcher passes `-disable_traces`; `V3COMPAT_DR_OPTS=-enable_traces` re-enables.
+   Phase 3's gate is not counted as met from the 2026-11-25 run.
+3. **Fork fix for the exit-time SIGSEGV** ([plan.md, Open items](plan.md#open-items)): decided 2026-11-27: fix it; in
+   progress.
+4. **Test-suite leftovers:** `test/misc_forms.c` stays; avxemu's `semantics.intel.ref` is retired; full-mode
+   `semantic-hw` for imm8 becomes a path-filtered CI job.
 
 ## Running
 

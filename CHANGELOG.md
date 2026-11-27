@@ -13,6 +13,8 @@ needs nothing outside itself.
 - duckdb, Node, Java and javac, `lzcnt` in `dlopen`ed libraries, static, static-PIE and musl children, `exec` chains,
   threads and `posix_spawn`, under Docker's default seccomp without ptrace. Output matches native on Ivy Bridge, slowly:
   `select 42` 5.1-5.4 s, about 20x native startup.
+- DynamoRIO traces are off by default (the launcher passes `-disable_traces`; owner, 2026-11-27): on Ivy Bridge javac and
+  java used 27-33% less CPU. `V3COMPAT_DR_OPTS=-enable_traces` turns them back on.
 - Fixed in the fork since the crash reports: the `common_heap_alloc()` heap crash (#29), the decode/emit race behind
   the status 255 and 134 crashes (crash 2, #81).
 
@@ -34,7 +36,8 @@ program's.
   letting it run on.
 - `test/seq_rwx.sh` seed 10 refuses ("write to code whose context cannot be translated"); it fails closed.
 - A debug-build assert, `vmareas.c:8965` (`area_contains_frag_pc`); release builds do not check it.
-- The translation cache is lab and test only: the shipped launcher does not use it. Startup stays DynamoRIO translation.
+- The translation cache is lab and test only: the launcher reads `V3COMPAT_CACHE*` for tests and labs, the runtime has a
+  read-only mount for it, and the canary does not use it (owner, 2026-11-27). Startup stays DynamoRIO translation.
 - Cache reset is off (ADR 0010); every system call leaves the code cache (ADR 0011).
 - No production use yet; the OCI wrapper is lhns/v3compat-runtime.
 
