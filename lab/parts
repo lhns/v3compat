@@ -1,16 +1,7 @@
-# One lab job per line: NAME COMMAND. A lab-* branch edits this file; every job builds the branch, and
-# /tmp/base (origin/main) when NAME starts with "ab". Lines starting with # are ignored.
-ab bash bench/ab.sh 6
-duck bash lab/stress.sh duck 240
-siga bash lab/stress.sh sig 434
-sigb bash lab/stress.sh sig 433
-sigc bash lab/stress.sh sig 433
-regc bash lab/stress.sh regc 340
-regd bash lab/stress.sh regd 340
-shorta bash lab/stress.sh short 1500
-shortb bash lab/stress.sh short 1500
-shortc bash lab/stress.sh short 1500
-# The javac crash under any client (plan, Open items): uncomment on a lab branch.
-# javac bash lab/javac.sh 8
-# vfork_exit and a lost SIGCHLD, base (origin/main) against this branch, EPYC 7763 only: over-launch, most runners skip.
-# ab-vfx bash lab/vfxab.sh 500
+# The exit-time SIGSEGV and exit status, base (origin/main) against the fork's fix-exit-default-action, interleaved.
+ab1 bash lab/exab.sh 4 10
+ab2 bash lab/exab.sh 4 10
+ab3 bash lab/exab.sh 4 10
+ab4 bash lab/exab.sh 4 10
+ab5 bash lab/exab.sh 4 10
+ab6 bash lab/exab.sh 4 10
