@@ -71,7 +71,7 @@ checks that every ELF in it needs nothing outside the bundle.
 `cmake -S . -B build -DV3COMPAT_SEMANTIC=ON` adds `semantic-hw`: it runs the instruction-form cases of the pinned
 [avxemu](https://github.com/lhns/avxemu) commit (always fetched, for the helpers) under the client against
 the digests recorded on AVX2 hardware, also with inline expansions off. `test/sem/refused.txt` lists the forms still
-refused, and has to be exact. A program that executes a form off the [audited list](docs/allowlist.md) exits with status 86; `V3COMPAT_AUDIT=1` lists such forms instead.
+refused, and has to be exact. `-DV3COMPAT_SEMANTIC_FULL=ON` adds `semantic-hw-full` (all imm8 values, label `semantic-full`); CI runs it when a pin or `src/expand.c` changes. A program that executes a form off the [audited list](docs/allowlist.md) exits with status 86; `V3COMPAT_AUDIT=1` lists such forms instead.
 
 - [v3compat-runtime](https://github.com/lhns/v3compat-runtime): OCI runtime wrapper, opt-in per pod through a RuntimeClass.
 - [avxemu](https://github.com/lhns/avxemu): fork supplying the instruction emulation helpers and test suite.

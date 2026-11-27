@@ -16,17 +16,22 @@ flowchart TB
     emu_gathers["✔ Emulate the AVX2<br/>gathers"]
     emu_intel_nan[/"✔ Intel and AMD agree<br/>on NaNs"/]
     emu_mxcsr["✔ Check FP control<br/>state at faults"]
+    emu_full_imm8["✔ Full imm8 check on<br/>pin changes"]
     emu_preload ~~~ emu_helpers
     emu_helpers ~~~ emu_semantic_suite
     emu_helpers ~~~ emu_rust_rewrite
     emu_semantic_suite ~~~ emu_gathers
     emu_rust_rewrite ~~~ emu_intel_nan
     emu_rust_rewrite ~~~ emu_mxcsr
+    emu_gathers ~~~ emu_full_imm8
+    emu_intel_nan ~~~ emu_full_imm8
+    emu_mxcsr ~~~ emu_full_imm8
     emu_preload -.-> emu_helpers
     emu_helpers --> emu_semantic_suite
     emu_semantic_suite --> emu_gathers
     emu_semantic_suite --> emu_intel_nan
     emu_semantic_suite --> emu_mxcsr
+    emu_mxcsr --> emu_full_imm8
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -42,7 +47,7 @@ flowchart TB
     classDef finding fill:#ffe0b2,stroke:#d84315,stroke-width:2px,color:#111
     classDef waiting fill:#e3f2fd,stroke:#1f6fc5,stroke-dasharray:5 5,color:#111
     class emu_preload dead
-    class emu_helpers,emu_semantic_suite unrated
+    class emu_helpers,emu_semantic_suite,emu_full_imm8 unrated
     class emu_rust_rewrite parked
     class emu_gathers,emu_intel_nan,emu_mxcsr succ
 ```
@@ -61,6 +66,7 @@ flowchart TB
 | `emu-mxcsr` | Check FP control state at faults | feature | none | done | successful | 2026-11-26 | 2026-11-26 | emu-semantic-suite |  |  |  | PR #88; commit 489618f3; lhns/avxemu#15 |
 | `emu-suite-leftovers` | Retire leftover semantic test pieces | decision | owner | next | n/a |  |  | emu-mxcsr |  |  |  | docs/handover.md |
 | `emu-rust-rewrite` | Rewrite AVXEmu in Rust | design | agent | parked | unrated | 2026-11-03 |  |  |  |  |  | session record |
+| `emu-full-imm8` | Full imm8 check on pin changes | feature | none | done | unrated | 2026-11-27 | 2026-11-27 | emu-suite-leftovers |  |  |  | PR #95 |
 
 ### Details per node
 
@@ -74,6 +80,7 @@ flowchart TB
 | `emu-mxcsr` | Check FP control state at faults | with the helper all three semantic tests pass on Xeon 6975P-C and EPYC 7763 (run 45740263716). |  | The suite now varies the FP control register (MXCSR) for every form and compares it after each instruction and at a fault; 17 FMA forms that disagreed were fixed. |  |  |  |  |  |
 | `emu-suite-leftovers` | Retire leftover semantic test pieces |  |  | The owner decides whether to keep test/misc_forms.c, retire avxemu's Intel reference file, and run the full imm8 semantic-hw as a nightly job. | Open owner decision 4 in docs/handover.md. |  |  |  |  |
 | `emu-rust-rewrite` | Rewrite AVXEmu in Rust |  |  | A Rust rewrite of AVXEmu was set aside: the worst bugs were wrong instruction semantics, which a test suite catches and Rust does not. |  |  |  |  |  |
+| `emu-full-imm8` | Full imm8 check on pin changes |  |  | CI runs the semantic suite on every imm8 value, inline and helpers only, when the avxemu pin, the DynamoRIO pin or src/expand.c changes. |  |  |  |  |  |
 
 ### Folded items per node
 

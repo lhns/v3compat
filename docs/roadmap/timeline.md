@@ -19,6 +19,7 @@ gantt
     Intel and AMD agree on NaNs :emu_intel_nan, 2026-11-10, 2026-11-10
     Check FP control state at faults :emu_mxcsr, 2026-11-26, 2026-11-26
     Rewrite AVXEmu in Rust :emu_rust_rewrite, 2026-11-03, 2026-11-27
+    Full imm8 check on pin changes :emu_full_imm8, 2026-11-27, 2026-11-27
     section client - translator client
     Translator on DynamoRIO, not patching :client_design, 2026-11-03, 2026-11-03
     Client, launcher and CI skeleton :client_scaffold, 2026-11-04, 2026-11-04

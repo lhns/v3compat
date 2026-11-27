@@ -17,3 +17,13 @@ add_test(NAME semantic-hw-helpers COMMAND ${CMAKE_COMMAND} -E env V3COMPAT_HELPE
 # Control on an AVX2 host: the same cases without DynamoRIO, to tell client differences from the host's.
 add_test(NAME semantic-hw-native COMMAND ${CMAKE_COMMAND} -E env V3COMPAT_NATIVE=1 ${RUN} -- $<TARGET_FILE:semhw> ${_sem_args})
 set_tests_properties(semantic-hw semantic-hw-helpers semantic-hw-native PROPERTIES TIMEOUT 900 LABELS semantic)
+
+# Opt-in (-DV3COMPAT_SEMANTIC_FULL=ON): every imm8 and every case, not the smoke subset. The digests are recorded, so
+# the result only changes with the avxemu pin, the DynamoRIO pin or src/expand.c: CI runs it on those (job semantic-full).
+if(V3COMPAT_SEMANTIC_FULL)
+  set(_full_args "${S}/test/spec/manifest.tsv" "${S}/test/reference/semantics.ref" full)
+  add_test(NAME semantic-hw-full COMMAND ${RUN} -- $<TARGET_FILE:semhw> ${_full_args} "${CMAKE_CURRENT_SOURCE_DIR}/refused.txt")
+  add_test(NAME semantic-hw-helpers-full COMMAND ${CMAKE_COMMAND} -E env V3COMPAT_HELPERS_ONLY=1 ${RUN} -- $<TARGET_FILE:semhw>
+           ${_full_args} "${CMAKE_CURRENT_SOURCE_DIR}/refused.txt")
+  set_tests_properties(semantic-hw-full semantic-hw-helpers-full PROPERTIES TIMEOUT 3000 LABELS semantic-full)
+endif()

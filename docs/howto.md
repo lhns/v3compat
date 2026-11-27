@@ -12,6 +12,10 @@ V3COMPAT_CI=1 ctest --test-dir build --output-on-failure
 
 - `-DV3COMPAT_SEMANTIC=ON` adds `semantic-hw` (every form against digests recorded on AVX2 silicon, inline and
   helpers only). CI turns it on; leave it on for any change to `src/expand.c`.
+- `-DV3COMPAT_SEMANTIC_FULL=ON` (with the above) adds `semantic-hw-full` and `semantic-hw-helpers-full` (label
+  `semantic-full`): the same check on every case and imm8 value, not the smoke subset (the adapter's `full` argument).
+  Run it with `ctest --test-dir build -L semantic-full`. It is deterministic, so CI runs it (job `semantic-full`) only
+  when `AVXEMU_COMMIT`, `V3COMPAT_DR_COMMIT` or `src/expand.c` changes, and on `workflow_dispatch`.
 - The first configure builds the pinned DynamoRIO fork into `~/.cache/v3compat/dr-<commit>` (about 10 minutes);
   `-DV3COMPAT_DR_ROOT=<install>` uses an existing build instead. avxemu's helpers (and, with the semantic suite, its test
   cases) are fetched by CMake at the commit pinned in `CMakeLists.txt` (`AVXEMU_COMMIT`).

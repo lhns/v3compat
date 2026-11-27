@@ -302,7 +302,7 @@ Generated on 2026-11-27.
 ## Done, by month
 
 <!-- BEGIN GENERATED: done-by-month -->
-<details><summary><b>Nov 2026</b>: 83 done, 9 abandoned</summary>
+<details><summary><b>Nov 2026</b>: 84 done, 9 abandoned</summary>
 
 - `client-design`: Translator on DynamoRIO, not patching (✔ done · unrated). Run x86-64-v3 programs on AVX-only CPUs with a same-ISA binary translator on DynamoRIO: QEMU was 16-30x slower than native, Intel SDE 100-300x, and in-memory patching missed libraries.
   - Apache-2.0 licence; DynamoRIO's LGPL extensions shipped as separate libraries (2026-11-03)
@@ -444,6 +444,7 @@ Generated on 2026-11-27.
   - Hardware FMA first parked until a workload needs it (2026-11-20)
 - `perf-helper-count`: Count the remaining helper calls (✔ done · unrated). After the inline work, helper calls outside FMA cost at most about 0.1 s of duckdb's mixed query, so nothing more is inlined until a workload needs it.
 - `runtime-installer`: Installer and release pin (✔ done · unrated). A DaemonSet installer image puts the wrapper on nodes; the wrapper pins the 0.1.0 release and mounts the cache read-only.
+- `emu-full-imm8`: Full imm8 check on pin changes (✔ done · unrated). CI runs the semantic suite on every imm8 value, inline and helpers only, when the avxemu pin, the DynamoRIO pin or src/expand.c changes.
 
 </details>
 <!-- END GENERATED: done-by-month -->
@@ -453,7 +454,7 @@ Generated on 2026-11-27.
 <!-- BEGIN GENERATED: tracks -->
 Each track has its own page with its tree, node table and per-node details.
 
-- [emu - instruction emulation](roadmap/tracks/emu.md): 8 nodes (5 done, 1 next, 1 parked, 1 abandoned)
+- [emu - instruction emulation](roadmap/tracks/emu.md): 9 nodes (6 done, 1 next, 1 parked, 1 abandoned)
 - [client - translator client](roadmap/tracks/client.md): 12 nodes (10 done, 2 abandoned)
 - [fork - DynamoRIO fork](roadmap/tracks/fork.md): 39 nodes (30 done, 1 in progress, 2 next, 5 parked, 1 abandoned)
 - [launch - launcher and exec](roadmap/tracks/launch.md): 4 nodes (3 done, 1 next)
