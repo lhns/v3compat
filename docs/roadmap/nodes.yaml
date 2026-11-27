@@ -123,20 +123,20 @@ nodes:
   title: "Retire leftover semantic test pieces"
   track: "emu"
   kind: "decision"
-  state: "next"
+  state: "done"
   outcome: "n/a"
   evidence: ["docs/handover.md"]
   verdict_quote: ""
   headline: ""
   depends_on: [emu-mxcsr]
   replaced_by: []
-  lane: "owner"
-  start: ""
-  end: ""
+  lane: "none"
+  start: "2026-11-27"
+  end: "2026-11-27"
   folded: []
   overview: false
-  plain: "The owner decides whether to keep test/misc_forms.c, retire avxemu's Intel reference file, and run the full imm8 semantic-hw as a nightly job."
-  notes: "Open owner decision 4 in docs/handover.md."
+  plain: "Decided: test/misc_forms.c stays, avxemu's Intel reference file is retired, and the full imm8 semantic-hw becomes a path-filtered CI job."
+  notes: "Owner decision of 2026-11-27; the avxemu and CI changes are done by other work."
 
 - id: "client-design"
   title: "Translator on DynamoRIO, not patching"
@@ -1130,20 +1130,20 @@ nodes:
   title: "Canary with or without the cache"
   track: "cache"
   kind: "decision"
-  state: "next"
+  state: "done"
   outcome: "n/a"
   evidence: ["docs/handover.md", "k0s-flux PR #1835"]
   verdict_quote: ""
   headline: ""
   depends_on: [cache-placement, lab-ivy-gate, prod-release]
   replaced_by: []
-  lane: "owner"
-  start: ""
-  end: ""
+  lane: "none"
+  start: "2026-11-27"
+  end: "2026-11-27"
   folded: []
   overview: false
-  plain: "The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work."
-  notes: "Open owner decision 1 in docs/handover.md. Either way, CHANGELOG's line saying the launcher does not use the cache needs fixing."
+  plain: "Decided: the cluster canary drops the cache; the cache gets its own canary run later, which does not count toward Phase 4."
+  notes: "Owner decision of 2026-11-27. CHANGELOG's line about the cache is corrected."
 
 - id: "perf-startup-options"
   title: "DynamoRIO options for startup"
@@ -1485,26 +1485,25 @@ nodes:
   folded: []
   overview: false
   plain: "On Ivy Bridge, turning traces off used 27-33% less CPU on javac and java, against about 3% more on runners; README marks its claim contradicted."
-  waiting_on: "the owner's traces decision"
 
 - id: "perf-traces-default"
   title: "Traces on or off by default"
   track: "perf"
   kind: "decision"
-  state: "next"
+  state: "done"
   outcome: "n/a"
   evidence: ["docs/handover.md", "docs/plan.md"]
   verdict_quote: ""
   headline: ""
   depends_on: [lab-ivy-traces]
   replaced_by: []
-  lane: "owner"
-  start: ""
-  end: ""
+  lane: "none"
+  start: "2026-11-27"
+  end: "2026-11-27"
   folded: []
   overview: false
-  plain: "The owner decides whether -disable_traces becomes the default, which also decides whether Phase 3's startup gate is met."
-  notes: "Open owner decision 2 in docs/handover.md."
+  plain: "Decided: traces are off by default, and a program can turn them back on through V3COMPAT_DR_OPTS."
+  notes: "Owner decision of 2026-11-27. Phase 3's startup gate is not counted as met from the 2026-11-25 run."
 
 - id: "runtime-sde"
   title: "Run v3 pods under Intel SDE"
@@ -1674,9 +1673,9 @@ nodes:
   end: ""
   folded: []
   overview: true
-  plain: "A long-lived translated duckdb on kube-worker-04 and a daily byte-for-byte comparison with native; built in k0s-flux #1835 (installer pinned), held unmerged until the owner decides about the cache."
+  plain: "A long-lived translated duckdb on kube-worker-04 and a daily byte-for-byte comparison with native; built in k0s-flux #1835 (installer pinned), held unmerged until it drops the cache, as the owner decided on 2026-11-27."
   notes: "Done when: the canary runs in the cluster through v3compat-runtime."
-  waiting_on: "#1835 held until the owner's cache call"
+  waiting_on: "#1835 changed to drop the cache"
 
 - id: "prod-two-weeks"
   title: "Phase 4: two weeks like native"
@@ -2022,7 +2021,7 @@ nodes:
   overview: true
   plain: "Phase 2's go/no-go on Ivy Bridge: per-op and signal gates are met; compute's fastest quarter is 2.0-2.2 s and its minimum 1.3-1.9 s against a 2 s gate."
   notes: "Done when: every Phase 2 gate in plan.md's Phases table is met on Ivy Bridge, or the owner calls it."
-  waiting_on: "the compute gate's reading and the traces default"
+  waiting_on: "the compute gate's reading"
 
 - id: "cache-phase3-gate"
   title: "Phase 3: fast warm start"
@@ -2061,7 +2060,7 @@ nodes:
   folded: []
   overview: false
   plain: "A Job on the Ivy Bridge node trains the cache into its own directory, and a root step renames it into the per-image tree; built in k0s-flux #1835, not merged."
-  waiting_on: "#1835 held until the owner's cache call"
+  waiting_on: "the cache's own canary; the main canary no longer uses it"
 
 - id: "cache-supported-option"
   title: "Cache as a supported launcher option"
@@ -2271,3 +2270,78 @@ nodes:
   folded: []
   overview: false
   plain: "CI runs the semantic suite on every imm8 value, inline and helpers only, when the avxemu pin, the DynamoRIO pin or src/expand.c changes."
+
+- id: "perf-traces-off"
+  title: "Traces off by default"
+  track: "perf"
+  kind: "feature"
+  state: "done"
+  outcome: "unrated"
+  evidence: ["branch decisions-2026-11-27", "launcher/v3compat-run.c", "README.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [perf-traces-default]
+  replaced_by: []
+  lane: "none"
+  start: "2026-11-27"
+  end: "2026-11-27"
+  folded: []
+  overview: false
+  plain: "The launcher passes -disable_traces first; V3COMPAT_DR_OPTS=-enable_traces turns traces back on for one program."
+
+- id: "lab-traces-steady"
+  title: "Traces on or off, steady compute"
+  track: "lab"
+  kind: "experiment"
+  state: "next"
+  outcome: "unrated"
+  evidence: ["docs/plan.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [perf-traces-default]
+  replaced_by: []
+  lane: "ivy"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "Not measured yet: a long steady-compute workload with traces on and off, interleaved in one job on kube-worker-04, to check the traces-off default where traces should help most."
+  notes: "Done when: both arms' CPU and wall times from one interleaved Ivy Bridge job are in plan.md."
+
+- id: "emu-intel-record"
+  title: "Record references on Intel AVX2"
+  track: "emu"
+  kind: "experiment"
+  state: "next"
+  outcome: "unrated"
+  evidence: ["lhns/avxemu docs/vendor-differences.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [emu-mxcsr]
+  replaced_by: []
+  lane: "gh-runners"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "Not done yet: record avxemu's semantic reference on an Intel AVX2 GitHub runner; runners are assigned at random (Xeon 8370C and 8573C among them), so the job retries until it lands on Intel."
+  notes: "Done when: an Intel reference is recorded; the one known Intel/AMD difference is movbe.m64_g.2 (avxemu docs/vendor-differences.md)."
+
+- id: "cache-canary-run"
+  title: "Separate canary for the cache"
+  track: "cache"
+  kind: "feature"
+  state: "next"
+  outcome: "unrated"
+  evidence: ["docs/translation-cache.md"]
+  verdict_quote: ""
+  headline: ""
+  depends_on: [cache-canary-call]
+  replaced_by: []
+  lane: "owner"
+  start: ""
+  end: ""
+  folded: []
+  overview: false
+  plain: "Not started: a second cluster canary that runs with the translation cache; it does not count toward Phase 4's two weeks."
+  notes: "Done when: the cache canary compares byte for byte with native in the cluster."

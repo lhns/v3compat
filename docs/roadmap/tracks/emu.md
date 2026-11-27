@@ -17,6 +17,7 @@ flowchart TB
     emu_intel_nan[/"✔ Intel and AMD agree<br/>on NaNs"/]
     emu_mxcsr["✔ Check FP control<br/>state at faults"]
     emu_full_imm8["✔ Full imm8 check on<br/>pin changes"]
+    emu_intel_record[/"○ Record references on<br/>Intel AVX2"/]
     emu_preload ~~~ emu_helpers
     emu_helpers ~~~ emu_semantic_suite
     emu_helpers ~~~ emu_rust_rewrite
@@ -24,14 +25,15 @@ flowchart TB
     emu_rust_rewrite ~~~ emu_intel_nan
     emu_rust_rewrite ~~~ emu_mxcsr
     emu_gathers ~~~ emu_full_imm8
-    emu_intel_nan ~~~ emu_full_imm8
-    emu_mxcsr ~~~ emu_full_imm8
+    emu_intel_nan ~~~ emu_intel_record
+    emu_mxcsr ~~~ emu_intel_record
     emu_preload -.-> emu_helpers
     emu_helpers --> emu_semantic_suite
     emu_semantic_suite --> emu_gathers
     emu_semantic_suite --> emu_intel_nan
     emu_semantic_suite --> emu_mxcsr
     emu_mxcsr --> emu_full_imm8
+    emu_mxcsr --> emu_intel_record
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -50,6 +52,7 @@ flowchart TB
     class emu_helpers,emu_semantic_suite,emu_full_imm8 unrated
     class emu_rust_rewrite parked
     class emu_gathers,emu_intel_nan,emu_mxcsr succ
+    class emu_intel_record next
 ```
 <!-- END GENERATED: track-emu -->
 
@@ -64,9 +67,10 @@ flowchart TB
 | `emu-gathers` | Emulate the AVX2 gathers | feature | none | done | successful | 2026-11-05 | 2026-11-05 | client-forms, emu-semantic-suite |  |  |  | PR #17; branch avxemu-gathers; lhns/avxemu#10 |
 | `emu-intel-nan` | Intel and AMD agree on NaNs | experiment | none | done | successful | 2026-11-10 | 2026-11-10 | emu-semantic-suite |  |  |  | PR #29; branch intel-nan; docs/plan.md |
 | `emu-mxcsr` | Check FP control state at faults | feature | none | done | successful | 2026-11-26 | 2026-11-26 | emu-semantic-suite |  |  |  | PR #88; commit 489618f3; lhns/avxemu#15 |
-| `emu-suite-leftovers` | Retire leftover semantic test pieces | decision | owner | next | n/a |  |  | emu-mxcsr |  |  |  | docs/handover.md |
+| `emu-suite-leftovers` | Retire leftover semantic test pieces | decision | none | done | n/a | 2026-11-27 | 2026-11-27 | emu-mxcsr |  |  |  | docs/handover.md |
 | `emu-rust-rewrite` | Rewrite AVXEmu in Rust | design | agent | parked | unrated | 2026-11-03 |  |  |  |  |  | session record |
 | `emu-full-imm8` | Full imm8 check on pin changes | feature | none | done | unrated | 2026-11-27 | 2026-11-27 | emu-suite-leftovers |  |  |  | PR #95 |
+| `emu-intel-record` | Record references on Intel AVX2 | experiment | gh-runners | next | unrated |  |  | emu-mxcsr |  |  |  | lhns/avxemu docs/vendor-differences.md |
 
 ### Details per node
 
@@ -78,9 +82,10 @@ flowchart TB
 | `emu-gathers` | Emulate the AVX2 gathers | `semantic-hw` and `semantic-hw-helpers` (smoke): 574 forms, 0 refused, match the digests recorded on AVX2 silicon, including the gather fault states and restarts. |  | The 16 gather instructions are expanded inline, one real load per element, so a fault mid-gather leaves the same state as hardware. |  |  |  |  |  |
 | `emu-intel-nan` | Intel and AMD agree on NaNs | So Intel and AMD agree on NaN priority and on every other recorded value, and the emulation matches both. |  | The reference results were recorded on AMD; a run on Intel CPUs showed the emulation matches Intel too. |  |  |  |  |  |
 | `emu-mxcsr` | Check FP control state at faults | with the helper all three semantic tests pass on Xeon 6975P-C and EPYC 7763 (run 45740263716). |  | The suite now varies the FP control register (MXCSR) for every form and compares it after each instruction and at a fault; 17 FMA forms that disagreed were fixed. |  |  |  |  |  |
-| `emu-suite-leftovers` | Retire leftover semantic test pieces |  |  | The owner decides whether to keep test/misc_forms.c, retire avxemu's Intel reference file, and run the full imm8 semantic-hw as a nightly job. | Open owner decision 4 in docs/handover.md. |  |  |  |  |
+| `emu-suite-leftovers` | Retire leftover semantic test pieces |  |  | Decided: test/misc_forms.c stays, avxemu's Intel reference file is retired, and the full imm8 semantic-hw becomes a path-filtered CI job. | Owner decision of 2026-11-27; the avxemu and CI changes are done by other work. |  |  |  |  |
 | `emu-rust-rewrite` | Rewrite AVXEmu in Rust |  |  | A Rust rewrite of AVXEmu was set aside: the worst bugs were wrong instruction semantics, which a test suite catches and Rust does not. |  |  |  |  |  |
 | `emu-full-imm8` | Full imm8 check on pin changes |  |  | CI runs the semantic suite on every imm8 value, inline and helpers only, when the avxemu pin, the DynamoRIO pin or src/expand.c changes. |  |  |  |  |  |
+| `emu-intel-record` | Record references on Intel AVX2 |  |  | Not done yet: record avxemu's semantic reference on an Intel AVX2 GitHub runner; runners are assigned at random (Xeon 8370C and 8573C among them), so the job retries until it lands on Intel. | Done when: an Intel reference is recorded; the one known Intel/AMD difference is movbe.m64_g.2 (avxemu docs/vendor-differences.md). |  |  |  |  |
 
 ### Folded items per node
 

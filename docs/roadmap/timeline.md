@@ -18,6 +18,7 @@ gantt
     Emulate the AVX2 gathers :emu_gathers, 2026-11-05, 2026-11-05
     Intel and AMD agree on NaNs :emu_intel_nan, 2026-11-10, 2026-11-10
     Check FP control state at faults :emu_mxcsr, 2026-11-26, 2026-11-26
+    Retire leftover semantic test pieces :emu_suite_leftovers, 2026-11-27, 2026-11-27
     Rewrite AVXEmu in Rust :emu_rust_rewrite, 2026-11-03, 2026-11-27
     Full imm8 check on pin changes :emu_full_imm8, 2026-11-27, 2026-11-27
     section client - translator client
@@ -78,6 +79,7 @@ gantt
     Build the cache for labs :cache_phase2, 2026-11-13, 2026-11-17
     Where the cache lives :cache_placement, 2026-11-17, 2026-11-17
     Cache fixes for debug builds :cache_debug_fix, 2026-11-20, 2026-11-20
+    Canary with or without the cache :cache_canary_call, 2026-11-27, 2026-11-27
     Cache training Job on the node :active, cache_training_job, 2026-11-26, 2026-11-27
     section perf - performance
     DynamoRIO options for startup :perf_startup_options, 2026-11-05, 2026-11-05
@@ -98,8 +100,10 @@ gantt
     Count the remaining helper calls :perf_helper_count, 2026-11-25, 2026-11-26
     Work the performance list now :perf_list_approved, 2026-11-25, 2026-11-25
     Traces-off cost claim contradicted :active, perf_traces_claim, 2026-11-26, 2026-11-27
+    Traces on or off by default :perf_traces_default, 2026-11-27, 2026-11-27
     Cheaper decoding for the client :crit, perf_fast_decode, 2026-11-12, 2026-11-12
     Phase 2 - fast on Ivy Bridge :active, perf_phase2_gate, 2026-11-26, 2026-11-27
+    Traces off by default :perf_traces_off, 2026-11-27, 2026-11-27
     section runtime - runtime wrapper
     Run v3 pods under Intel SDE :crit, runtime_sde, 2026-11-03, 2026-11-22
     Wrapper runs v3compat-run, not SDE :runtime_v3compat_run, 2026-11-21, 2026-11-22
@@ -124,5 +128,5 @@ gantt
     Thread-exit test's own race :lab_thread_exit_test, 2026-11-25, 2026-11-26
 ```
 
-Not shown (no `start`): `emu-suite-leftovers`, `fork-exit-fix`, `fork-exit-lock-review`, `fork-reset-fix`, `fork-vfork-state`, `launch-exe-cases`, `cache-canary-call`, `cache-phase3-gate`, `cache-supported-option`, `cache-integrity`, `perf-traces-default`, `prod-two-weeks`, `prod-passthrough`, `prod-changelog-cache`, `lab-javac-digest`, `lab-fma-ivy`
+Not shown (no `start`): `emu-intel-record`, `fork-exit-fix`, `fork-exit-lock-review`, `fork-reset-fix`, `fork-vfork-state`, `launch-exe-cases`, `cache-phase3-gate`, `cache-supported-option`, `cache-integrity`, `cache-canary-run`, `prod-two-weeks`, `prod-passthrough`, `prod-changelog-cache`, `lab-javac-digest`, `lab-fma-ivy`, `lab-traces-steady`
 <!-- END GENERATED: timeline -->

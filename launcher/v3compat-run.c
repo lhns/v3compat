@@ -3,7 +3,7 @@
  * It execs libdynamorio.so with the target in DYNAMORIO_EXE_PATH, so the exit status and signals are the
  * program's own. Exit 125 launcher failure, 127 not found, 126 not executable, 87 refused (exec_check.h).
  *   V3COMPAT_NATIVE=1  skip DynamoRIO and every check
- *   V3COMPAT_DR_OPTS   extra DynamoRIO options
+ *   V3COMPAT_DR_OPTS   extra DynamoRIO options, after the default -disable_traces: `-enable_traces` turns traces back on
  *   V3COMPAT_UNPROTECTED_GENCODE=1   -protect_mask 0: faster JIT startup, but DynamoRIO's generated code stays
  *                      writable, so a stray app write corrupts it instead of faulting
  *   V3COMPAT_STATS=1   client prints executed per-class and per-opcode totals at exit
@@ -173,14 +173,15 @@ __attribute__((used)) void run(long *sp) {
     x->fd = v3c_pin(x->fd);
     if (x->fd < 0) die(125, "cannot keep ", x->final, " open");
 
-    /* DYNAMORIO_OPTIONS: -code_api, no cache reset (it corrupts multithreaded programs: ADR 0010), the user's options,
-     * then the client with its options. */
+    /* DYNAMORIO_OPTIONS: -code_api, no cache reset (it corrupts multithreaded programs: ADR 0010), no traces (owner,
+     * 2026-11-27; -no_enable_traces does not do it), the user's options (`-enable_traces` undoes it), then the client
+     * with its options. */
     opts = grab(8192);
     {
         const char *user = envget(envp, "V3COMPAT_DR_OPTS="), *s;
         char *p = opts;
         if (user && slen(user) >= MAX_CONFIG_VALUE) die(125, "V3COMPAT_DR_OPTS is too long for DynamoRIO", "", ""); /* before it is copied */
-        p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset -no_ignore_syscalls ");
+        p = scpy(p, "DYNAMORIO_OPTIONS=-code_api -no_enable_reset -disable_traces -no_ignore_syscalls ");
         s = envget(envp, "V3COMPAT_UNPROTECTED_GENCODE="); if (s && s[0] == '1' && !s[1]) p = scpy(p, "-protect_mask 0 ");
         if (user && *user) { p = scpy(p, user); *p++ = ' '; }
         /* Not a user option yet (Phase 3): a directory, written by a training run. */

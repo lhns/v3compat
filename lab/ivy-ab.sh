@@ -1,7 +1,7 @@
 #!/bin/bash
 # ivy-ab.sh: the Ivy Bridge traces A/B, run in a pod on the target node from a clone of this repo (no AVX2, so no
 # native arm). Decides whether DynamoRIO traces ship: every section measures under each option set, interleaved.
-# Option sets (V3COMPAT_DR_OPTS): d = default, nt = -disable_traces, th = -trace_threshold 1000. th is an internal
+# Option sets (V3COMPAT_DR_OPTS): d = traces on (-enable_traces; the launcher default is off since 2026-11-27), nt = -disable_traces, th = -trace_threshold 1000. th is an internal
 # DynamoRIO option; it is probed first (probe.trace_threshold) and dropped everywhere when rejected.
 # Builds build/ if missing, fetches duckdb, then runs, each skippable:
 #   1. P3=1: per set a training run into /tmp/ivy-cache-<set> and a cache-hits run, then 10 rounds of `select 42`,
@@ -47,7 +47,7 @@ Q42=(./duckdb -csv -noheader -cmd "set threads = $THREADS" -c 'select 42')
 QC=(./duckdb -csv -noheader -cmd "set threads = $THREADS" -c 'select sum(range*range) from range(30000000)')
 # The same query with duckdb's timer: its "Run Time (s): real" line is the query alone, without startup.
 QT=(./duckdb -csv -noheader -cmd "set threads = $THREADS" -cmd '.timer on' -c 'select sum(range*range) from range(30000000)')
-declare -A OPT=([d]="" [nt]="-disable_traces" [th]="-trace_threshold 1000")
+declare -A OPT=([d]="-enable_traces" [nt]="-disable_traces" [th]="-trace_threshold 1000")
 OUT=/tmp/ivy-out ERR=/tmp/ivy-err
 rec() { echo "$*" >> $RAW; echo "$*"; }
 loadnow() { cut -d' ' -f1 /proc/loadavg; }

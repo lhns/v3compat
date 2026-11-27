@@ -16,6 +16,7 @@ flowchart TB
     cache_supported_option["⛔ Cache as a supported<br/>launcher option"]
     cache_integrity["⛔ Hash manifest for<br/>the cache"]
     cache_phase3_gate["⛔ Phase 3: fast warm<br/>start"]
+    cache_canary_run["○ Separate canary for<br/>the cache"]
     cache_design ~~~ cache_phase2
     cache_phase2 ~~~ cache_debug_fix
     cache_phase2 ~~~ cache_training_job
@@ -24,6 +25,7 @@ flowchart TB
     cache_training_job ~~~ cache_integrity
     cache_supported_option ~~~ cache_integrity
     cache_integrity ~~~ cache_phase3_gate
+    cache_integrity ~~~ cache_canary_run
     cache_design --> cache_phase2
     cache_phase2 --> cache_debug_fix
     cache_design --> cache_training_job
@@ -48,6 +50,7 @@ flowchart TB
     class cache_debug_fix vsucc
     class cache_training_job waiting
     class cache_supported_option,cache_integrity,cache_phase3_gate blocked
+    class cache_canary_run next
 ```
 <!-- END GENERATED: track-cache -->
 
@@ -60,11 +63,12 @@ flowchart TB
 | `cache-phase2` | Build the cache for labs | feature | none | done | mixed | 2026-11-13 | 2026-11-17 | cache-design |  |  | 0.55 to 0.34 s | PR #50; branch pcache-phase2; PR #56; branch pcache-phase2-rebase; lhns/dynamorio#14; lhns/dynamorio#16; branch lab-pcache-rerun; docs/translation-cache.md |
 | `cache-placement` | Where the cache lives | decision | none | done | n/a | 2026-11-17 | 2026-11-17 | cache-design |  |  |  | PR #60; branch adr6-cache-placement; docs/adr/0006-read-only-translation-cache.md |
 | `cache-debug-fix` | Cache fixes for debug builds | fix | none | done | very-successful | 2026-11-20 | 2026-11-20 | cache-phase2 |  |  | 0 of 200 bad after | PR #74; branch pin-pcache-lock; lhns/dynamorio#28; docs/plan.md |
-| `cache-canary-call` | Canary with or without the cache | decision | owner | next | n/a |  |  | cache-placement, lab-ivy-gate, prod-release |  |  |  | docs/handover.md; k0s-flux PR #1835 |
+| `cache-canary-call` | Canary with or without the cache | decision | none | done | n/a | 2026-11-27 | 2026-11-27 | cache-placement, lab-ivy-gate, prod-release |  |  |  | docs/handover.md; k0s-flux PR #1835 |
 | `cache-phase3-gate` | Phase 3: fast warm start | gate | ivy | blocked | unrated |  |  | perf-traces-default, cache-supported-option, cache-integrity |  |  |  | docs/plan.md; docs/translation-cache.md |
 | `cache-training-job` | Cache training Job on the node | feature | owner | in-progress | unrated | 2026-11-26 |  | cache-placement, runtime-installer |  |  |  | k0s-flux PR #1835; docs/adr/0006-read-only-translation-cache.md |
 | `cache-supported-option` | Cache as a supported launcher option | feature | agent | blocked | unrated |  |  | cache-canary-call |  |  |  | docs/translation-cache.md; launcher/v3compat-run.c; CHANGELOG.md |
 | `cache-integrity` | Hash manifest for the cache | feature | agent | blocked | unrated |  |  | cache-canary-call |  |  |  | docs/adr/0006-read-only-translation-cache.md; lhns/v3compat-runtime README |
+| `cache-canary-run` | Separate canary for the cache | feature | owner | next | unrated |  |  | cache-canary-call |  |  |  | docs/translation-cache.md |
 
 ### Details per node
 
@@ -74,11 +78,12 @@ flowchart TB
 | `cache-phase2` | Build the cache for labs | Phase 1's stop criterion, 40% on `select 42` with traces on, is met on the 7763 (43%) and missed on the 9V45 (39%). | 0.55 to 0.34 s | The cache works for tests and labs: entries are checksummed and position-independent, a bad entry is rejected, and duckdb starts about 40% faster warm. |  |  |  |  |  |
 | `cache-placement` | Where the cache lives |  |  | The owner agreed: one root-owned cache directory per node and image digest, written by a training Job, mounted read-only. |  |  |  |  |  |
 | `cache-debug-fix` | Cache fixes for debug builds | 200 of 200 runs stopped before, 0 of 200 bad after | 0 of 200 bad after | Debug builds of DynamoRIO stopped on every run with the cache; an option read and a leak are fixed. |  |  |  |  |  |
-| `cache-canary-call` | Canary with or without the cache |  |  | The owner decides whether the cluster canary drops the cache (recommended) or keeps it, which needs more ADR 0006 work. | Open owner decision 1 in docs/handover.md. Either way, CHANGELOG's line saying the launcher does not use the cache needs fixing. |  |  |  |  |
+| `cache-canary-call` | Canary with or without the cache |  |  | Decided: the cluster canary drops the cache; the cache gets its own canary run later, which does not count toward Phase 4. | Owner decision of 2026-11-27. CHANGELOG's line about the cache is corrected. |  |  |  |  |
 | `cache-phase3-gate` | Phase 3: fast warm start |  |  | Phase 3's go/no-go: warm duckdb start under 2 s on Ivy Bridge and 40% below cold, under 180 MB, bad entries rejected; met so far only with traces off. | Done when: the gate run passes with the shipped options and ADR 0006 is amended with what Phase 3 learned. |  |  | 3 |  |
-| `cache-training-job` | Cache training Job on the node |  |  | A Job on the Ivy Bridge node trains the cache into its own directory, and a root step renames it into the per-image tree; built in k0s-flux #1835, not merged. |  |  | #1835 held until the owner's cache call |  |  |
+| `cache-training-job` | Cache training Job on the node |  |  | A Job on the Ivy Bridge node trains the cache into its own directory, and a root step renames it into the per-image tree; built in k0s-flux #1835, not merged. |  |  | the cache's own canary; the main canary no longer uses it |  |  |
 | `cache-supported-option` | Cache as a supported launcher option |  |  | V3COMPAT_CACHE is for tests and labs only; Phase 3 makes it the user option the runtime's read-only mount relies on. | Done when: the launcher documents and supports the cache outside labs, and CHANGELOG says so. |  |  |  |  |
 | `cache-integrity` | Hash manifest for the cache |  |  | ADR 0006 starts cache integrity with a hash manifest, fs-verity where the filesystem has it; the runtime checks only ownership so far. | Done when: a cache file whose hash is not in the manifest is refused before DynamoRIO reads it. |  |  |  |  |
+| `cache-canary-run` | Separate canary for the cache |  |  | Not started: a second cluster canary that runs with the translation cache; it does not count toward Phase 4's two weeks. | Done when: the cache canary compares byte for byte with native in the cluster. |  |  |  |  |
 
 ### Folded items per node
 

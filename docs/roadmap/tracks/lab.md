@@ -19,6 +19,7 @@ flowchart TB
     lab_ivy_traces_signal[/"✔ Signal runs with<br/>traces off"/]
     lab_javac_digest["○ Check javac output<br/>on Ivy Bridge"]
     lab_fma_ivy[/"○ Packed FMA kernel on<br/>Ivy Bridge"/]
+    lab_traces_steady[/"○ Traces on or off,<br/>steady compute"/]
     lab_phase0 ~~~ lab_noop_value_checks
     lab_tooling ~~~ lab_ivy_gate
     lab_ivy_ab ~~~ lab_thread_exit_test
@@ -28,10 +29,14 @@ flowchart TB
     lab_ivy_traces ~~~ lab_ivy_traces_signal
     lab_ivy_traces ~~~ lab_javac_digest
     lab_ivy_traces ~~~ lab_fma_ivy
+    lab_ivy_traces_signal ~~~ lab_traces_steady
+    lab_javac_digest ~~~ lab_traces_steady
+    lab_fma_ivy ~~~ lab_traces_steady
     lab_ivy_ab --> lab_ivy_gate
     lab_ivy_gate --> lab_ivy_traces
     lab_ivy_traces --> lab_ivy_traces_signal
     lab_ivy_traces --> lab_javac_digest
+    lab_ivy_traces --> lab_traces_steady
     classDef vsucc fill:#2e9e4f,stroke:#1b6b34,color:#fff
     classDef succ fill:#bfe8c8,stroke:#2e9e4f,color:#111
     classDef mixed fill:#ffd37a,stroke:#c98a00,color:#111
@@ -49,7 +54,7 @@ flowchart TB
     class lab_phase0,lab_ivy_ab,lab_ivy_gate,lab_ivy_traces mixed
     class lab_tooling unrated
     class lab_noop_value_checks,lab_thread_exit_test,lab_ivy_traces_signal succ
-    class lab_javac_digest,lab_fma_ivy next
+    class lab_javac_digest,lab_fma_ivy,lab_traces_steady next
 ```
 <!-- END GENERATED: track-lab -->
 
@@ -70,6 +75,7 @@ flowchart TB
 | `lab-thread-exit-test` | Thread-exit test's own race | fix | none | done | successful | 2026-11-25 | 2026-11-26 | fork-thread-create-fail |  |  |  | PR #86; commit 0c5c0f8f; docs/plan.md |
 | `lab-javac-digest` | Check javac output on Ivy Bridge | tooling | agent | next | unrated |  |  | lab-ivy-traces |  |  |  | docs/plan.md |
 | `lab-fma-ivy` | Packed FMA kernel on Ivy Bridge | experiment | ivy | next | unrated |  |  | perf-fma-packed |  |  |  | docs/plan.md |
+| `lab-traces-steady` | Traces on or off, steady compute | experiment | ivy | next | unrated |  |  | perf-traces-default |  |  |  | docs/plan.md |
 
 ### Details per node
 
@@ -87,6 +93,7 @@ flowchart TB
 | `lab-thread-exit-test` | Thread-exit test's own race | The cause is the test, not DynamoRIO: it crashes natively too. |  | The thread-exit test crashed now and then because it detached threads racily; natively too. Threads are now created detached. |  |  |  |  |  |
 | `lab-javac-digest` | Check javac output on Ivy Bridge |  |  | The Ivy Bridge lab compares duckdb and Java outputs across option sets but prints no digest for javac's output, so a wrong compile would go unseen. | Done when: lab/ivy-ab.sh prints a javac output digest and compares it across option sets. |  |  |  |  |
 | `lab-fma-ivy` | Packed FMA kernel on Ivy Bridge |  |  | The packed-FMA speedup was measured on six runner CPUs but not on Ivy Bridge, where helpers cost 4-5x more. | Done when: bench/fma's packed rows, base against the pin, are in plan.md from one interleaved Ivy Bridge job. |  |  | 2 | after the running signal job: one Job at a time on the node |
+| `lab-traces-steady` | Traces on or off, steady compute |  |  | Not measured yet: a long steady-compute workload with traces on and off, interleaved in one job on kube-worker-04, to check the traces-off default where traces should help most. | Done when: both arms' CPU and wall times from one interleaved Ivy Bridge job are in plan.md. |  |  |  |  |
 
 ### Folded items per node
 
