@@ -1,7 +1,12 @@
-# The exit-time SIGSEGV and exit status, base (origin/main) against the fork's fix-exit-default-action, interleaved.
+# The exit fix (fork fix-exit-default-action) against origin/main's pin, interleaved: exit status and core dumper per
+# fault kind (exab), and the exit, vfork and stress tests for regressions and hangs (regab).
 ab1 bash lab/exab.sh 4 10
 ab2 bash lab/exab.sh 4 10
 ab3 bash lab/exab.sh 4 10
 ab4 bash lab/exab.sh 4 10
 ab5 bash lab/exab.sh 4 10
 ab6 bash lab/exab.sh 4 10
+abreg1 bash lab/regab.sh 1
+abreg2 bash lab/regab.sh 1
+abreg3 bash lab/regab.sh 1
+abreg4 bash lab/regab.sh 1
