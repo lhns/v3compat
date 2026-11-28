@@ -10,7 +10,7 @@ permissions:
 
 env:
   BASE: 45bfae0f37ff5af4befb66dae72490e83f8b3795
-  FIX: 177a5e0552539ada7d6bde087fc0953daee2e3c7
+  FIX: 19f19fe14eaf4add2fcacac215d1f42fe50313af
 jobs:
   suite:
     runs-on: ubuntu-22.04
@@ -40,8 +40,15 @@ jobs:
             git clone -q --filter=blob:none https://github.com/lhns/dynamorio dr-$s && git -C dr-$s checkout -q $sha && git -C dr-$s submodule update -q --init --depth 1
             cmake -S dr-$s -B b-$s $flags >/dev/null && cmake --build b-$s -j"$(nproc)" >/dev/null 2>&1 || echo "$s: build failed" | tee -a "$out/summary.txt"
             cd b-$s
-            ctest -j"$(nproc)" --timeout 300 >/dev/null 2>&1; extract "$out/$s-first.txt"; cp Testing/Temporary/LastTest.log "$out/$s-LastTest.log"
-            ctest -j"$(nproc)" --timeout 300 --rerun-failed >/dev/null 2>&1; extract "$out/$s-rerun.txt"
+            timeout -k 30 3600 ctest -j"$(nproc)" --timeout 300 >/dev/null 2>&1
+            if [ $? -ge 124 ]; then
+              { echo "$s: ctest hung; started but not finished:"
+                awk '/^[0-9]+\/[0-9]+ Testing: /{t[$3]=1} /^[0-9]+\/[0-9]+ Test: /{delete t[$3]} END{for (k in t) print "  " k}' Testing/Temporary/LastTest.log
+                ps -eo pid,ppid,etime,stat,args --forest | grep -F "b-$s" | grep -v grep | cut -c1-300 | head -60; } | tee -a "$out/summary.txt"
+              pkill -9 -f "b-$s/" || true
+            fi
+            extract "$out/$s-first.txt"; cp Testing/Temporary/LastTest.log "$out/$s-LastTest.log"
+            timeout -k 30 1800 ctest -j"$(nproc)" --timeout 300 --rerun-failed >/dev/null 2>&1; extract "$out/$s-rerun.txt"
             echo "$s: $(ctest -N | tail -1); first-pass failures $(wc -l < "$out/$s-first.txt"), after rerun $(wc -l < "$out/$s-rerun.txt")" | tee -a "$out/summary.txt"
             cd ..
           done
@@ -49,7 +56,7 @@ jobs:
           for k in $(cat "$out/candidates.txt"); do
             kre=$(printf '%s' "$k" | sed 's/[][\\.|$^*+?(){}]/\\&/g')
             for s in ${BASE:0:7} ${FIX:0:7}; do
-              f=0; for i in $(seq 20); do (cd b-$s && ctest -R "^$kre\$" --timeout 300 >/dev/null 2>&1) || f=$((f+1)); done
+              f=0; for i in $(seq 20); do (cd b-$s && timeout -k 30 600 ctest -R "^$kre\$" --timeout 300 >/dev/null 2>&1) || f=$((f+1)); done
               echo "repeat $s $k: $f of 20 failed" | tee -a "$out/summary.txt"
             done
           done
